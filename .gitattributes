@@ -1,0 +1,2 @@
+# Normalize all text files to LF (Linux tooling, Dockerfile, bash scripts)
+* text=auto eol=lf
