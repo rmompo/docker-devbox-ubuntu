@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.1.0
+# Version: 0.1.1
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -179,11 +179,13 @@ function Get-DevboxFullName {
 function Read-DevboxName {
     param(
         [Parameter(Mandatory)][string]$Prompt,
-        [Parameter(Mandatory)][string]$Default
+        [Parameter(Mandatory)][string]$Default,
+        [string]$DefaultSuffix = ''
     )
     while ($true) {
-        # The default is shown with the prefix; the typed text never includes it.
-        $value = Read-Host "$Prompt [$DevboxPrefix-$Default]"
+        # The default is shown with the prefix (and, for images, with its version, for example
+        # ':0.1.0'); the typed text never includes either of them.
+        $value = Read-Host "$Prompt [$DevboxPrefix-$Default$DefaultSuffix]"
         if ([string]::IsNullOrWhiteSpace($value)) { $value = $Default }
         $value = $value.Trim()
         if ($value -cnotmatch '^[a-z][a-z0-9_-]*$') {

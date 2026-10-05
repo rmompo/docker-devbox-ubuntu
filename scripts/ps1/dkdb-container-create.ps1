@@ -1,12 +1,17 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.1.0
+# Version: 0.1.1
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxIntegrity
 Assert-DevboxDocker
 
 # --- Ask for everything ---
-$imageInput = Read-DevboxName -Prompt 'Image name' -Default $DevboxDefaultName
+# The default image is shown with the version that will be used (the highest compatible tag).
+$defaultImageName = Get-DevboxFullName $DevboxDefaultName
+$defaultImageRef = Get-DevboxCompatibleImage -ImageName $defaultImageName
+$defaultImageSuffix = ''
+if ($defaultImageRef) { $defaultImageSuffix = $defaultImageRef.Substring($defaultImageName.Length) }
+$imageInput = Read-DevboxName -Prompt 'Image name' -Default $DevboxDefaultName -DefaultSuffix $defaultImageSuffix
 $imageName = Get-DevboxFullName $imageInput
 
 $containerInput = Read-DevboxName -Prompt 'Container name' -Default $DevboxDefaultName

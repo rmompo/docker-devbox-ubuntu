@@ -15,7 +15,7 @@ Several scripts and the image share names, encoding and ways of interacting with
 ## Decision
 - **Language:** English for documentation, scripts, prompts, messages and comments.
 - **Prefix:** `dkdb`, defined in one common place. Image, container and user are named `dkdb-<input>`; default input value: `devbox-ubuntu`, so the image, the container and the user are `dkdb-devbox-ubuntu` by default.
-- **Prompts:** the default is displayed with the prefix (`Image name [dkdb-devbox-ubuntu]:`), but the user types only the own part; the script always prepends `dkdb-`. Typing the prefix yourself would produce `dkdb-dkdb-...`.
+- **Prompts:** the default is displayed with the prefix (`Image name [dkdb-devbox-ubuntu:0.1.0]:` for images, which also show the version that will be built or used), but the user types only the own part, without prefix or version; the script always prepends `dkdb-`. Typing the prefix yourself would produce `dkdb-dkdb-...`.
 - **Length:** `dkdb-` takes 5 characters; the typed text allows up to 27 (Linux limits user names to 32).
 - **Filtering:** always by `dkdb-`.
 - **Encoding:** UTF-8 without BOM and LF for every file. A BOM would only be used in a `.ps1` that needs non-ASCII characters (currently none).

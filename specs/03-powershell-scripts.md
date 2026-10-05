@@ -13,9 +13,9 @@ Daily management of images and containers must be fast, without remembering Dock
 
 | Script | Behavior |
 |---|---|
-| `dkdb-image-create` | Asks only for the image name (default `devbox-ubuntu`, so `dkdb-devbox-ubuntu`) and builds `dkdb-<name>`. |
+| `dkdb-image-create` | Asks only for the image name (default `devbox-ubuntu`, so `dkdb-devbox-ubuntu`; the prompt shows the version it will be tagged with) and builds `dkdb-<name>:<version>`. |
 | `dkdb-image-delete` | Menu of `dkdb-` images; deletes the chosen one (single selection). |
-| `dkdb-container-create` | Asks for the image (as `dkdb-image-create` does), container name, user and the host projects and tools paths (spec 04) and, if Mutagen is installed, the projects volume type (menu; spec 08); the `bash` volume is fixed. |
+| `dkdb-container-create` | Asks for the image (as `dkdb-image-create` does; the default is shown with the highest compatible version that will be used), container name, user and the host projects and tools paths (spec 04) and, if Mutagen is installed, the projects volume type (menu; spec 08); the `bash` volume is fixed. |
 | `dkdb-container-start` | Menu of **stopped** `dkdb-` containers. For a Mutagen container it also makes sure the Mutagen daemon is running and creates or resumes the sync session (spec 08). |
 | `dkdb-container-stop` | Menu of **running** `dkdb-` containers. It never touches Mutagen (daemon or session). |
 | `dkdb-container-connect` | Menu of **running** `dkdb-` containers; opens bash with `docker exec -it -u <user>`. For a Mutagen container it first makes sure the daemon is running and creates or resumes the sync session, flushing only when it creates it (spec 08); the shell opens even if that fails. |
