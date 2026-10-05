@@ -1,7 +1,9 @@
 # Terminate the orphan Mutagen sessions: dkdb- sessions whose container no longer exists
+# Version: 0.1.0
 # (left by containers deleted outside dkdb-container-delete, or while the Mutagen daemon was
 # stopped). The host folders are not touched.
 . "$PSScriptRoot\dkdb-common.ps1"
+Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
 if (-not (Test-DevboxMutagen)) {

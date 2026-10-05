@@ -22,6 +22,7 @@ Several scripts and the image share names, encoding and ways of interacting with
 - **`.gitattributes`:** `* text=auto eol=lf` (replaces the initial `* text=auto`).
 - **Script names:** every file under `scripts/ps1/` and `scripts/bash/` is named `dkdb-<name>` so that, once `scripts\ps1` is on the PATH, commands cannot be confused with others. File names cannot use `$DevboxPrefix`: changing the prefix also means renaming these files.
 - **Repository layout:** `install/`, `scripts/docker/`, `scripts/ps1/`, `scripts/bash/`, `specs/`.
+- **Version and integrity:** `manifest.json` in the repository root is the inventory of the package: `version` (semantic versioning, starting at `0.1.0`) and `files`, the version of every file the installer downloads (and of `install/install.ps1`). Each listed file carries `# Version: x.y.z` in its first lines; manifest and header must match (checked by `Get-DevboxIntegrity`: existence and version; no hashes). Installed as `<root>\devbox\manifest.json`. Every `dkdb-*.ps1`, `install.ps1`, `uninstall.ps1`, the bash installers and the entrypoint print their own version and the project version when they start (`Show-DevboxVersion -Script $PSCommandPath` in the common file). The bash scripts take the project version from the image environment (`DEVBOX_VERSION`; `unknown` in an older image). Rules for bumping versions are in `CLAUDE.md`, which is mandatory.
 - **Menu:** common function `Select-DevboxItem`, navigation only: up/down arrows, Enter confirms, Esc cancels. No numbers. ASCII, no external modules.
 
 ## Consequences

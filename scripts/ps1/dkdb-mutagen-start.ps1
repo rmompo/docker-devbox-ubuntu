@@ -1,6 +1,8 @@
 # Start the Mutagen daemon if it is not running (it only checks when it is).
+# Version: 0.1.0
 # dkdb-container-start and dkdb-container-connect already do this for Mutagen containers.
 . "$PSScriptRoot\dkdb-common.ps1"
+Show-DevboxVersion -Script $PSCommandPath
 
 if (-not (Test-DevboxMutagen)) {
     Write-Host 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).' -ForegroundColor Red

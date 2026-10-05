@@ -12,6 +12,7 @@ Typical problems and their fixes. Commands in `PowerShell` run on the Windows ho
 | 4 | "the scripts must be in `<root>\devbox\scripts\ps1`" | The scripts were moved. They deduce the shared root from their location: run `install.ps1` again instead of moving them. |
 | 5 | I want another shared root | Run `install.ps1` with the new root, then recreate your containers (they keep the host paths they were created with). The installer offers to remove the old PATH entry. |
 | 6 | I want to remove everything | Run `<root>\devbox\install\uninstall.ps1`. It keeps `tools`, your projects, containers and images. |
+| 7 | "the installed package is inconsistent with manifest.json" | A file is missing or has another version than the manifest. Run `dkdb-verify` to see which, then run `install.ps1` again. If it says "Inconsistent download" during the installation, wait a few minutes (GitHub caches raw files) and try again. |
 
 ## Docker
 
@@ -43,3 +44,5 @@ Typical problems and their fixes. Commands in `PowerShell` run on the Windows ho
 | 2 | The AI client installer says another client is installed | One AI client per container. Create another container for the other client. |
 | 3 | `dkdb-install-*.sh` is not found | Run it with `bash ~/devbox/bash/<script>`; the `bash` folder is mounted read-only and Windows does not keep the execute bit. |
 | 4 | I changed the image or `entrypoint.sh` | Rebuild with `dkdb-image-create` and recreate the containers: a container keeps the image it was created from. |
+| 5 | `dkdb-container-start` or `dkdb-container-connect` says the image version is not compatible | The container was created from an image of another major.minor version than the scripts (0.x). Rebuild with `dkdb-image-create` and recreate the container. To reach its data meanwhile: `docker start <container>`, `docker exec -it -u <user> <container> bash`, `docker cp`. |
+| 6 | "No image ... with a version compatible with the scripts" in `dkdb-container-create` | Build one with `dkdb-image-create`. Images are tagged with the version (`dkdb-<name>:<version>`); `latest` is never used. |

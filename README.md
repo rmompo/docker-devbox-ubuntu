@@ -78,9 +78,18 @@ From any folder, in a new terminal:
 | 9 | `dkdb-mutagen-stop` | Stops the Mutagen daemon if it is running (stops all Mutagen sessions). |
 | 10 | `dkdb-mutagen-status` | Shows the sync state and conflicts of a Mutagen container (menu). |
 | 11 | `dkdb-mutagen-clean` | Terminates leftover Mutagen sessions (container deleted outside the scripts, or daemon stopped at that time; menu, asks first). |
+| 12 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
 
 Problems? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
+## Version and integrity
+
+`manifest.json` lists the project version and every file with its own version (each file also carries a `# Version: x.y.z` line). It is installed as `<root>\devbox\manifest.json`, and:
+
+1. Every script prints its own version and the project version when it starts.
+2. `install.ps1` downloads the manifest first and then exactly the files it lists, checking that each file has the version the manifest says (a mixed or partial download stops the installation). When an update changes the major.minor version (0.x), it tells you to rebuild the images and recreate the containers.
+3. `dkdb-verify` checks the installed package against the manifest. `dkdb-image-create`, `dkdb-container-create`, `dkdb-container-start` and `dkdb-container-connect` run the same check and stop if it fails.
+4. Images are tagged with the version (`dkdb-<name>:<version>`, never `latest`). `dkdb-container-create` uses the highest tag that is compatible with the scripts (same major.minor in 0.x, same major from 1.0), and `start` and `connect` refuse to work with a container created from an incompatible image: rebuild the image and recreate the container.
 
 ## Folders
 
@@ -89,6 +98,7 @@ Host (default values; the shared root is chosen once by `install.ps1`):
 ```
 C:\shared\                       shared root
   devbox\
+    manifest.json                 project version and the version of every file
     install\                     install.ps1 (downloaded by hand) and uninstall.ps1
     scripts\
       ps1\                       added to the user PATH (Windows)
@@ -114,6 +124,7 @@ The `bash` path is not asked, and the default tools path is not stored anywhere:
 ## Repository layout
 
 ```
+manifest.json       Project version and the version of every file (the installer's file list)
 install/    install.ps1 (the single-file installer) and uninstall.ps1
 scripts/
   docker/   Dockerfile and entrypoint.sh
@@ -124,7 +135,7 @@ TROUBLESHOOTING.md   Typical problems and fixes
 LICENSE              Unlicense (public domain)
 ```
 
-When you add, rename or remove a file under `scripts/`, update the `$Files` list in `install/install.ps1`; otherwise the installer will not download it.
+When you add, rename or remove a file under `scripts/` or `install/`, update `manifest.json`: the installer downloads exactly the files it lists (see `CLAUDE.md`).
 
 ## Methodology (CoT)
 

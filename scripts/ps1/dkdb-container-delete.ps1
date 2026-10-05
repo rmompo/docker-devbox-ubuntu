@@ -1,9 +1,11 @@
 # Delete one stopped devbox container chosen from a menu.
+# Version: 0.1.0
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # With a Mutagen container, only the Mutagen session of this container is terminated
 # (never the daemon or other sessions).
 . "$PSScriptRoot\dkdb-common.ps1"
+Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
 $containers = Get-DevboxContainers -Running $false

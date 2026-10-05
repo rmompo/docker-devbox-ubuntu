@@ -1,3 +1,4 @@
+# Version: 0.1.0
 ARG UBUNTU_VERSION=26.04
 FROM ubuntu:${UBUNTU_VERSION}
 
@@ -21,6 +22,12 @@ RUN sed -i 's/^#force_color_prompt=yes/force_color_prompt=yes/' /etc/skel/.bashr
         "alias ls='ls --color=auto'" \
         "alias grep='grep --color=auto'" \
         >> /etc/skel/.bashrc
+
+# Project version (manifest.json), passed by dkdb-image-create. Placed after the heavy layers
+# so that a new version does not invalidate the apt cache.
+ARG DEVBOX_VERSION=unknown
+ENV DEVBOX_VERSION=${DEVBOX_VERSION}
+LABEL org.opencontainers.image.version="${DEVBOX_VERSION}"
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

@@ -1,5 +1,8 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
+# Version: 0.1.0
 . "$PSScriptRoot\dkdb-common.ps1"
+Show-DevboxVersion -Script $PSCommandPath
+Assert-DevboxIntegrity
 Assert-DevboxDocker
 
 # --- Ask for everything ---
@@ -34,8 +37,8 @@ $bashPath = (Get-DevboxBashPath).TrimEnd('\')
 
 # --- Validate everything before doing anything ---
 $errors = @()
-docker image inspect $imageName *> $null
-if ($LASTEXITCODE -ne 0) { $errors += "Image '$imageName' does not exist. Run dkdb-image-create first." }
+$imageRef = Get-DevboxCompatibleImage -ImageName $imageName
+if (-not $imageRef) { $errors += "No image '$imageName' with a version compatible with the scripts ($(Get-DevboxVersion)) was found. Run dkdb-image-create first." }
 docker container inspect $containerName *> $null
 if ($LASTEXITCODE -eq 0) { $errors += "A container named '$containerName' already exists." }
 foreach ($path in @($projectsPath, $toolsPath, $bashPath)) {
@@ -89,14 +92,14 @@ if ($useMutagen) {
 $createArgs += @(
     '--mount', "type=bind,source=$toolsPath,target=$mountBase/tools",
     '--mount', "type=bind,source=$bashPath,target=$mountBase/bash,readonly",
-    $imageName
+    $imageRef
 )
 docker @createArgs | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host 'Error: docker create failed.' -ForegroundColor Red
     exit 1
 }
-Write-Host "Container '$containerName' created (user '$userName', password equal to the user name)." -ForegroundColor Green
+Write-Host "Container '$containerName' created from image '$imageRef' (user '$userName', password equal to the user name)." -ForegroundColor Green
 if ($useMutagen) {
     Write-Host "Projects: Mutagen will synchronize '$projectsPath' with the container when it is started."
 }

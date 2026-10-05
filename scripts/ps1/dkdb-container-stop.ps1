@@ -1,6 +1,8 @@
 # Stop one running devbox container chosen from a menu.
+# Version: 0.1.0
 # It never touches Mutagen (daemon or session): see dkdb-mutagen-stop for that.
 . "$PSScriptRoot\dkdb-common.ps1"
+Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
 $containers = Get-DevboxContainers -Running $true

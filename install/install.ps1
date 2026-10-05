@@ -1,5 +1,6 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# It downloads scripts/bash, scripts/ps1, scripts/docker and install/uninstall.ps1 from the
+# Version: 0.1.0
+# It downloads manifest.json and every file it lists (scripts and uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -8,28 +9,6 @@ $RepoUrl = 'https://github.com/rmompo/docker-devbox-ubuntu'
 $DefaultBranch = 'main'
 # Shared root: <root>\devbox holds the scripts, <root>\tools the shared tools (spec 07).
 $DefaultRootPath = 'C:\shared\'
-
-# Every file to download, relative to the repository root. Keep it in sync with
-# the repository: a file missing from this list is NOT installed (spec 07).
-$Files = @(
-    'install/uninstall.ps1'
-    'scripts/bash/dkdb-install-claudecode.sh'
-    'scripts/bash/dkdb-install-ghcopilot-cli.sh'
-    'scripts/docker/Dockerfile'
-    'scripts/docker/entrypoint.sh'
-    'scripts/ps1/dkdb-common.ps1'
-    'scripts/ps1/dkdb-container-connect.ps1'
-    'scripts/ps1/dkdb-container-create.ps1'
-    'scripts/ps1/dkdb-container-delete.ps1'
-    'scripts/ps1/dkdb-container-start.ps1'
-    'scripts/ps1/dkdb-container-stop.ps1'
-    'scripts/ps1/dkdb-image-create.ps1'
-    'scripts/ps1/dkdb-image-delete.ps1'
-    'scripts/ps1/dkdb-mutagen-clean.ps1'
-    'scripts/ps1/dkdb-mutagen-start.ps1'
-    'scripts/ps1/dkdb-mutagen-status.ps1'
-    'scripts/ps1/dkdb-mutagen-stop.ps1'
-)
 
 $ErrorActionPreference = 'Stop'
 
@@ -65,6 +44,40 @@ function Add-InstallUserPath {
         $env:Path = "$env:Path;$Folder"
     }
 }
+
+# Version of a file: the '# Version: x.y.z' line in its first lines ($null when absent).
+function Get-InstallFileVersion {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    foreach ($line in (Get-Content -LiteralPath $Path -TotalCount 15)) {
+        if ($line -match '^#\s*Version:\s*(\d+\.\d+\.\d+)\s*$') { return $Matches[1] }
+    }
+    return $null
+}
+
+# Project version from a manifest.json ('unknown' when it cannot be read).
+function Get-InstallVersion {
+    param([Parameter(Mandatory)][string]$ManifestPath)
+    try {
+        $version = (Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json).version
+        if ($version) { return [string]$version }
+    } catch { $version = $null }
+    return 'unknown'
+}
+
+# Compatible versions share major.minor (0.x) or major (1.0 and later); same rule as dkdb-common.ps1.
+function Test-InstallVersionCompatible {
+    param([string]$Left, [string]$Right)
+    $a = $null
+    $b = $null
+    if (-not [version]::TryParse($Left, [ref]$a) -or -not [version]::TryParse($Right, [ref]$b)) { return $false }
+    if ($a.Major -eq 0 -and $b.Major -eq 0) { return ($a.Minor -eq $b.Minor) }
+    return ($a.Major -eq $b.Major)
+}
+
+$selfVersion = Get-InstallFileVersion -Path $PSCommandPath
+if (-not $selfVersion) { $selfVersion = 'unknown' }
+Write-Host "install $selfVersion (docker-devbox-ubuntu installer)" -ForegroundColor DarkGray
 
 # The repository URL must be a GitHub one (the files are downloaded from raw.githubusercontent.com).
 if ($RepoUrl.TrimEnd('/') -match '^https://github\.com/([^/]+/[^/]+)$') {
@@ -110,26 +123,65 @@ $Branch = $Branch.Trim()
 if ($Branch -notmatch '^[A-Za-z0-9._/-]+$') { Stop-Install "Invalid branch or tag name: $Branch" }
 $rawBase = "https://raw.githubusercontent.com/$repoSlug/$Branch"
 
-# --- Download ---
-Write-Host "Downloading from $RepoUrl ($Branch) ..."
+# --- Previous version (to tell whether images and containers must be rebuilt) ---
+$manifestPath = Join-Path $devboxPath 'manifest.json'
+$previousVersion = $null
+if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+    $previousVersion = Get-InstallVersion -ManifestPath $manifestPath
+    if ($previousVersion -eq 'unknown') { $previousVersion = $null }
+}
 
-foreach ($file in $Files) {
-    $target = Join-Path $devboxPath ($file.Replace('/', '\'))
+# Download one repository file into <root>\devbox, keeping its relative path.
+function Save-InstallFile {
+    param([Parameter(Mandatory)][string]$Relative)
+    $target = Join-Path $devboxPath ($Relative.Replace('/', '\'))
     $targetDir = Split-Path -Parent $target
     try {
         if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
             New-Item -ItemType Directory -Path $targetDir | Out-Null
         }
         # Bytes are saved as they are, so LF line endings are preserved.
-        Invoke-WebRequest -UseBasicParsing -Uri "$rawBase/$file" -OutFile $target
+        Invoke-WebRequest -UseBasicParsing -Uri "$rawBase/$Relative" -OutFile $target
     } catch {
-        Stop-Install "Could not download $file ($($_.Exception.Message)). Is the repository public?"
+        Stop-Install "Could not download $Relative ($($_.Exception.Message)). Is the repository public?"
     }
     if (-not (Test-Path -LiteralPath $target) -or (Get-Item -LiteralPath $target).Length -eq 0) {
-        Stop-Install "The downloaded file is missing or empty: $file"
+        Stop-Install "The downloaded file is missing or empty: $Relative"
     }
     if ($target -like '*.ps1') { Unblock-File -LiteralPath $target }
-    Write-Host "  $file"
+    return $target
+}
+
+# --- Download: manifest.json first, then every file it lists ---
+Write-Host "Downloading from $RepoUrl ($Branch) ..."
+$manifestFile = Save-InstallFile -Relative 'manifest.json'
+try {
+    $manifest = Get-Content -Raw -LiteralPath $manifestFile | ConvertFrom-Json
+} catch {
+    Stop-Install 'manifest.json is not valid JSON.'
+}
+$entries = @()
+if ($manifest.files) { $entries = @($manifest.files.PSObject.Properties) }
+if ($entries.Count -eq 0) { Stop-Install 'manifest.json does not list any file.' }
+$version = Get-InstallVersion -ManifestPath $manifestFile
+Write-Host "Version: $version" -ForegroundColor Cyan
+
+foreach ($entry in $entries) {
+    $relative = $entry.Name
+    # The installer itself was downloaded by hand: only its version is compared.
+    if ($relative -eq 'install/install.ps1') {
+        if ($selfVersion -ne [string]$entry.Value) {
+            Write-Host "Warning: this installer is version $selfVersion but $Branch expects $($entry.Value). Download install.ps1 again from that branch." -ForegroundColor Yellow
+        }
+        continue
+    }
+    $target = Save-InstallFile -Relative $relative
+    # Integrity: the version in the file must be the one in the manifest (a mixed or partial download fails here).
+    $actual = Get-InstallFileVersion -Path $target
+    if ($actual -ne [string]$entry.Value) {
+        Stop-Install "Inconsistent download: $relative is version '$actual' but manifest.json says $($entry.Value). Try again in a few minutes (GitHub caches raw files)."
+    }
+    Write-Host "  $relative ($actual)"
 }
 
 # --- Shared tools folder (the default tools path of dkdb-container-create) ---
@@ -175,6 +227,9 @@ if ($policy -in @('Restricted', 'AllSigned')) {
 }
 
 Write-Host ''
-Write-Host "Installed in $devboxPath (shared tools folder: $toolsPath)" -ForegroundColor Green
+Write-Host "Installed in $devboxPath (shared tools folder: $toolsPath), version $version" -ForegroundColor Green
+if ($previousVersion -and -not (Test-InstallVersionCompatible -Left $previousVersion -Right $version)) {
+    Write-Host "Updated from ${previousVersion} to ${version}: rebuild the images (dkdb-image-create) and recreate the containers." -ForegroundColor Yellow
+}
 Write-Host 'Make sure Docker Engine is running (start Docker Desktop and wait until it is ready).' -ForegroundColor Red
 Write-Host 'Then open a new terminal (so the PATH is refreshed) and run: dkdb-image-create'

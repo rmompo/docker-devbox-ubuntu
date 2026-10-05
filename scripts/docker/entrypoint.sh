@@ -1,4 +1,5 @@
 #!/bin/bash
+# Version: 0.1.0
 # Container entrypoint (runs as root).
 # Creates the user given in DEVBOX_USER (password = user name, sudo with
 # password), then hands the main process over to that user.
@@ -8,6 +9,11 @@ if [ -z "${DEVBOX_USER:-}" ]; then
     echo "entrypoint: DEVBOX_USER is not set" >&2
     exit 1
 fi
+
+# Project version baked into the image: shown in the container logs and kept in a file.
+script_version="$(sed -n 's/^# Version: *//p' "$0" | head -n 1)"
+echo "$(basename "$0") ${script_version:-unknown} (docker-devbox-ubuntu ${DEVBOX_VERSION:-unknown})"
+echo "${DEVBOX_VERSION:-unknown}" > /etc/devbox-version
 
 if ! id "$DEVBOX_USER" >/dev/null 2>&1; then
     useradd --create-home --shell /bin/bash --groups sudo "$DEVBOX_USER"

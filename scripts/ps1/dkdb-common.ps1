@@ -1,4 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
+# Version: 0.1.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -11,6 +12,148 @@ $DevboxDefaultProjectsPath = 'C:\LocalFiles\proyectos\'
 # Optional Mutagen (file sync, spec 08), downloaded on demand by dkdb-container-create.
 # It is also the minimum accepted version (0.18.1 fixed the compatibility with Docker Engine 28+).
 $DevboxMutagenVersion = '0.18.1'
+
+# --- Version and integrity (spec 01) ---
+# <root>\devbox (the installed package) or the repository root: both have the same layout.
+function Get-DevboxBase {
+    return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+}
+
+# Project version, read from <root>\devbox\manifest.json (downloaded by install.ps1).
+# 'unknown' when the manifest is missing or unreadable.
+function Get-DevboxVersion {
+    $manifest = Join-Path (Get-DevboxBase) 'manifest.json'
+    if (Test-Path -LiteralPath $manifest -PathType Leaf) {
+        try {
+            $version = (Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json).version
+            if ($version) { return [string]$version }
+        } catch {
+            return 'unknown'
+        }
+    }
+    return 'unknown'
+}
+
+# Version of a file: the '# Version: x.y.z' line in its first lines ($null when absent).
+function Get-DevboxFileVersion {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    foreach ($line in (Get-Content -LiteralPath $Path -TotalCount 15)) {
+        if ($line -match '^#\s*Version:\s*(\d+\.\d+\.\d+)\s*$') { return $Matches[1] }
+    }
+    return $null
+}
+
+# One line with the version of the calling script and of the project; every dkdb-*
+# script calls it when it starts: Show-DevboxVersion -Script $PSCommandPath
+function Show-DevboxVersion {
+    param([string]$Script)
+    $package = Get-DevboxVersion
+    if (-not $Script) {
+        Write-Host "docker-devbox-ubuntu $package" -ForegroundColor DarkGray
+        return
+    }
+    $own = Get-DevboxFileVersion -Path $Script
+    if (-not $own) { $own = 'unknown' }
+    Write-Host "$([System.IO.Path]::GetFileNameWithoutExtension($Script)) $own (docker-devbox-ubuntu $package)" -ForegroundColor DarkGray
+}
+
+# Compare the files under $Base with manifest.json: every listed file must exist and its
+# '# Version:' header must equal the manifest entry. Returns Errors (the package is
+# inconsistent) and Notes (files under scripts/ or install/ that the manifest does not list).
+function Get-DevboxIntegrity {
+    param([Parameter(Mandatory)][string]$Base)
+    $Base = [System.IO.Path]::GetFullPath($Base).TrimEnd('\', '/')
+    $errors = @()
+    $notes = @()
+    $manifestPath = Join-Path $Base 'manifest.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        return [pscustomobject]@{ Errors = @('manifest.json is missing'); Notes = @(); Checked = 0 }
+    }
+    try {
+        $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    } catch {
+        return [pscustomobject]@{ Errors = @('manifest.json is not valid JSON'); Notes = @(); Checked = 0 }
+    }
+    if (-not $manifest.files) {
+        return [pscustomobject]@{ Errors = @('manifest.json has no files list'); Notes = @(); Checked = 0 }
+    }
+    $listed = @{}
+    foreach ($entry in $manifest.files.PSObject.Properties) {
+        $relative = $entry.Name
+        $listed[$relative] = $true
+        $path = Join-Path $Base ($relative -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            # install.ps1 is downloaded by hand: it may legitimately be elsewhere.
+            if ($relative -eq 'install/install.ps1') { $notes += "not found (downloaded by hand): $relative" }
+            else { $errors += "missing: $relative" }
+            continue
+        }
+        $actual = Get-DevboxFileVersion -Path $path
+        if (-not $actual) { $errors += "no '# Version:' header: $relative" }
+        elseif ($actual -ne [string]$entry.Value) { $errors += "version $actual in the file, $($entry.Value) in manifest.json: $relative" }
+    }
+    foreach ($file in (Get-ChildItem -Path (Join-Path $Base 'scripts'), (Join-Path $Base 'install') -Recurse -File -ErrorAction SilentlyContinue)) {
+        $relative = ($file.FullName.Substring($Base.Length).TrimStart('\', '/')) -replace '\\', '/'
+        if (-not $listed.ContainsKey($relative)) { $notes += "not listed in manifest.json: $relative" }
+    }
+    return [pscustomobject]@{ Errors = @($errors); Notes = @($notes); Checked = $listed.Count }
+}
+
+# Stop when the installed package is inconsistent with manifest.json.
+function Assert-DevboxIntegrity {
+    $result = Get-DevboxIntegrity -Base (Get-DevboxBase)
+    if ($result.Errors.Count -eq 0) { return }
+    Write-Host 'Error: the installed package is inconsistent with manifest.json:' -ForegroundColor Red
+    foreach ($problem in $result.Errors) { Write-Host "  - $problem" -ForegroundColor Red }
+    Write-Host 'Run install.ps1 again (dkdb-verify shows the details).' -ForegroundColor Red
+    exit 1
+}
+
+# Two versions are compatible when they share major.minor (0.x) or major (1.0 and later).
+function Test-DevboxVersionCompatible {
+    param([string]$Left, [string]$Right)
+    $a = $null
+    $b = $null
+    if (-not [version]::TryParse($Left, [ref]$a) -or -not [version]::TryParse($Right, [ref]$b)) { return $false }
+    if ($a.Major -eq 0 -and $b.Major -eq 0) { return ($a.Minor -eq $b.Minor) }
+    return ($a.Major -eq $b.Major)
+}
+
+# Highest tag of the image $ImageName (with prefix) compatible with the scripts, as
+# name:tag; $null when there is none. Images are tagged with a version, never latest.
+function Get-DevboxCompatibleImage {
+    param([Parameter(Mandatory)][string]$ImageName)
+    $scripts = Get-DevboxVersion
+    $best = $null
+    foreach ($line in (docker images --format '{{.Repository}}:{{.Tag}}')) {
+        $separator = $line.LastIndexOf(':')
+        if ($separator -lt 1) { continue }
+        if ($line.Substring(0, $separator) -cne $ImageName) { continue }
+        $tag = $line.Substring($separator + 1)
+        $parsed = $null
+        if (-not [version]::TryParse($tag, [ref]$parsed)) { continue }
+        if (-not (Test-DevboxVersionCompatible -Left $tag -Right $scripts)) { continue }
+        if ($null -eq $best -or $parsed -gt $best) { $best = $parsed }
+    }
+    if ($null -eq $best) { return $null }
+    return "${ImageName}:$best"
+}
+
+# Stop when the container was created from an image that is not compatible with the scripts.
+function Assert-DevboxContainerVersion {
+    param([Parameter(Mandatory)][string]$Container)
+    $imageVersion = Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_VERSION'
+    $scripts = Get-DevboxVersion
+    if ($imageVersion) { Write-Host "Container image version: $imageVersion" }
+    if (-not $imageVersion -or -not (Test-DevboxVersionCompatible -Left $imageVersion -Right $scripts)) {
+        $shown = $imageVersion
+        if (-not $shown) { $shown = 'unknown' }
+        Write-Host "Error: '$Container' was created from an image with version $shown, not compatible with the scripts ($scripts)." -ForegroundColor Red
+        Write-Host 'Rebuild the image (dkdb-image-create) and recreate the container. Your data stays reachable with docker: docker start, docker exec -it -u <user> <container> bash, docker cp.' -ForegroundColor Red
+        exit 1
+    }
+}
 
 # Linux limits user names to 32 characters; the prefix and the hyphen use some.
 $DevboxMaxInputLength = 32 - ($DevboxPrefix.Length + 1)

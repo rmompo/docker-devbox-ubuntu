@@ -1,7 +1,10 @@
 #!/bin/bash
+# Version: 0.1.0
 # Install GitHub Copilot CLI (latest) in this container (no Node needed).
 # Rule: one AI client per container. Run with: bash dkdb-install-ghcopilot-cli.sh
 set -euo pipefail
+script_version="$(sed -n 's/^# Version: *//p' "$0" | head -n 1)"
+echo "$(basename "$0") ${script_version:-unknown} (docker-devbox-ubuntu ${DEVBOX_VERSION:-unknown})"
 
 # Refuse to install if the other client is already present.
 if command -v claude >/dev/null 2>&1 || [ -e "$HOME/.local/bin/claude" ]; then

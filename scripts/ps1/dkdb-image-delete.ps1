@@ -1,5 +1,7 @@
 # Delete one devbox image chosen from a menu.
+# Version: 0.1.0
 . "$PSScriptRoot\dkdb-common.ps1"
+Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
 $images = Get-DevboxImages

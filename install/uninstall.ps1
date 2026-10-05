@@ -1,9 +1,20 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
+# Version: 0.1.0
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
 $ErrorActionPreference = 'Stop'
+
+# Project version from <root>\devbox\manifest.json ('unknown' when it cannot be read).
+function Get-UninstallVersion {
+    param([Parameter(Mandatory)][string]$ManifestPath)
+    try {
+        $version = (Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json).version
+        if ($version) { return [string]$version }
+    } catch { $version = $null }
+    return 'unknown'
+}
 
 function Stop-Uninstall {
     param([Parameter(Mandatory)][string]$Message)
@@ -40,6 +51,11 @@ if ((Split-Path -Leaf $installDir) -ine 'install' -or (Split-Path -Leaf $devboxP
     Stop-Uninstall "Run this script from <root>\devbox\install (found: $installDir)."
 }
 $scriptsPath = Join-Path $devboxPath 'scripts'
+$ownVersion = 'unknown'
+foreach ($line in (Get-Content -LiteralPath $PSCommandPath -TotalCount 15)) {
+    if ($line -match '^#\s*Version:\s*(\d+\.\d+\.\d+)\s*$') { $ownVersion = $Matches[1]; break }
+}
+Write-Host "uninstall $ownVersion (docker-devbox-ubuntu $(Get-UninstallVersion -ManifestPath (Join-Path $devboxPath 'manifest.json')))" -ForegroundColor DarkGray
 $ps1Path = Join-Path $scriptsPath 'ps1'
 $mutagenPath = Join-Path $devboxPath 'mutagen'
 $mutagenExe = Join-Path $mutagenPath 'mutagen.exe'

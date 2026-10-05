@@ -16,6 +16,7 @@ One AI client (Claude Code or GitHub Copilot CLI) is installed inside the contai
 - **Installed copy:** `<root>\devbox\scripts\bash\`, downloaded by `install.ps1` (spec 07) and mounted read-only inside the container at `/home/<user>/devbox/bash/`. To update, re-run `install.ps1`.
 - **Claude Code:** `curl -fsSL https://claude.ai/install.sh | bash` (latest version; leaves `~/.local/bin/claude`).
 - **Copilot CLI:** `curl -fsSL https://gh.io/copilot-install | bash` (no Node needed; installs into `$HOME/.local` for non-root users).
+- **Version:** each script has a `# Version: x.y.z` header and prints `<script> <own version> (docker-devbox-ubuntu <DEVBOX_VERSION>)` when it starts; the project version comes from the image environment (`unknown` in an image built before the version support).
 - **PATH:** each script appends `~/.local/bin` to `.bashrc` idempotently.
 - **Exclusivity check:** before installing, the script looks for the other client (`claude` or `copilot`, on the PATH or in `~/.local/bin`). If found, it installs nothing, prints that another container must be used, and exits with an error code. If the client is the same one, it continues (reinstall or update).
 - **Language:** script comments and messages are in English.

@@ -1,5 +1,8 @@
 # Open a bash shell, as the container's user, in a running devbox container.
+# Version: 0.1.0
 . "$PSScriptRoot\dkdb-common.ps1"
+Show-DevboxVersion -Script $PSCommandPath
+Assert-DevboxIntegrity
 Assert-DevboxDocker
 
 $containers = Get-DevboxContainers -Running $true
@@ -19,6 +22,9 @@ if (-not $userName) {
     Write-Host "Error: '$selected' has no DEVBOX_USER variable; it was not created by dkdb-container-create." -ForegroundColor Red
     exit 1
 }
+
+# Stop when the image the container was created from is not compatible with the scripts.
+Assert-DevboxContainerVersion -Container $selected
 
 # Mutagen container: make sure the daemon is running and the sync session is active
 # (nothing does it when the container was started with plain docker).

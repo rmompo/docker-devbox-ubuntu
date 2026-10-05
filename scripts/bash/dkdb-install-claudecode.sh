@@ -1,7 +1,10 @@
 #!/bin/bash
+# Version: 0.1.0
 # Install Claude Code (latest) in this container.
 # Rule: one AI client per container. Run with: bash dkdb-install-claudecode.sh
 set -euo pipefail
+script_version="$(sed -n 's/^# Version: *//p' "$0" | head -n 1)"
+echo "$(basename "$0") ${script_version:-unknown} (docker-devbox-ubuntu ${DEVBOX_VERSION:-unknown})"
 
 # Refuse to install if the other client is already present.
 if command -v copilot >/dev/null 2>&1 || [ -e "$HOME/.local/bin/copilot" ]; then

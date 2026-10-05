@@ -1,5 +1,8 @@
 # Start one stopped devbox container chosen from a menu.
+# Version: 0.1.0
 . "$PSScriptRoot\dkdb-common.ps1"
+Show-DevboxVersion -Script $PSCommandPath
+Assert-DevboxIntegrity
 Assert-DevboxDocker
 
 $containers = Get-DevboxContainers -Running $false
@@ -13,6 +16,8 @@ if (-not $selected) {
     Write-Host 'Cancelled.'
     exit 0
 }
+
+Assert-DevboxContainerVersion -Container $selected
 
 docker start $selected | Out-Null
 if ($LASTEXITCODE -ne 0) {

@@ -1,6 +1,8 @@
 # Stop the Mutagen daemon if it is running (it only checks when it is not).
+# Version: 0.1.0
 # It is one daemon per user: stopping it stops ALL Mutagen sessions, not only dkdb-* ones.
 . "$PSScriptRoot\dkdb-common.ps1"
+Show-DevboxVersion -Script $PSCommandPath
 
 if (-not (Test-DevboxMutagen)) {
     Write-Host 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).' -ForegroundColor Red

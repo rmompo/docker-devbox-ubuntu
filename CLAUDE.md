@@ -1,0 +1,42 @@
+# CLAUDE.md
+
+Instructions for working on this repository (docker-devbox-ubuntu). The design lives in `specs/`; read the relevant spec before changing a script.
+
+## Versioning and integrity (MANDATORY)
+
+`manifest.json` is the single inventory of the package: the project `version` and, in `files`, every file that the installer downloads with the version of each one. Every file listed there carries its own version in a `# Version: x.y.z` line in its first lines (`.ps1`, `.sh`, `Dockerfile`).
+
+**These rules are MANDATORY; follow them in every change, without being asked:**
+
+1. **Changing a listed file means bumping its version.** Raise the `# Version:` line of the file and its entry in `manifest.json` in the same change. Patch (0.1.0 -> 0.1.1) for fixes and wording; minor (0.1.0 -> 0.2.0) for a change of behavior. They must always be equal.
+2. **Adding, renaming or removing a file under `scripts/` or `install/`** means adding, renaming or removing its entry in `manifest.json` `files` and giving a new file its `# Version:` line. The installer downloads exactly the files of that list, and `install/install.ps1` is listed too (it is downloaded by hand).
+3. **Bump the project version** (`version` in `manifest.json`) **when a change affects the project critically** (see below).
+4. **Before finishing, run the integrity check and fix everything it reports** (no errors, no notes):
+
+   ```bash
+   pwsh -NoProfile -Command ". ./scripts/ps1/dkdb-common.ps1; \$r = Get-DevboxIntegrity -Base (Get-Location).Path; \$r.Errors; \$r.Notes"
+   ```
+
+   It compares every listed file with `manifest.json` (existence and version) and reports files under `scripts/` or `install/` that the manifest does not list.
+
+### When a change is critical (bump the project version)
+
+A change is critical when, after it, users must act (reinstall, rebuild the image, recreate containers) or when something they rely on changes. Typical cases:
+
+1. Image changes: `Dockerfile`, `entrypoint.sh`, base Ubuntu version, installed packages.
+2. Volume or path changes: folder layout, mount targets such as `~/devbox/projects`, `~/devbox/tools`, `~/devbox/bash`, default host paths, the shared root layout.
+3. Installer changes: `install.ps1`, `uninstall.ps1`, what is installed or where, the PATH handling.
+4. Renaming, adding or removing a `dkdb-*` script, or changing what a script does in a way users notice.
+5. Default names (image, container, user) or the `dkdb` prefix.
+6. Mutagen behavior: session naming, sync mode, flags, minimum version, lifecycle in start, stop, connect or delete.
+
+Not critical (no project bump, but the file version still follows rule 1): documentation fixes, comments, message wording, refactors without a visible effect.
+
+How to bump the project while it is `0.x`: raise the minor number (0.1.0 -> 0.2.0) for a critical change and the patch number (0.1.0 -> 0.1.1) for a fix. From `1.0.0` on, follow semantic versioning (major for breaking changes). **Images are compatible with the scripts when they share major.minor (0.x) or major (1.0 and later)**, so a minor bump in `0.x` forces users to rebuild the image and recreate containers. If it is unclear whether a change is critical, ask the owner before deciding. After a bump, say in the final message that the image must be rebuilt (`dkdb-image-create`) and the containers recreated.
+
+## Conventions to keep
+
+1. Documentation, scripts, prompts, messages and comments are in English.
+2. `.ps1` files are pure ASCII; every file is UTF-8 without BOM and LF.
+3. Every file under `scripts/ps1/` and `scripts/bash/` is named `dkdb-<name>`.
+4. Never commit unless the owner asks for it.
