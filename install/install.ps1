@@ -1,17 +1,18 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# It downloads scripts/bash, scripts/ps1 and scripts/docker from the repository
-# into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
+# It downloads scripts/bash, scripts/ps1, scripts/docker and install/uninstall.ps1 from the
+# repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
 # --- Settings ---
 $RepoUrl = 'https://github.com/rmompo/docker-devbox-ubuntu'
-$Branch = 'main'
+$DefaultBranch = 'main'
 # Shared root: <root>\devbox holds the scripts, <root>\tools the shared tools (spec 07).
 $DefaultRootPath = 'C:\shared\'
 
 # Every file to download, relative to the repository root. Keep it in sync with
 # the repository: a file missing from this list is NOT installed (spec 07).
 $Files = @(
+    'install/uninstall.ps1'
     'scripts/bash/dkdb-install-claudecode.sh'
     'scripts/bash/dkdb-install-ghcopilot-cli.sh'
     'scripts/docker/Dockerfile'
@@ -24,24 +25,10 @@ $Files = @(
     'scripts/ps1/dkdb-container-stop.ps1'
     'scripts/ps1/dkdb-image-create.ps1'
     'scripts/ps1/dkdb-image-delete.ps1'
+    'scripts/ps1/dkdb-mutagen-clean.ps1'
     'scripts/ps1/dkdb-mutagen-start.ps1'
+    'scripts/ps1/dkdb-mutagen-status.ps1'
     'scripts/ps1/dkdb-mutagen-stop.ps1'
-)
-
-# Files installed by earlier versions under their old names (before the dkdb-
-# prefix). They are offered for removal after the download; nothing else is deleted.
-$OldFiles = @(
-    'scripts/bash/install-claudecode.sh'
-    'scripts/bash/install-ghcopilot-cli.sh'
-    'scripts/ps1/common.ps1'
-    'scripts/ps1/container-connect.ps1'
-    'scripts/ps1/container-create.ps1'
-    'scripts/ps1/container-delete.ps1'
-    'scripts/ps1/container-start.ps1'
-    'scripts/ps1/container-stop.ps1'
-    'scripts/ps1/image-create.ps1'
-    'scripts/ps1/image-delete.ps1'
-    'scripts/ps1/scripts-update.ps1'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -79,11 +66,12 @@ function Add-InstallUserPath {
     }
 }
 
-# Raw URL of the repository: https://github.com/<user>/<repo> -> raw.githubusercontent.com/<user>/<repo>
-if ($RepoUrl.TrimEnd('/') -notmatch '^https://github\.com/([^/]+/[^/]+)$') {
+# The repository URL must be a GitHub one (the files are downloaded from raw.githubusercontent.com).
+if ($RepoUrl.TrimEnd('/') -match '^https://github\.com/([^/]+/[^/]+)$') {
+    $repoSlug = $Matches[1]
+} else {
     Stop-Install "RepoUrl is not a valid GitHub repository URL: $RepoUrl"
 }
-$rawBase = "https://raw.githubusercontent.com/$($Matches[1])/$Branch"
 
 # --- Ask for the shared root and check it ---
 $rootPath = Read-Host "Shared root path [$DefaultRootPath]"
@@ -115,8 +103,16 @@ if (Test-Path -LiteralPath $scriptsPath) {
     if (-not (Confirm-Install 'Continue?')) { Stop-Install 'Cancelled by the user.' }
 }
 
+# --- Branch or tag ---
+$Branch = Read-Host "Branch or tag to download [$DefaultBranch]"
+if ([string]::IsNullOrWhiteSpace($Branch)) { $Branch = $DefaultBranch }
+$Branch = $Branch.Trim()
+if ($Branch -notmatch '^[A-Za-z0-9._/-]+$') { Stop-Install "Invalid branch or tag name: $Branch" }
+$rawBase = "https://raw.githubusercontent.com/$repoSlug/$Branch"
+
 # --- Download ---
 Write-Host "Downloading from $RepoUrl ($Branch) ..."
+
 foreach ($file in $Files) {
     $target = Join-Path $devboxPath ($file.Replace('/', '\'))
     $targetDir = Split-Path -Parent $target
@@ -134,20 +130,6 @@ foreach ($file in $Files) {
     }
     if ($target -like '*.ps1') { Unblock-File -LiteralPath $target }
     Write-Host "  $file"
-}
-
-# --- Old files from earlier versions (removed only after confirmation) ---
-$oldFound = @($OldFiles | ForEach-Object { Join-Path $devboxPath ($_.Replace('/', '\')) } |
-    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
-if ($oldFound.Count -gt 0) {
-    Write-Host 'Files from an earlier version were found (now replaced by dkdb-* files):' -ForegroundColor Yellow
-    $oldFound | ForEach-Object { Write-Host "  $_" }
-    if (Confirm-Install 'Delete them?') {
-        $oldFound | ForEach-Object { Remove-Item -LiteralPath $_ -Force }
-        Write-Host 'Old files deleted.'
-    } else {
-        Write-Host 'Old files kept (delete them by hand to avoid duplicated commands).' -ForegroundColor Yellow
-    }
 }
 
 # --- Shared tools folder (the default tools path of dkdb-container-create) ---

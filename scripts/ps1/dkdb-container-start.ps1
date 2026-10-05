@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Container '$selected' started." -ForegroundColor Green
 
 if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
-    if (Start-DevboxSync -Container $selected) {
+    if (Start-DevboxSync -Container $selected -Flush) {
         Write-Host "Mutagen sync for '$selected' is active." -ForegroundColor Green
     } else {
         Write-Host 'The container is running, but the projects are NOT synchronized.' -ForegroundColor Yellow

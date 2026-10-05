@@ -8,7 +8,7 @@ A lightweight Ubuntu Docker image, managed with PowerShell scripts, for running 
 |---|-------|------------|
 | 1 | Image | Minimal Ubuntu 26.04 LTS with generic development tools and Python 3. No user and no AI client. |
 | 2 | Container | The user is created when the container is created (not in the image); the main process runs as that user. **One AI client per container.** |
-| 3 | PowerShell scripts | Create and delete images; create, start, stop, connect to and delete containers; start and stop the optional Mutagen daemon. |
+| 3 | PowerShell scripts | Create and delete images; create, start, stop, connect to and delete containers; manage the optional Mutagen sync (daemon, status, clean-up). |
 | 4 | Installer | `install/install.ps1`, the only file you download. It installs the rest. |
 | 5 | Volumes | `projects` (your projects), `tools` (shared tools such as Maven or JDKs) and `bash` (AI client installers, read-only). Optionally, `projects` can be synchronized with [Mutagen](https://mutagen.io) instead of a bind mount. |
 
@@ -36,9 +36,10 @@ iwr -UseBasicParsing 'https://raw.githubusercontent.com/rmompo/docker-devbox-ubu
 powershell -ExecutionPolicy Bypass -File "$dir\install.ps1"
 ```
 
-It asks for the **shared root** (default `C:\shared\`, created on confirmation), downloads `scripts\{bash,ps1,docker}` into `<root>\devbox\` (asking before overwriting an existing install), creates `<root>\tools\` and adds `<root>\devbox\scripts\ps1` to your user PATH (offering to remove the PATH entries of a previous installation). Then **open a new terminal**.
+It asks for the **shared root** (default `C:\shared\`, created on confirmation) and the **branch or tag** to download (default `main`), downloads `scripts\{bash,ps1,docker}` into `<root>\devbox\` plus `uninstall.ps1` into `<root>\devbox\install\` (asking before overwriting an existing install), creates `<root>\tools\` and adds `<root>\devbox\scripts\ps1` to your user PATH (offering to remove the PATH entries of a previous installation). Then **open a new terminal**.
 
 - Update: run the installer again.
+- Uninstall: run `C:\shared\devbox\install\uninstall.ps1` (it keeps `tools`, your projects, containers and images).
 - Change the shared root: run the installer with the new root and recreate your containers (they keep the host paths they were created with).
 - Scripts blocked by the execution policy: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
 
@@ -75,8 +76,11 @@ From any folder, in a new terminal:
 | 7 | `dkdb-image-delete` | Deletes an image. |
 | 8 | `dkdb-mutagen-start` | Starts the Mutagen daemon if it is not running (optional Mutagen). |
 | 9 | `dkdb-mutagen-stop` | Stops the Mutagen daemon if it is running (stops all Mutagen sessions). |
+| 10 | `dkdb-mutagen-status` | Shows the sync state and conflicts of a Mutagen container (menu). |
+| 11 | `dkdb-mutagen-clean` | Terminates leftover Mutagen sessions (container deleted outside the scripts, or daemon stopped at that time; menu, asks first). |
 
-Containers created with an older layout (`~/devbox/proyectos`, `~/devbox/resources`, or without the `bash` volume) must be recreated, and the image rebuilt with `dkdb-image-create` (the entrypoint changed).
+Problems? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
 
 ## Folders
 
@@ -85,7 +89,7 @@ Host (default values; the shared root is chosen once by `install.ps1`):
 ```
 C:\shared\                       shared root
   devbox\
-    install\                     where install.ps1 is downloaded
+    install\                     install.ps1 (downloaded by hand) and uninstall.ps1
     scripts\
       ps1\                       added to the user PATH (Windows)
       bash\                      AI client installers -> ~/devbox/bash (read-only)
@@ -110,12 +114,14 @@ The `bash` path is not asked, and the default tools path is not stored anywhere:
 ## Repository layout
 
 ```
-install/    install.ps1, the single-file installer
+install/    install.ps1 (the single-file installer) and uninstall.ps1
 scripts/
   docker/   Dockerfile and entrypoint.sh
   ps1/      PowerShell scripts (dkdb-*.ps1)
   bash/     AI client installers
 specs/      Project specifications
+TROUBLESHOOTING.md   Typical problems and fixes
+LICENSE              Unlicense (public domain)
 ```
 
 When you add, rename or remove a file under `scripts/`, update the `$Files` list in `install/install.ps1`; otherwise the installer will not download it.
@@ -136,3 +142,9 @@ Each spec follows the pattern **Context -> Reasoning -> Decision -> Consequences
 | 06 | [Verifications and open items](specs/06-verifications.md) | Checks already done and items still to validate |
 | 07 | [Installer](specs/07-installer.md) | install.ps1: shared root, download, PATH |
 | 08 | [Mutagen](specs/08-mutagen.md) | Optional projects sync (avoids slow 9p mounts) |
+
+## License
+
+This is free and unencumbered software released into the public domain, under the [Unlicense](LICENSE). Third-party tools that the scripts download, such as Mutagen, keep their own licenses.
+
+**Disclaimer:** this project is provided "as is", without warranty of any kind, including security. The author accepts no liability whatsoever for its use, copying, modification or forking. Use it at your own risk. The container is meant for local development and uses a weak password by design.

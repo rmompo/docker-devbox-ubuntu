@@ -30,13 +30,13 @@
 
 Reported by the project owner (not reproduced here): git "dubious ownership" on the 9p projects mount, because it shows files as owned by root while git runs as UID 1000. Git 2.46 added the `safe.directory = /path/*` pattern (https://git-scm.com/docs/git/2.46.0). Whether the pattern also matches repositories nested deeper than one level, or a repository at the mount root itself, is not verified.
 
-Not verified yet (needs Windows and Docker Desktop): `install.ps1` end to end (download, PATH, execution policy), the read-only `bash` mount, the `tools` mount, the shared-root layout (`Get-DevboxRoot`, the installer creating `<root>\tools`, stale PATH entry removal), the image rebuilt with the `projects` rename, the entrypoint under rust-coreutils, whether the base image ships extra users, the installers of Claude Code and Copilot CLI on 26.04, `safe.directory` on the 9p mount, and Mutagen end to end: on-demand installation, session creation, `/dev/shm` being recreated at every container start, session behavior after rebooting the PC or stopping Docker Desktop, handling of case-only name differences, and the permission and ownership flags.
+Not verified yet (needs Windows and Docker Desktop): `install.ps1` end to end (download, PATH, execution policy), the read-only `bash` mount, the `tools` mount, the shared-root layout (`Get-DevboxRoot`, the installer creating `<root>\tools`, stale PATH entry removal), the image rebuilt with the `projects` rename, the entrypoint under rust-coreutils, whether the base image ships extra users, the installers of Claude Code and Copilot CLI on 26.04, `safe.directory` on the 9p mount, and Mutagen end to end: on-demand installation, the minimum version check (`mutagen version` output), `mutagen sync list --template` (used to list session names), the orphan clean-up, `uninstall.ps1`, the branch or tag prompt of `install.ps1`, session creation, `/dev/shm` being recreated at every container start, session behavior after rebooting the PC or stopping Docker Desktop, handling of case-only name differences, and the permission and ownership flags.
 
 ## To check during implementation (22.04 items are historical)
 1. Confirm with Docker that `ubuntu:22.04` does not ship the `ubuntu` user.
 2. Confirm the `universe` repository is enabled in the image for `pipx` (otherwise `pip install --user pipx`).
 3. ~~Review the current `.gitattributes`~~ Done: it only contained `* text=auto`; replaced by `* text=auto eol=lf`.
-4. Handle network exposure of the container (password is weak by design).
+4. Network exposure of the container: accepted. It is a local development container (password equal to the user name, weak by design) and it needs internet access; no network hardening is planned.
 
 ## Out of scope
 Connecting VS Code (done manually via terminal and volumes) and `remoteUser` configuration.

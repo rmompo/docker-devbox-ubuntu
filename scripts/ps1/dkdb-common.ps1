@@ -8,6 +8,7 @@ $DevboxDefaultName = 'ubuntu'
 $DevboxDefaultProjectsPath = 'C:\LocalFiles\proyectos\'
 
 # Optional Mutagen (file sync, spec 08), downloaded on demand by dkdb-container-create.
+# It is also the minimum accepted version (0.18.1 fixed the compatibility with Docker Engine 28+).
 $DevboxMutagenVersion = '0.18.1'
 
 # Linux limits user names to 32 characters; the prefix and the hyphen use some.
@@ -191,6 +192,15 @@ function Test-DevboxMutagen {
     return [bool](Get-DevboxMutagenExe)
 }
 
+# Version of the installed Mutagen ([version]), or $null when it cannot be read.
+function Get-DevboxMutagenVersion {
+    $mutagen = Get-DevboxMutagenExe
+    if (-not $mutagen) { return $null }
+    $text = (& $mutagen version 2>&1 | Out-String)
+    if ($text -match '(\d+\.\d+\.\d+)') { return [version]$Matches[1] }
+    return $null
+}
+
 # Add a folder to the user PATH (registry) and to this session, without duplicates.
 function Add-DevboxUserPath {
     param([Parameter(Mandatory)][string]$Folder)
@@ -320,10 +330,34 @@ function Get-DevboxSyncSessionName {
     return "$Container-$($id.Substring(0, 12))"
 }
 
-# Create the session, or resume it when it already exists, then flush it.
-# Returns $true on success; prints the reason and returns $false otherwise.
+# Dkdb- containers (running or stopped) created with the Mutagen volume type.
+function Get-DevboxMutagenContainers {
+    $names = @()
+    foreach ($running in @($true, $false)) {
+        foreach ($container in (Get-DevboxContainers -Running $running)) {
+            if ((Get-DevboxContainerEnv -Container $container -Name 'DEVBOX_SYNC') -eq 'mutagen') { $names += $container }
+        }
+    }
+    return @($names)
+}
+
+# Names of every Mutagen session known by the daemon; $null when they cannot be listed.
+function Get-DevboxMutagenSessionNames {
+    $mutagen = Get-DevboxMutagenExe
+    if (-not $mutagen) { return $null }
+    $lines = & $mutagen sync list --template '{{range .}}{{println .Name}}{{end}}'
+    if ($LASTEXITCODE -ne 0) { return $null }
+    return @($lines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() })
+}
+
+# Create the session, or resume it when it already exists. The session is flushed when it
+# was just created or when -Flush is given. Returns $true on success; prints the reason
+# and returns $false otherwise.
 function Start-DevboxSync {
-    param([Parameter(Mandatory)][string]$Container)
+    param(
+        [Parameter(Mandatory)][string]$Container,
+        [switch]$Flush
+    )
     $user = Get-DevboxContainerUser -Container $Container
     $hostPath = Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_SYNC_PATH'
     # The session and its docker endpoint use the container ID, not the name: a recreated
@@ -356,6 +390,7 @@ function Start-DevboxSync {
         Write-Host 'Error: the Mutagen daemon could not be started.' -ForegroundColor Red
         return $false
     }
+    $created = $false
     & $mutagen sync list $session *> $null
     if ($LASTEXITCODE -eq 0) {
         & $mutagen sync resume $session | Out-Null
@@ -374,15 +409,38 @@ function Start-DevboxSync {
             "docker://$user@$containerId/home/$user/devbox/projects"
         )
         & $mutagen @syncArgs | Out-Null
+        $created = $true
     }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Error: could not create or resume the Mutagen session '$session'." -ForegroundColor Red
         return $false
     }
-    Write-Host 'Synchronizing (first flush) ...'
-    & $mutagen sync flush $session | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Warning: the first flush failed. Check it with: mutagen sync list $session" -ForegroundColor Yellow
+    if ($created -or $Flush) {
+        Write-Host 'Synchronizing ...'
+        & $mutagen sync flush $session | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Warning: the flush failed. Check it with: dkdb-mutagen-status" -ForegroundColor Yellow
+        }
     }
     return $true
+}
+
+# Terminate one Mutagen session (the host folder is not touched). It never starts the daemon:
+# when Mutagen or its daemon is not running, the session is left for dkdb-mutagen-clean.
+function Remove-DevboxSyncSession {
+    param([string]$SessionName)
+    if (-not $SessionName) {
+        Write-Host 'Warning: the Mutagen session name is unknown; run dkdb-mutagen-clean to look for leftover sessions.' -ForegroundColor Yellow
+        return
+    }
+    if (-not (Test-DevboxMutagen) -or -not (Test-DevboxMutagenDaemon)) {
+        Write-Host "Warning: the Mutagen daemon is not running, so the session '$SessionName' was not terminated. Run dkdb-mutagen-clean later." -ForegroundColor Yellow
+        return
+    }
+    & (Get-DevboxMutagenExe) sync terminate $SessionName *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Warning: could not terminate the Mutagen session '$SessionName'. Run dkdb-mutagen-clean later." -ForegroundColor Yellow
+        return
+    }
+    Write-Host "Mutagen session terminated: $SessionName"
 }

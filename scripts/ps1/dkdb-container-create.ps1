@@ -58,6 +58,19 @@ if ($useMutagen -and -not (Test-DevboxMutagen)) {
     }
 }
 
+# --- Mutagen minimum version ---
+if ($useMutagen) {
+    $mutagenFound = Get-DevboxMutagenVersion
+    if ($mutagenFound -and $mutagenFound -lt [version]$DevboxMutagenVersion) {
+        Write-Host "Error: Mutagen $mutagenFound ($(Get-DevboxMutagenExe)) is older than $DevboxMutagenVersion, which Docker Engine 28+ needs." -ForegroundColor Red
+        Write-Host 'Update it, or remove it from the PATH so that this script installs its own. Aborted. Nothing was created.' -ForegroundColor Red
+        exit 1
+    }
+    if (-not $mutagenFound) {
+        Write-Host "Warning: could not read the Mutagen version; $DevboxMutagenVersion or newer is required." -ForegroundColor Yellow
+    }
+}
+
 # --- Create the container ---
 $mountBase = "/home/$userName/devbox"
 $createArgs = @(

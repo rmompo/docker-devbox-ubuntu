@@ -1,7 +1,8 @@
 # Delete one stopped devbox container chosen from a menu.
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
-# It never touches Mutagen (daemon or session).
+# With a Mutagen container, only the Mutagen session of this container is terminated
+# (never the daemon or other sessions).
 . "$PSScriptRoot\dkdb-common.ps1"
 Assert-DevboxDocker
 
@@ -23,9 +24,17 @@ if ($answer -notmatch '^[yY]$') {
     exit 0
 }
 
+# The session name depends on the container ID: read it before the container is removed.
+$session = $null
+if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
+    $session = Get-DevboxSyncSessionName -Container $selected
+    $usesMutagen = $true
+}
+
 docker rm $selected | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: could not delete '$selected'." -ForegroundColor Red
     exit 1
 }
 Write-Host "Container '$selected' deleted." -ForegroundColor Green
+if ($usesMutagen) { Remove-DevboxSyncSession -SessionName $session }
