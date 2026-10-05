@@ -2,12 +2,12 @@
 # The host folders (projects, bash) are bind mounts and are NOT touched,
 # but everything stored only inside the container (its home, installed AI
 # client, login) is lost.
-. "$PSScriptRoot\common.ps1"
+. "$PSScriptRoot\dkdb-common.ps1"
 Assert-DevboxDocker
 
 $containers = Get-DevboxContainers -Running $false
 if ($containers.Count -eq 0) {
-    Write-Host "No stopped containers starting with '$DevboxPrefix-' were found (stop it first with container-stop)."
+    Write-Host "No stopped containers starting with '$DevboxPrefix-' were found (stop it first with dkdb-container-stop)."
     exit 0
 }
 

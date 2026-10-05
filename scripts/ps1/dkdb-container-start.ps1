@@ -1,5 +1,5 @@
 # Start one stopped devbox container chosen from a menu.
-. "$PSScriptRoot\common.ps1"
+. "$PSScriptRoot\dkdb-common.ps1"
 Assert-DevboxDocker
 
 $containers = Get-DevboxContainers -Running $false

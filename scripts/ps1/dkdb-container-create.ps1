@@ -1,5 +1,5 @@
-# Create a devbox container (it is not started; use container-start).
-. "$PSScriptRoot\common.ps1"
+# Create a devbox container (it is not started; use dkdb-container-start).
+. "$PSScriptRoot\dkdb-common.ps1"
 Assert-DevboxDocker
 
 # --- Ask for everything ---
@@ -23,7 +23,7 @@ $bashPath = (Get-DevboxBashPath).TrimEnd('\')
 # --- Validate everything before doing anything ---
 $errors = @()
 docker image inspect $imageName *> $null
-if ($LASTEXITCODE -ne 0) { $errors += "Image '$imageName' does not exist. Run image-create first." }
+if ($LASTEXITCODE -ne 0) { $errors += "Image '$imageName' does not exist. Run dkdb-image-create first." }
 docker container inspect $containerName *> $null
 if ($LASTEXITCODE -eq 0) { $errors += "A container named '$containerName' already exists." }
 foreach ($path in @($projectsPath, $bashPath)) {
@@ -52,4 +52,4 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-Host "Container '$containerName' created (user '$userName', password equal to the user name)." -ForegroundColor Green
-Write-Host 'Next: container-start, then container-connect.'
+Write-Host 'Next: dkdb-container-start, then dkdb-container-connect.'

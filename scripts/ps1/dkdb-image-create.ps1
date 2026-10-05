@@ -1,5 +1,5 @@
 # Build a devbox image named <prefix>-<name>.
-. "$PSScriptRoot\common.ps1"
+. "$PSScriptRoot\dkdb-common.ps1"
 Assert-DevboxDocker
 
 $name = Read-DevboxName -Prompt 'Image name' -Default $DevboxDefaultName

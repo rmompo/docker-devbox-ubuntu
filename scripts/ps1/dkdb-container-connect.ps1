@@ -1,5 +1,5 @@
 # Open a bash shell, as the container's user, in a running devbox container.
-. "$PSScriptRoot\common.ps1"
+. "$PSScriptRoot\dkdb-common.ps1"
 Assert-DevboxDocker
 
 $containers = Get-DevboxContainers -Running $true
@@ -16,7 +16,7 @@ if (-not $selected) {
 
 $userName = Get-DevboxContainerUser -Container $selected
 if (-not $userName) {
-    Write-Host "Error: '$selected' has no DEVBOX_USER variable; it was not created by container-create." -ForegroundColor Red
+    Write-Host "Error: '$selected' has no DEVBOX_USER variable; it was not created by dkdb-container-create." -ForegroundColor Red
     exit 1
 }
 

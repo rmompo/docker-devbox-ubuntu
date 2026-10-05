@@ -20,6 +20,7 @@ Several scripts and the image share names, encoding and ways of interacting with
 - **Filtering:** always by `dkdb-`.
 - **Encoding:** UTF-8 without BOM and LF for every file. A BOM would only be used in a `.ps1` that needs non-ASCII characters (currently none).
 - **`.gitattributes`:** `* text=auto eol=lf` (replaces the initial `* text=auto`).
+- **Script names:** every file under `scripts/ps1/` and `scripts/bash/` is named `dkdb-<name>` so that, once `scripts\ps1` is on the PATH, commands cannot be confused with others. File names cannot use `$DevboxPrefix`: changing the prefix also means renaming these files.
 - **Repository layout:** `install/`, `scripts/docker/`, `scripts/ps1/`, `scripts/bash/`, `specs/`.
 - **Menu:** common function `Select-DevboxItem`, navigation only: up/down arrows, Enter confirms, Esc cancels. No numbers. ASCII, no external modules.
 

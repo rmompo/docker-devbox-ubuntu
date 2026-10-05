@@ -11,10 +11,25 @@ $DefaultInstallPath = 'C:\DataDocker\docker-devbox-ubuntu\'
 # Every file to download, relative to the repository root. Keep it in sync with
 # the repository: a file missing from this list is NOT installed (spec 07).
 $Files = @(
-    'scripts/bash/install-claudecode.sh'
-    'scripts/bash/install-ghcopilot-cli.sh'
+    'scripts/bash/dkdb-install-claudecode.sh'
+    'scripts/bash/dkdb-install-ghcopilot-cli.sh'
     'scripts/docker/Dockerfile'
     'scripts/docker/entrypoint.sh'
+    'scripts/ps1/dkdb-common.ps1'
+    'scripts/ps1/dkdb-container-connect.ps1'
+    'scripts/ps1/dkdb-container-create.ps1'
+    'scripts/ps1/dkdb-container-delete.ps1'
+    'scripts/ps1/dkdb-container-start.ps1'
+    'scripts/ps1/dkdb-container-stop.ps1'
+    'scripts/ps1/dkdb-image-create.ps1'
+    'scripts/ps1/dkdb-image-delete.ps1'
+)
+
+# Files installed by earlier versions under their old names (before the dkdb-
+# prefix). They are offered for removal after the download; nothing else is deleted.
+$OldFiles = @(
+    'scripts/bash/install-claudecode.sh'
+    'scripts/bash/install-ghcopilot-cli.sh'
     'scripts/ps1/common.ps1'
     'scripts/ps1/container-connect.ps1'
     'scripts/ps1/container-create.ps1'
@@ -23,6 +38,7 @@ $Files = @(
     'scripts/ps1/container-stop.ps1'
     'scripts/ps1/image-create.ps1'
     'scripts/ps1/image-delete.ps1'
+    'scripts/ps1/scripts-update.ps1'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -95,6 +111,20 @@ foreach ($file in $Files) {
     Write-Host "  $file"
 }
 
+# --- Old files from earlier versions (removed only after confirmation) ---
+$oldFound = @($OldFiles | ForEach-Object { Join-Path $installPath ($_.Replace('/', '\')) } |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+if ($oldFound.Count -gt 0) {
+    Write-Host 'Files from an earlier version were found (now replaced by dkdb-* files):' -ForegroundColor Yellow
+    $oldFound | ForEach-Object { Write-Host "  $_" }
+    if (Confirm-Install 'Delete them?') {
+        $oldFound | ForEach-Object { Remove-Item -LiteralPath $_ -Force }
+        Write-Host 'Old files deleted.'
+    } else {
+        Write-Host 'Old files kept (delete them by hand to avoid duplicated commands).' -ForegroundColor Yellow
+    }
+}
+
 # --- User PATH ---
 $ps1Path = Join-Path $scriptsPath 'ps1'
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -124,4 +154,4 @@ if ($policy -in @('Restricted', 'AllSigned')) {
 
 Write-Host ''
 Write-Host "Installed in $installPath" -ForegroundColor Green
-Write-Host 'Open a new terminal (so the PATH is refreshed) and run: image-create'
+Write-Host 'Open a new terminal (so the PATH is refreshed) and run: dkdb-image-create'

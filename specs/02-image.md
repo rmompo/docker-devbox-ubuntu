@@ -31,5 +31,5 @@ The image must be lightweight and generic: it serves any container and any AI cl
 - **User:** passed via an environment variable; the password is derived from the name, so no secret travels.
 
 ## Consequences
-- Docker records the container's default user as root: `docker exec` must pass `-u <user>` (done by `container-connect`).
+- Docker records the container's default user as root: `docker exec` must pass `-u <user>` (done by `dkdb-container-connect`).
 - The image is somewhat larger because of `build-essential` (about 200 MB).

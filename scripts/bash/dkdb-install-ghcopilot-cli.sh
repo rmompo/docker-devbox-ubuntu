@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install GitHub Copilot CLI (latest) in this container (no Node needed).
-# Rule: one AI client per container. Run with: bash install-ghcopilot-cli.sh
+# Rule: one AI client per container. Run with: bash dkdb-install-ghcopilot-cli.sh
 set -euo pipefail
 
 # Refuse to install if the other client is already present.

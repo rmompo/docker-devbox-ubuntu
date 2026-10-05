@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Load it with:  . "$PSScriptRoot\common.ps1"
+# Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
 # Prefix shared by every image, container and user name. Change it here only.

@@ -1,48 +1,105 @@
 # docker-ubuntu-devbox
 
-A lightweight Ubuntu Docker image, managed with PowerShell scripts, for installing an AI client (Claude Code, GitHub Copilot CLI, etc.) inside an isolated environment.
+A lightweight Ubuntu Docker image, managed with PowerShell scripts, for running an AI client (Claude Code, GitHub Copilot CLI) inside an isolated environment.
 
 ## Overview
 
-- **Image:** minimal Ubuntu 26.04 LTS with generic development tools and Python 3. It ships with no user and no AI client.
-- **Container:** the user is created when the container is created (not in the image); the main process runs as that user.
-- **Installer:** `install/install.ps1` is the only file to download; it fetches `scripts/` from the repository, adds `scripts\ps1` to the user PATH.
-- **PowerShell scripts:** create and delete images; create, start, stop and connect to containers.
-- **AI clients:** installed inside the container with bash scripts from the mounted `bash` volume. **One client per container.**
-- **Volumes:** `proyectos` (host projects) and `bash` (`<install path>\scripts\bash`, read-only) mounted inside the container.
-- **Prefix (critical):** `dkdb`. Every name (image, container, user) is `dkdb-<name>`.
-- **Language:** documentation, scripts, messages and comments are all written in English.
+| # | Piece | What it is |
+|---|-------|------------|
+| 1 | Image | Minimal Ubuntu 26.04 LTS with generic development tools and Python 3. No user and no AI client. |
+| 2 | Container | The user is created when the container is created (not in the image); the main process runs as that user. **One AI client per container.** |
+| 3 | PowerShell scripts | Create and delete images; create, start, stop, connect to and delete containers. |
+| 4 | Installer | `install/install.ps1`, the only file you download. It installs the rest. |
+| 5 | Volumes | `proyectos` (your projects) and `bash` (AI client installers, read-only). |
+
+Conventions:
+
+1. **Prefix `dkdb`:** every image, container and user is named `dkdb-<name>`.
+2. **Language:** documentation, scripts, messages and comments are in English.
+
+## Requirements
+
+1. Windows with PowerShell 5.1 or newer.
+2. Docker Desktop, running.
+3. Internet access (the installer downloads from GitHub, and the AI clients download their own installers).
+
+## Installation
+
+### 1. Host (Windows)
+
+In PowerShell, download the installer to a temp folder and run it:
+
+```powershell
+$dir = Join-Path $env:TEMP 'devbox-install'
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+iwr -UseBasicParsing 'https://raw.githubusercontent.com/rmompo/docker-devbox-ubuntu/main/install/install.ps1' -OutFile "$dir\install.ps1"
+powershell -ExecutionPolicy Bypass -File "$dir\install.ps1"
+```
+
+It asks for the install path (default `C:\DataDocker\docker-devbox-ubuntu\`, created on confirmation), downloads `scripts\{bash,ps1,docker}` (asking before overwriting an existing install) and adds `scripts\ps1` to your user PATH. Then **open a new terminal**.
+
+- Update: run the installer again.
+- Scripts blocked by the execution policy: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
+
+Then, in a new PowerShell terminal, create the image and a container, and open a shell in it:
+
+```powershell
+dkdb-image-create
+dkdb-container-create
+dkdb-container-start
+dkdb-container-connect
+```
+
+### 2. Guest (Docker container)
+
+Inside the container (opened with `dkdb-container-connect`), install one AI client (one per container):
+
+```bash
+bash ~/devbox/bash/dkdb-install-claudecode.sh       # Claude Code
+bash ~/devbox/bash/dkdb-install-ghcopilot-cli.sh    # GitHub Copilot CLI
+```
+
+## Usage
+
+From any folder, in a new terminal:
+
+| # | Command | What it does |
+|---|---------|--------------|
+| 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
+| 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user and projects path). |
+| 3 | `dkdb-container-start` | Starts a stopped container. |
+| 4 | `dkdb-container-connect` | Opens a shell in a running container. |
+| 5 | `dkdb-container-stop` | Stops a running container. |
+| 6 | `dkdb-container-delete` | Deletes a stopped container (asks for confirmation). |
+| 7 | `dkdb-image-delete` | Deletes an image. |
+
+Containers created before the `bash` volume existed still mount the old `resources` folder; recreate them.
+
+## Volumes
+
+| # | Host | Inside the container | Mode |
+|---|------|----------------------|------|
+| 1 | Projects path, asked by `dkdb-container-create` (default `C:\Localfiles\proyectos\`) | `~/devbox/proyectos` | read/write |
+| 2 | `<install path>\scripts\bash` (default: `C:\DataDocker\docker-devbox-ubuntu\scripts\bash`) | `~/devbox/bash` | read-only |
+
+The `bash` path is not asked: it is the `scripts\bash` folder next to the scripts, so it follows the install path you chose (the default install path gives the value shown above). The projects path must already exist; nothing is created for you.
 
 ## Repository layout
 
 ```
-install/    install.ps1: the single-file installer
+install/    install.ps1, the single-file installer
 scripts/
   docker/   Dockerfile and entrypoint.sh
-  ps1/      PowerShell scripts (image-*, container-*, common.ps1)
-  bash/     AI client installers, mounted read-only into the container
+  ps1/      PowerShell scripts (dkdb-*.ps1)
+  bash/     AI client installers
 specs/      Project specifications
 ```
 
-## Quick start
-
-Download only `install/install.ps1` (the repository must be public) and run it; it asks for the install path (default `C:\DataDocker\docker-devbox-ubuntu\`). Then, in a new terminal:
-
-```powershell
-image-create       # build dkdb-<name>
-container-create   # create a container (mounts proyectos and scripts\bash)
-container-start
-container-connect  # then, inside: bash ~/devbox/bash/install-claudecode.sh
-container-stop
-container-delete   # stopped containers only
-image-delete
-```
-
-Re-run `install.ps1` to update the scripts.
+When you add, rename or remove a file under `scripts/`, update the `$Files` list in `install/install.ps1`; otherwise the installer will not download it.
 
 ## Methodology (CoT)
 
-Each spec follows the pattern **Context -> Reasoning -> Decision -> Consequences**. Every decision was validated one by one with the project owner before being written down here.
+Each spec follows the pattern **Context -> Reasoning -> Decision -> Consequences**. Every decision was validated one by one with the project owner before being written down.
 
 ## Specs
 

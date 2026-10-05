@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install Claude Code (latest) in this container.
-# Rule: one AI client per container. Run with: bash install-claudecode.sh
+# Rule: one AI client per container. Run with: bash dkdb-install-claudecode.sh
 set -euo pipefail
 
 # Refuse to install if the other client is already present.

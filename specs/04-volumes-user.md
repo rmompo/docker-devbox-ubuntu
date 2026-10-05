@@ -5,7 +5,7 @@ VS Code and Docker must point to the same projects folder on the host. The conta
 
 ## Reasoning
 1. Code must outlive the container -> bind mounts to host folders.
-2. Host paths differ between machines -> `container-create` asks for them, with defaults.
+2. Host paths differ between machines -> `dkdb-container-create` asks for them, with defaults.
 3. The mount target depends on the user -> `/home/<user>/devbox/...`.
 4. With `-v`, Docker Desktop creates a missing folder, which contradicts the rule "if it does not exist, do nothing" -> use `--mount type=bind` plus prior validation: nothing is created and the script aborts.
 5. The user needs sudo, protected by a password for safety -> `sudo` group without `NOPASSWD`.
@@ -16,7 +16,7 @@ VS Code and Docker must point to the same projects folder on the host. The conta
   - Projects: `C:\Localfiles\proyectos\`
   - Bash: not asked; it is `<install path>\scripts\bash`, mounted `readonly` (the container cannot modify the installers).
 - **Container targets:** `/home/<user>/devbox/proyectos` and `/home/<user>/devbox/bash`.
-- **Missing path:** `container-create` aborts with an error and creates nothing.
+- **Missing path:** `dkdb-container-create` aborts with an error and creates nothing.
 - **User:** `dkdb-<input>`; by default, the full container name. It is validated (lowercase, at most 32 characters) before creating anything.
 - **Password:** equal to the full user name (example: `dkdb-user1`).
 - **Sudo:** the user is a sudoer, always with a password.
