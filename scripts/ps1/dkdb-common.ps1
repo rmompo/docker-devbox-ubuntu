@@ -5,9 +5,7 @@
 # Prefix shared by every image, container and user name. Change it here only.
 $DevboxPrefix = 'dkdb'
 $DevboxDefaultName = 'ubuntu'
-$DevboxDefaultProjectsPath = 'C:\Localfiles\proyectos\'
-# Shared tools (Maven, JDKs, ...): one installation for every container.
-$DevboxDefaultResourcesPath = 'C:\shared\'
+$DevboxDefaultProjectsPath = 'C:\LocalFiles\proyectos\'
 
 # Optional Mutagen (file sync, spec 08), downloaded on demand by dkdb-container-create.
 $DevboxMutagenVersion = '0.18.1'
@@ -138,6 +136,24 @@ function Get-DevboxContainerUser {
     return Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_USER'
 }
 
+# Shared root of the installation (default C:\shared). It is never stored: it is deduced
+# from where the scripts are, <root>\devbox\scripts\ps1 (chosen once by install.ps1).
+function Get-DevboxRoot {
+    $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
+    $expected = Join-Path $root 'devbox\scripts\ps1'
+    if ($PSScriptRoot.TrimEnd('\') -ine $expected.TrimEnd('\')) {
+        Write-Host "Error: the scripts must be in <root>\devbox\scripts\ps1 (found: $PSScriptRoot). Run install.ps1 again." -ForegroundColor Red
+        exit 1
+    }
+    return $root
+}
+
+# Default host folder for the shared tools (Maven, JDKs, ...): <root>\tools.
+# One installation for every container; mounted in ~/devbox/tools.
+function Get-DevboxDefaultToolsPath {
+    return (Join-Path (Get-DevboxRoot) 'tools')
+}
+
 # Host folder with the AI client installers (scripts\bash next to scripts\ps1).
 # It is bind-mounted read-only into the container; nothing is copied.
 function Get-DevboxBashPath {
@@ -155,7 +171,8 @@ function Get-DevboxBashPath {
 $DevboxSyncModeBind = 'Docker bind mount (traditional)'
 $DevboxSyncModeMutagen = 'Mutagen sync (copy inside the container, faster)'
 
-# Mutagen is installed next to the scripts: <install path>\mutagen.
+# Mutagen is installed next to the scripts: <root>\devbox\mutagen (never inside tools,
+# which is mounted read/write in the containers).
 function Get-DevboxMutagenDir {
     return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\mutagen'))
 }

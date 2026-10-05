@@ -12,7 +12,7 @@ On Docker Desktop with WSL2, bind mounts from `C:\` (9p) are slow for projects w
 6. Sessions are created or resumed by `start` and `connect`; `stop` and `delete` never touch Mutagen (a leftover session cannot reach another container because it is bound to the container ID).
 
 ## Decision
-- **Installation:** `dkdb-container-create` calls `Install-DevboxMutagen` (in `dkdb-common.ps1`) when Mutagen is chosen and missing: it asks `[y/N]`, downloads the release zip of `$DevboxMutagenVersion` (0.18.1), verifies it against `SHA256SUMS`, extracts it into `<install path>\mutagen\` and adds that folder to the user PATH. If declined or failed, the script aborts and creates nothing. `Get-DevboxMutagenExe` finds `mutagen.exe` in the PATH or in that folder, so the other scripts do not depend on a refreshed PATH.
+- **Installation:** `dkdb-container-create` calls `Install-DevboxMutagen` (in `dkdb-common.ps1`) when Mutagen is chosen and missing: it asks `[y/N]`, downloads the release zip of `$DevboxMutagenVersion` (0.18.1), verifies it against `SHA256SUMS`, extracts it into `<root>\devbox\mutagen\` and adds that folder to the user PATH. If declined or failed, the script aborts and creates nothing. `Get-DevboxMutagenExe` finds `mutagen.exe` in the PATH or in that folder, so the other scripts do not depend on a refreshed PATH.
 - **Menu in `dkdb-container-create`:** "Docker bind mount (traditional)" or "Mutagen sync", always shown.
 - **Mutagen container:** no projects bind mount; environment variables `DEVBOX_SYNC=mutagen` and `DEVBOX_SYNC_PATH=<host projects path>`. The bash volume is unchanged.
 - **Session:** named `<container>-<first 12 characters of the container ID>`, `two-way-safe`, `--no-ignore-vcs`, **no ignore patterns** (everything, including `.git`, is synchronized), `--symlink-mode=ignore` (repositories are cloned on Windows, so they must not depend on symlinks), file mode `0644`, directory mode `0755`, beta owner and group = the container user. Endpoints: `<host path>` (alpha) and `docker://<user>@<container ID>/home/<user>/devbox/projects` (beta). The ID, not the name, is used so that a container recreated with the same name never reuses a leftover session.
@@ -21,7 +21,8 @@ On Docker Desktop with WSL2, bind mounts from `C:\` (9p) are slow for projects w
 - **`dkdb-container-connect`:** for a Mutagen container, runs the same create-or-resume step as `start` (idempotent), so a container started with plain `docker start` or Docker Desktop gets its session back. The shell opens even if the sync fails, with a warning.
 - **`dkdb-container-stop`:** never touches Mutagen: no flush, no pause, no daemon stop. The session stays active (and retries to reach the container) until `start` or `connect` reconnects it. Only `dkdb-mutagen-stop` stops the daemon.
 - **`dkdb-container-delete`:** never touches Mutagen. The host folder is not touched; the container copy is lost. The session of the deleted container is left behind (harmless: it cannot reach any other container, see Session); remove it by hand with `mutagen sync terminate <session>`.
-- **`resources` and `bash`** are always bind mounts; only `projects` can be synchronized.
+- **`tools` and `bash`** are always bind mounts; only `projects` can be synchronized.
+- **Mutagen is installed outside `tools`** on purpose: `tools` is mounted read/write in every container, and `mutagen.exe` runs on the host, so a container must not be able to replace it.
 - **Existing containers** keep their bind mount; recreate them to use Mutagen.
 
 ## Consequences

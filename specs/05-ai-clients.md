@@ -13,7 +13,7 @@ One AI client (Claude Code or GitHub Copilot CLI) is installed inside the contai
 
 ## Decision
 - **Source of truth:** `scripts/bash/` in the repository (versioned in git): `dkdb-install-claudecode.sh` and `dkdb-install-ghcopilot-cli.sh`. Run them inside the container with `bash ~/devbox/bash/<script>`.
-- **Installed copy:** `<install path>\scripts\bash\`, downloaded by `install.ps1` (spec 07) and mounted read-only inside the container at `/home/<user>/devbox/bash/`. To update, re-run `install.ps1`.
+- **Installed copy:** `<root>\devbox\scripts\bash\`, downloaded by `install.ps1` (spec 07) and mounted read-only inside the container at `/home/<user>/devbox/bash/`. To update, re-run `install.ps1`.
 - **Claude Code:** `curl -fsSL https://claude.ai/install.sh | bash` (latest version; leaves `~/.local/bin/claude`).
 - **Copilot CLI:** `curl -fsSL https://gh.io/copilot-install | bash` (no Node needed; installs into `$HOME/.local` for non-root users).
 - **PATH:** each script appends `~/.local/bin` to `.bashrc` idempotently.

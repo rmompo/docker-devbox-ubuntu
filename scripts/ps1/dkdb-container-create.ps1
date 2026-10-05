@@ -15,8 +15,9 @@ $userName = Get-DevboxFullName $userInput
 
 $projectsPath = Read-Host "Host projects path [$DevboxDefaultProjectsPath]"
 if ([string]::IsNullOrWhiteSpace($projectsPath)) { $projectsPath = $DevboxDefaultProjectsPath }
-$resourcesPath = Read-Host "Host resources path [$DevboxDefaultResourcesPath]"
-if ([string]::IsNullOrWhiteSpace($resourcesPath)) { $resourcesPath = $DevboxDefaultResourcesPath }
+$defaultToolsPath = Get-DevboxDefaultToolsPath
+$toolsPath = Read-Host "Host tools path [$defaultToolsPath]"
+if ([string]::IsNullOrWhiteSpace($toolsPath)) { $toolsPath = $defaultToolsPath }
 
 # Volume type for the projects folder (Mutagen is downloaded later if needed).
 $syncMode = Select-DevboxItem -Title 'Projects volume type:' -Items @($DevboxSyncModeBind, $DevboxSyncModeMutagen)
@@ -28,7 +29,7 @@ $useMutagen = ($syncMode -eq $DevboxSyncModeMutagen)
 
 # Docker mount sources must not end with a backslash.
 $projectsPath = $projectsPath.Trim().TrimEnd('\')
-$resourcesPath = $resourcesPath.Trim().TrimEnd('\')
+$toolsPath = $toolsPath.Trim().TrimEnd('\')
 $bashPath = (Get-DevboxBashPath).TrimEnd('\')
 
 # --- Validate everything before doing anything ---
@@ -37,7 +38,7 @@ docker image inspect $imageName *> $null
 if ($LASTEXITCODE -ne 0) { $errors += "Image '$imageName' does not exist. Run dkdb-image-create first." }
 docker container inspect $containerName *> $null
 if ($LASTEXITCODE -eq 0) { $errors += "A container named '$containerName' already exists." }
-foreach ($path in @($projectsPath, $resourcesPath, $bashPath)) {
+foreach ($path in @($projectsPath, $toolsPath, $bashPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Container)) {
         $errors += "Host path does not exist (nothing is created): $path"
     }
@@ -73,7 +74,7 @@ if ($useMutagen) {
     $createArgs += @('--mount', "type=bind,source=$projectsPath,target=$mountBase/projects")
 }
 $createArgs += @(
-    '--mount', "type=bind,source=$resourcesPath,target=$mountBase/resources",
+    '--mount', "type=bind,source=$toolsPath,target=$mountBase/tools",
     '--mount', "type=bind,source=$bashPath,target=$mountBase/bash,readonly",
     $imageName
 )

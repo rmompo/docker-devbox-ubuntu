@@ -1,12 +1,13 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
 # It downloads scripts/bash, scripts/ps1 and scripts/docker from the repository
-# into a local folder and adds scripts\ps1 to the user PATH.
+# into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
 # --- Settings ---
 $RepoUrl = 'https://github.com/rmompo/docker-devbox-ubuntu'
 $Branch = 'main'
-$DefaultInstallPath = 'C:\DataDocker\docker-devbox-ubuntu\'
+# Shared root: <root>\devbox holds the scripts, <root>\tools the shared tools (spec 07).
+$DefaultRootPath = 'C:\shared\'
 
 # Every file to download, relative to the repository root. Keep it in sync with
 # the repository: a file missing from this list is NOT installed (spec 07).
@@ -84,28 +85,30 @@ if ($RepoUrl.TrimEnd('/') -notmatch '^https://github\.com/([^/]+/[^/]+)$') {
 }
 $rawBase = "https://raw.githubusercontent.com/$($Matches[1])/$Branch"
 
-# --- Ask for the install path and check it ---
-$installPath = Read-Host "Install path [$DefaultInstallPath]"
-if ([string]::IsNullOrWhiteSpace($installPath)) { $installPath = $DefaultInstallPath }
-$installPath = $installPath.Trim().Replace('/', '\').TrimEnd('\')
+# --- Ask for the shared root and check it ---
+$rootPath = Read-Host "Shared root path [$DefaultRootPath]"
+if ([string]::IsNullOrWhiteSpace($rootPath)) { $rootPath = $DefaultRootPath }
+$rootPath = $rootPath.Trim().Replace('/', '\').TrimEnd('\')
 
-if ($installPath.Contains(',')) { Stop-Install "The path must not contain commas: $installPath" }
-if (-not [System.IO.Path]::IsPathRooted($installPath)) { Stop-Install "The path must be absolute (for example C:\DataDocker): $installPath" }
+if ($rootPath.Contains(',')) { Stop-Install "The path must not contain commas: $rootPath" }
+if (-not [System.IO.Path]::IsPathRooted($rootPath)) { Stop-Install "The path must be absolute (for example C:\shared): $rootPath" }
 
-if (-not (Test-Path -LiteralPath $installPath -PathType Container)) {
-    if (-not (Confirm-Install "The path does not exist: $installPath. Create it?")) {
-        Stop-Install 'The install path does not exist and was not created.'
+if (-not (Test-Path -LiteralPath $rootPath -PathType Container)) {
+    if (-not (Confirm-Install "The path does not exist: $rootPath. Create it?")) {
+        Stop-Install 'The shared root does not exist and was not created.'
     }
     try {
-        New-Item -ItemType Directory -Path $installPath | Out-Null
+        New-Item -ItemType Directory -Path $rootPath | Out-Null
     } catch {
-        Stop-Install "Could not create the path $installPath ($($_.Exception.Message))"
+        Stop-Install "Could not create the path $rootPath ($($_.Exception.Message))"
     }
 }
-$installPath = (Resolve-Path -LiteralPath $installPath).Path
+$rootPath = (Resolve-Path -LiteralPath $rootPath).Path
+$devboxPath = Join-Path $rootPath 'devbox'
+$scriptsPath = Join-Path $devboxPath 'scripts'
+$toolsPath = Join-Path $rootPath 'tools'
 
 # --- Previous installation ---
-$scriptsPath = Join-Path $installPath 'scripts'
 if (Test-Path -LiteralPath $scriptsPath) {
     Write-Host "An installation already exists in $scriptsPath." -ForegroundColor Yellow
     Write-Host 'Files will be overwritten (manual edits are lost); files that no longer exist in the repository are not deleted.' -ForegroundColor Yellow
@@ -115,7 +118,7 @@ if (Test-Path -LiteralPath $scriptsPath) {
 # --- Download ---
 Write-Host "Downloading from $RepoUrl ($Branch) ..."
 foreach ($file in $Files) {
-    $target = Join-Path $installPath ($file.Replace('/', '\'))
+    $target = Join-Path $devboxPath ($file.Replace('/', '\'))
     $targetDir = Split-Path -Parent $target
     try {
         if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
@@ -134,7 +137,7 @@ foreach ($file in $Files) {
 }
 
 # --- Old files from earlier versions (removed only after confirmation) ---
-$oldFound = @($OldFiles | ForEach-Object { Join-Path $installPath ($_.Replace('/', '\')) } |
+$oldFound = @($OldFiles | ForEach-Object { Join-Path $devboxPath ($_.Replace('/', '\')) } |
     Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
 if ($oldFound.Count -gt 0) {
     Write-Host 'Files from an earlier version were found (now replaced by dkdb-* files):' -ForegroundColor Yellow
@@ -147,8 +150,40 @@ if ($oldFound.Count -gt 0) {
     }
 }
 
+# --- Shared tools folder (the default tools path of dkdb-container-create) ---
+if (-not (Test-Path -LiteralPath $toolsPath -PathType Container)) {
+    try {
+        New-Item -ItemType Directory -Path $toolsPath | Out-Null
+        Write-Host "Created $toolsPath"
+    } catch {
+        Stop-Install "Could not create the tools folder $toolsPath ($($_.Exception.Message))"
+    }
+}
+
 # --- User PATH ---
-Add-InstallUserPath -Folder (Join-Path $scriptsPath 'ps1')
+$ps1Path = Join-Path $scriptsPath 'ps1'
+Add-InstallUserPath -Folder $ps1Path
+
+# User PATH entries of a previous installation (they contain dkdb-common.ps1): offer to remove them.
+$currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (-not [string]::IsNullOrEmpty($currentUserPath)) {
+    $userEntries = @($currentUserPath -split ';' | Where-Object { $_ -ne '' })
+    $stale = @($userEntries | Where-Object {
+        $_.TrimEnd('\') -ine $ps1Path.TrimEnd('\') -and (Test-Path -LiteralPath (Join-Path $_ 'dkdb-common.ps1') -PathType Leaf)
+    })
+    if ($stale.Count -gt 0) {
+        Write-Host 'The user PATH has entries of a previous installation:' -ForegroundColor Yellow
+        $stale | ForEach-Object { Write-Host "  $_" }
+        if (Confirm-Install 'Remove them from the user PATH? (the files are not deleted)') {
+            $kept = @($userEntries | Where-Object { $stale -notcontains $_ })
+            [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User')
+            $env:Path = (@($env:Path -split ';' | Where-Object { $_ -ne '' -and $stale -notcontains $_ }) -join ';')
+            Write-Host 'Removed from the user PATH.'
+        } else {
+            Write-Host 'Kept. Two installations on the PATH may run the wrong scripts.' -ForegroundColor Yellow
+        }
+    }
+}
 
 # --- Execution policy (warn only, never change it) ---
 $policy = Get-ExecutionPolicy
@@ -158,5 +193,5 @@ if ($policy -in @('Restricted', 'AllSigned')) {
 }
 
 Write-Host ''
-Write-Host "Installed in $installPath" -ForegroundColor Green
+Write-Host "Installed in $devboxPath (shared tools folder: $toolsPath)" -ForegroundColor Green
 Write-Host 'Open a new terminal (so the PATH is refreshed) and run: dkdb-image-create'

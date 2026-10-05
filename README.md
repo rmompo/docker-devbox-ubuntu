@@ -10,7 +10,7 @@ A lightweight Ubuntu Docker image, managed with PowerShell scripts, for running 
 | 2 | Container | The user is created when the container is created (not in the image); the main process runs as that user. **One AI client per container.** |
 | 3 | PowerShell scripts | Create and delete images; create, start, stop, connect to and delete containers; start and stop the optional Mutagen daemon. |
 | 4 | Installer | `install/install.ps1`, the only file you download. It installs the rest. |
-| 5 | Volumes | `projects` (your projects), `resources` (shared tools such as Maven or JDKs) and `bash` (AI client installers, read-only). Optionally, `projects` can be synchronized with [Mutagen](https://mutagen.io) instead of a bind mount. |
+| 5 | Volumes | `projects` (your projects), `tools` (shared tools such as Maven or JDKs) and `bash` (AI client installers, read-only). Optionally, `projects` can be synchronized with [Mutagen](https://mutagen.io) instead of a bind mount. |
 
 Conventions:
 
@@ -27,18 +27,19 @@ Conventions:
 
 ### 1. Host (Windows)
 
-In PowerShell, download the installer to a temp folder and run it:
+In PowerShell, download the installer to `C:\shared\devbox\install\` and run it:
 
 ```powershell
-$dir = Join-Path $env:TEMP 'devbox-install'
+$dir = 'C:\shared\devbox\install'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 iwr -UseBasicParsing 'https://raw.githubusercontent.com/rmompo/docker-devbox-ubuntu/main/install/install.ps1' -OutFile "$dir\install.ps1"
 powershell -ExecutionPolicy Bypass -File "$dir\install.ps1"
 ```
 
-It asks for the install path (default `C:\DataDocker\docker-devbox-ubuntu\`, created on confirmation), downloads `scripts\{bash,ps1,docker}` (asking before overwriting an existing install) and adds `scripts\ps1` to your user PATH. Then **open a new terminal**.
+It asks for the **shared root** (default `C:\shared\`, created on confirmation), downloads `scripts\{bash,ps1,docker}` into `<root>\devbox\` (asking before overwriting an existing install), creates `<root>\tools\` and adds `<root>\devbox\scripts\ps1` to your user PATH (offering to remove the PATH entries of a previous installation). Then **open a new terminal**.
 
 - Update: run the installer again.
+- Change the shared root: run the installer with the new root and recreate your containers (they keep the host paths they were created with).
 - Scripts blocked by the execution policy: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
 
 Then, in a new PowerShell terminal, create the image and a container, and open a shell in it:
@@ -66,7 +67,7 @@ From any folder, in a new terminal:
 | # | Command | What it does |
 |---|---------|--------------|
 | 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
-| 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, resources path and the projects volume type: Docker bind mount or Mutagen). |
+| 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path and the projects volume type: Docker bind mount or Mutagen). |
 | 3 | `dkdb-container-start` | Starts a stopped container. |
 | 4 | `dkdb-container-connect` | Opens a shell in a running container. |
 | 5 | `dkdb-container-stop` | Stops a running container. |
@@ -75,19 +76,36 @@ From any folder, in a new terminal:
 | 8 | `dkdb-mutagen-start` | Starts the Mutagen daemon if it is not running (optional Mutagen). |
 | 9 | `dkdb-mutagen-stop` | Stops the Mutagen daemon if it is running (stops all Mutagen sessions). |
 
-Containers created with an older layout (`~/devbox/proyectos`, or without the `bash` volume) must be recreated, and the image rebuilt with `dkdb-image-create` (the entrypoint changed).
+Containers created with an older layout (`~/devbox/proyectos`, `~/devbox/resources`, or without the `bash` volume) must be recreated, and the image rebuilt with `dkdb-image-create` (the entrypoint changed).
 
-## Volumes
+## Folders
 
-| # | Host | Inside the container | Mode |
-|---|------|----------------------|------|
-| 1 | Projects path, asked by `dkdb-container-create` (default `C:\Localfiles\proyectos\`) | `~/devbox/projects` | read/write |
-| 2 | Resources path, asked by `dkdb-container-create` (default `C:\shared\`): tools such as Maven or JDKs, installed once and shared by every container | `~/devbox/resources` | read/write |
-| 3 | `<install path>\scripts\bash` (default: `C:\DataDocker\docker-devbox-ubuntu\scripts\bash`) | `~/devbox/bash` | read-only |
+Host (default values; the shared root is chosen once by `install.ps1`):
 
-The `bash` path is not asked: it is the `scripts\bash` folder next to the scripts, so it follows the install path you chose (the default install path gives the value shown above). The projects and resources paths must already exist; nothing is created for you.
+```
+C:\shared\                       shared root
+  devbox\
+    install\                     where install.ps1 is downloaded
+    scripts\
+      ps1\                       added to the user PATH (Windows)
+      bash\                      AI client installers -> ~/devbox/bash (read-only)
+      docker\                    Dockerfile and entrypoint.sh
+    mutagen\                     Mutagen, only if you choose it (never mounted in a container)
+  tools\                         shared tools (Maven, JDKs...) -> ~/devbox/tools
+C:\LocalFiles\proyectos\         your projects -> ~/devbox/projects
+```
 
-**Mutagen (optional):** `dkdb-container-create` asks whether the projects volume is a Docker bind mount or a Mutagen sync. If you pick Mutagen and it is not installed, the script asks before downloading it (about 100 MB, checksum verified, into `<install path>\mutagen`). With Mutagen, `~/devbox/projects` is a folder inside the container, kept in sync with the host projects path (everything, including `.git`; only symbolic links are ignored), and `dkdb-container-start` creates or resumes the session. Nothing else has to be run. `dkdb-mutagen-start` and `dkdb-mutagen-stop` check and start or stop the Mutagen daemon by hand (stopping it stops all your Mutagen sessions). `resources` is never synchronized: it stays a bind mount. Mutagen is third-party and is downloaded from its official release (MIT, with SSPL-licensed parts); see [spec 08](specs/08-mutagen.md).
+Inside the container:
+
+| # | Host (default) | Inside the container | Mode |
+|---|----------------|----------------------|------|
+| 1 | Projects path, asked by `dkdb-container-create` (default `C:\LocalFiles\proyectos\`) | `~/devbox/projects` | read/write |
+| 2 | Tools path, asked by `dkdb-container-create` (default `<root>\tools`, that is `C:\shared\tools`): tools such as Maven or JDKs, installed once and shared by every container | `~/devbox/tools` | read/write |
+| 3 | `<root>\devbox\scripts\bash` (default `C:\shared\devbox\scripts\bash`) | `~/devbox/bash` | read-only |
+
+The `bash` path is not asked, and the default tools path is not stored anywhere: both are deduced from where the scripts are, so they follow the shared root you chose. The projects and tools paths must already exist (the installer creates the default tools folder); nothing else is created for you.
+
+**Mutagen (optional):** `dkdb-container-create` asks whether the projects volume is a Docker bind mount or a Mutagen sync. If you pick Mutagen and it is not installed, the script asks before downloading it (about 100 MB, checksum verified, into `<root>\devbox\mutagen`). With Mutagen, `~/devbox/projects` is a folder inside the container, kept in sync with the host projects path (everything, including `.git`; only symbolic links are ignored), and `dkdb-container-start` creates or resumes the session. Nothing else has to be run. `dkdb-mutagen-start` and `dkdb-mutagen-stop` check and start or stop the Mutagen daemon by hand (stopping it stops all your Mutagen sessions). `tools` is never synchronized: it stays a bind mount. Mutagen is third-party and is downloaded from its official release (MIT, with SSPL-licensed parts); see [spec 08](specs/08-mutagen.md).
 
 ## Repository layout
 
@@ -116,5 +134,5 @@ Each spec follows the pattern **Context -> Reasoning -> Decision -> Consequences
 | 04 | [Volumes and user](specs/04-volumes-user.md) | Host paths, mounts, user, sudo |
 | 05 | [AI client installation](specs/05-ai-clients.md) | Bash scripts for Claude Code and Copilot CLI |
 | 06 | [Verifications and open items](specs/06-verifications.md) | Checks already done and items still to validate |
-| 07 | [Installer](specs/07-installer.md) | install.ps1: download, install path, PATH |
+| 07 | [Installer](specs/07-installer.md) | install.ps1: shared root, download, PATH |
 | 08 | [Mutagen](specs/08-mutagen.md) | Optional projects sync (avoids slow 9p mounts) |
