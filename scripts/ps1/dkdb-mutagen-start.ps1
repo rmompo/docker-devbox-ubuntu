@@ -1,9 +1,10 @@
 # Start the Mutagen daemon if it is not running (it only checks when it is).
-# Version: 0.1.5
+# Version: 0.2.0
 # dkdb-container-start and dkdb-container-connect already do this for Mutagen containers.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -17,6 +18,25 @@ if ($Help) {
         -Notes @(
             'dkdb-container-start and dkdb-container-connect start it by themselves for a container that uses Mutagen, and then pause its existing sessions unless you ask to synchronize.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Makes sure the Mutagen daemon is running.' `
+        -Needs @(
+            'mutagen.exe (dkdb-container-create installs it on demand).'
+        ) `
+        -Steps @(
+            'Checks whether the daemon is running; if it is, says so and stops.',
+            'Starts it and waits for it (it can take a few seconds).'
+        ) `
+        -Changes @(
+            'The Mutagen daemon of your user is running.'
+        ) `
+        -Never @(
+            'Creates or resumes sessions.'
+        ) `
+        -Next 'dkdb-mutagen-sync lets you choose what to synchronize.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

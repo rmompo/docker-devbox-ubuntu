@@ -1,9 +1,10 @@
 # Open a bash shell, as the container's user, in a running devbox container.
-# Version: 0.3.0
+# Version: 0.4.0
 # For a Mutagen container a menu chooses what to synchronize (No sync is the first option and the default).
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -19,6 +20,30 @@ if ($Help) {
             'The shell opens even if the synchronization fails.',
             'If the container has no AI client yet, it suggests how to install one.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Opens a bash shell, as the container user, in one running devbox container chosen from a menu.' `
+        -Needs @(
+            'Docker Engine running and a running dkdb- container.'
+        ) `
+        -Steps (@(
+            'Warns, never stops, when the package or the image of the container have another version.',
+            'Shows the menu of running containers.'
+        ) + $DevboxSyncMenuMan + @(
+            'The shell opens even if the synchronization fails.',
+            'If the container has no AI client yet, suggests how to install one.',
+            'Runs docker exec -it as the container user, with TERM=xterm-256color so the prompt shows colors.'
+        )) `
+        -Changes @(
+            'With Mutagen, sessions may be created, resumed or paused according to the choice.'
+        ) `
+        -Never @(
+            'Is blocked by versions.',
+            'Terminates sessions or touches files.'
+        ) `
+        -Next 'Inside the container, install one AI client (dkdb-install-claudecode.sh or dkdb-install-ghcopilot-cli.sh) if you have none.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath
@@ -53,6 +78,9 @@ if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutag
     if (-not $pick.Ok) {
         Write-DevboxWarning 'Opening the shell anyway, but the projects are NOT synchronized.'
     }
+} else {
+    # No Mutagen: the state file of the container (versions) is refreshed for dkdb-info.sh and dkdb-version.sh.
+    $null = Update-DevboxContainerState -Container $selected
 }
 
 # Next step: the AI client (one per container) is installed from inside the container.

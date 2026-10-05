@@ -1,5 +1,5 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.1.4
+# Version: 0.2.0
 # It downloads manifest.json and every file it lists (scripts and uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -7,6 +7,7 @@
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 
@@ -124,7 +125,7 @@ function Show-InstallHelp {
         $window = $Host.UI.RawUI.WindowSize.Width
         if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
     } catch { $width = 100 }
-    $parameters = @(@{ Name = '-Help'; Description = 'Show this help and exit.' })
+    $parameters = @(@{ Name = '-Help'; Description = 'Show this help and exit.' }, @{ Name = '-Man'; Description = 'Show the manual (what the script does, step by step) and exit.' })
     if ($VersionLine) { Write-Host $VersionLine -ForegroundColor DarkGray }
     Write-Host ''
     Write-Host 'NAME' -ForegroundColor Cyan
@@ -162,6 +163,57 @@ function Show-InstallHelp {
     Write-Host ''
 }
 
+# Manual (-Man): what the script does, in colors (same layout as the dkdb-* scripts, spec 01).
+function Show-InstallMan {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Purpose,
+        [string[]]$Needs = @(),
+        [string[]]$Steps = @(),
+        [string[]]$Changes = @(),
+        [string[]]$Never = @(),
+        [string]$Next = ''
+    )
+    $width = 100
+    try {
+        $window = $Host.UI.RawUI.WindowSize.Width
+        if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
+    } catch { $width = 100 }
+    Write-Host ''
+    Write-Host 'MANUAL' -ForegroundColor Cyan
+    Write-Host "    $Name" -ForegroundColor Green
+    Write-Host ''
+    Write-Host 'PURPOSE' -ForegroundColor Cyan
+    foreach ($line in (Get-InstallWrappedLines -Text $Purpose -Width ($width - 4))) { Write-Host "    $line" }
+    $sections = @(
+        @{ Title = 'REQUIREMENTS'; Items = $Needs; Numbered = $false },
+        @{ Title = 'WHAT IT DOES'; Items = $Steps; Numbered = $true },
+        @{ Title = 'WHAT IT CHANGES'; Items = $Changes; Numbered = $false },
+        @{ Title = 'WHAT IT NEVER DOES'; Items = $Never; Numbered = $false }
+    )
+    foreach ($section in $sections) {
+        if (@($section.Items).Count -eq 0) { continue }
+        Write-Host ''
+        Write-Host $section.Title -ForegroundColor Cyan
+        $number = 0
+        foreach ($item in $section.Items) {
+            $number++
+            $marker = if ($section.Numbered) { ('{0,2}. ' -f $number) } else { '  - ' }
+            $lines = @(Get-InstallWrappedLines -Text $item -Width ($width - 8))
+            Write-Host '    ' -NoNewline
+            Write-Host $marker -NoNewline -ForegroundColor Green
+            Write-Host $lines[0]
+            foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host ('        ' + $line) }
+        }
+    }
+    if ($Next) {
+        Write-Host ''
+        Write-Host 'NEXT STEP' -ForegroundColor Cyan
+        foreach ($line in (Get-InstallWrappedLines -Text $Next -Width ($width - 4))) { Write-Host "    $line" -ForegroundColor Yellow }
+    }
+    Write-Host ''
+}
+
 $selfVersion = Get-InstallFileVersion -Path $PSCommandPath
 if (-not $selfVersion) { $selfVersion = 'unknown' }
 Write-Host "install $selfVersion (docker-devbox-ubuntu installer)" -ForegroundColor DarkGray
@@ -178,6 +230,37 @@ if ($Help) {
             'Run it again to update: it asks before overwriting an existing installation.',
             'Nothing needs administrator rights: only the user PATH is changed.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-InstallMan -Name 'install.ps1' `
+        -Purpose 'Installs docker-devbox-ubuntu from its GitHub repository without cloning it: you only download this file.' `
+        -Needs @(
+            'Internet access to raw.githubusercontent.com (the repository is public).',
+            'Windows PowerShell 5.1 or PowerShell 7. No administrator rights.'
+        ) `
+        -Steps @(
+            'Asks for the shared root (default C:\shared\): it must be absolute and without commas; when it does not exist it asks before creating it, and stops if it cannot.',
+            'Asks for the branch or tag to download (default main).',
+            'Downloads manifest.json first and prints the version; when the major.minor of the previous installation changed, it says to rebuild the images and recreate the containers.',
+            'If there is an installation, warns that its files are overwritten and asks [y/N].',
+            'Downloads every file listed in the manifest into <root>\devbox, checks that the Version header of each equals the manifest (otherwise it stops) and unblocks the .ps1 files.',
+            'Creates <root>\tools when it is missing.',
+            'Adds <root>\devbox\scripts\ps1 to the user PATH without duplicates; other entries from a previous installation are removed only after you confirm.',
+            'Warns, without changing it, when the execution policy is Restricted or AllSigned.'
+        ) `
+        -Changes @(
+            'The files under <root>\devbox.',
+            'The folder <root>\tools, when it was missing.',
+            'The user PATH.'
+        ) `
+        -Never @(
+            'Needs administrator rights.',
+            'Installs Docker or Mutagen (dkdb-container-create installs Mutagen on demand).',
+            'Changes the execution policy or stores the root path (the scripts deduce it from their location).',
+            'Deletes your projects, containers or images.'
+        ) `
+        -Next 'Make sure Docker Engine is running, open a new terminal and run dkdb-image-create.'
     exit 0
 }
 

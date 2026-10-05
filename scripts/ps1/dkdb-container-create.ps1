@@ -1,8 +1,9 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.1.6
+# Version: 0.2.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -19,6 +20,33 @@ if ($Help) {
             'The password of the user is its name (weak by design: local development only).',
             'Mutagen is downloaded on demand if you choose it and it is not installed (about 100 MB, checksum verified).'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Creates a devbox container from an image. It is created, not started.' `
+        -Needs @(
+            'Docker Engine running and an image built with dkdb-image-create.',
+            'The host projects and tools folders exist (nothing is created for you).',
+            'With Mutagen: version 0.18.1 or newer (downloaded on demand when missing).'
+        ) `
+        -Steps @(
+            'Checks the package against manifest.json and checks Docker.',
+            'Asks for the image, the container name, the user (default: the container name), the host projects path, the host tools path and the projects volume type (Docker bind mount or Mutagen).',
+            'Validates everything before creating: the image exists (the highest compatible tag; an older one only warns), the container name is free, the host paths exist and have no commas.',
+            'If Mutagen was chosen: installs it when missing and checks its version.',
+            'Runs docker create with DEVBOX_USER, tools mounted at ~/devbox/tools, scripts\bash at ~/devbox/bash (read-only) and, for a bind mount, the projects at ~/devbox/projects. With Mutagen there is no projects mount: the container only gets DEVBOX_SYNC and DEVBOX_SYNC_PATH.'
+        ) `
+        -Changes @(
+            'Adds a stopped container.',
+            'With Mutagen, may download it into <root>\devbox\mutagen.'
+        ) `
+        -Never @(
+            'Starts the container.',
+            'Creates host folders.',
+            'Starts the Mutagen daemon or creates any Mutagen session.'
+        ) `
+        -Next 'dkdb-container-start (with Mutagen its menu lets you choose what to synchronize), then dkdb-container-connect.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

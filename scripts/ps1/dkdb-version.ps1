@@ -1,8 +1,9 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.1.1
+# Version: 0.2.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -16,6 +17,27 @@ if ($Help) {
         -Notes @(
             'An image or container older than the scripts is only reported; it keeps working.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Shows every version of the package and what it is running on.' `
+        -Needs @(
+            'Nothing for the first sections; Docker for images and containers.'
+        ) `
+        -Steps @(
+            'Prints the project version and the image version of the manifest.',
+            'Compares each file (manifest against its Version header).',
+            'Prints PowerShell, Docker and Mutagen (against the minimum).',
+            'Lists each image and container with its compatibility.'
+        ) `
+        -Changes @(
+            'Nothing: it only reads.'
+        ) `
+        -Never @(
+            'Blocks anything: an image or container older than the scripts is only reported.'
+        ) `
+        -Next 'Run dkdb-verify if a file does not match.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

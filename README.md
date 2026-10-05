@@ -57,9 +57,18 @@ dkdb-container-connect
 Inside the container (opened with `dkdb-container-connect`), install one AI client (one per container):
 
 ```bash
-bash ~/devbox/bash/dkdb-install-claudecode.sh       # Claude Code
-bash ~/devbox/bash/dkdb-install-ghcopilot-cli.sh    # GitHub Copilot CLI
+dkdb-install-claudecode.sh       # Claude Code
+dkdb-install-ghcopilot-cli.sh    # GitHub Copilot CLI
 ```
+
+The scripts of `~/devbox/bash` run by name in a container created from image 0.2.0 or newer (`bash ~/devbox/bash/<script>` works in any). Besides the installers there are two that show information from inside the container, in the same layout as their PowerShell twins:
+
+| Script | What it shows |
+|--------|---------------|
+| `dkdb-info.sh` | Container, user, image version, folders and mounts, AI client and the Mutagen sessions. |
+| `dkdb-version.sh` | The package and image versions, each bash script against the manifest, the tools and whether the container image is compatible. |
+
+The Mutagen sessions and the manifest versions come from `~/.devbox-state`, a file that the host scripts write (`dkdb-container-connect`, `dkdb-mutagen-sync`, `dkdb-mutagen-status` and `dkdb-mutagen-stop` refresh it); it carries the time it was written, so it can be out of date.
 
 ## Usage
 
@@ -105,14 +114,18 @@ The recommended way is to register the projects **separately** (repo1, repo2, ..
 6. Each session covers one folder, not the whole container. The registry is Mutagen itself: the list comes from the sessions of the container (recognized by their beta endpoint, whatever their name). Stopping a container never touches Mutagen, and deleting it terminates its sessions. The menu never creates a session of the whole projects folder (it could take very long).
 7. Two **active** sessions of the same container never overlap; different containers can share a host folder (the host is the real copy, each container subscribes and publishes).
 
-### Help
+### Help and manual
 
-Every script prints its usage with `-Help` (the bash installers also with `-h` and `--help`), with or without other parameters, and does nothing else:
+Every script has two switches, with or without other parameters, and does nothing else:
+
+- **PowerShell:** `-Help` is the short usage and `-Man` the **manual**, in colors: purpose, requirements, what it does step by step, what it changes and what it never does, and the next step.
+- **bash** (the scripts of `~/devbox/bash` inside the container): `-h` or `--help` is the short usage and `man` (a word: `bash ~/devbox/bash/<script> man`) the manual.
 
 ```powershell
 dkdb-container-start -Help
-dkdb-mutagen-sync -Help
-& "C:\shared\devbox\install\install.ps1" -Help
+dkdb-mutagen-sync -Man
+& "C:\shared\devbox\install\install.ps1" -Man
+bash ~/devbox/bash/dkdb-install-claudecode.sh man   # inside the container
 ```
 
 Problems? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

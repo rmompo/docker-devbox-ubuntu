@@ -1,9 +1,10 @@
 # Synchronize the projects of a running Mutagen container chosen from a menu.
-# Version: 0.3.0
+# Version: 0.4.0
 # A menu chooses what to synchronize: No sync, a registered folder, All or Add.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -18,6 +19,25 @@ if ($Help) {
             'For a container that uses Mutagen a menu asks what to synchronize: No sync (the first option, the default: the daemon is started and the existing sessions are paused), a folder already registered as a session, All registered, or Add... (a new folder). Registering projects separately is the recommended way. A folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). All registered activates the sessions that are not inside another one. Nothing is ever terminated.',
             'Sessions are paused, never terminated; the files are not touched.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Chooses a running Mutagen container and what to synchronize in it.' `
+        -Needs @(
+            'Docker Engine running, mutagen.exe and a running container that uses Mutagen.'
+        ) `
+        -Steps (@(
+            'Shows the menu of the running containers that use Mutagen and warns about versions.'
+        ) + $DevboxSyncMenuMan) `
+        -Changes @(
+            'Sessions are created, resumed or paused according to the choice.'
+        ) `
+        -Never @(
+            'Terminates sessions or touches files.',
+            'Creates a session of the whole projects folder.'
+        ) `
+        -Next 'dkdb-mutagen-status shows the progress; run it again to change the folder.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

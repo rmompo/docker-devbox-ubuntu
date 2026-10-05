@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.1.2
+# Version: 0.2.0
 # Container entrypoint (runs as root).
 # Creates the user given in DEVBOX_USER (password = user name, sudo with
 # password), then hands the main process over to that user.
@@ -65,6 +65,24 @@ fi
 safe_dir="${user_home}/devbox/projects/*"
 if ! git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$safe_dir"; then
     git config --system --add safe.directory "$safe_dir"
+fi
+
+# The scripts of ~/devbox/bash (dkdb-info.sh, dkdb-version.sh, the AI client installers) run by name in the
+# interactive shells: the folder goes on the PATH and every script also gets a function that runs it with bash,
+# because a Windows mount may not keep the execute bit. Added to ~/.bashrc once (idempotent).
+bashrc="${user_home}/.bashrc"
+if ! grep -qxF '# devbox: the scripts of ~/devbox/bash run by name' "$bashrc" 2>/dev/null; then
+    cat >> "$bashrc" <<'BASHRC'
+# devbox: the scripts of ~/devbox/bash run by name
+export PATH="$HOME/devbox/bash:$PATH"
+for devbox_script in "$HOME"/devbox/bash/dkdb-*.sh; do
+    [ -e "$devbox_script" ] || continue
+    devbox_name="${devbox_script##*/}"
+    [ "$devbox_name" = dkdb-common.sh ] && continue
+    eval "${devbox_name}() { bash \"$devbox_script\" \"\$@\"; }"
+done
+unset devbox_script devbox_name
+BASHRC
 fi
 
 # Ready marker for the host scripts (/dev/shm is a tmpfs recreated at every start).

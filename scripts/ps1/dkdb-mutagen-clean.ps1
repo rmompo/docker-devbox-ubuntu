@@ -1,10 +1,11 @@
 # Terminate the orphan Mutagen sessions: dkdb- sessions whose container no longer exists
-# Version: 0.1.4
+# Version: 0.2.0
 # (left by containers deleted outside dkdb-container-delete, or while the Mutagen daemon was
 # stopped). The host folders are not touched.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -18,6 +19,27 @@ if ($Help) {
         -Notes @(
             'Sessions of folders of a living container are not leftovers.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Terminates leftover Mutagen sessions whose container no longer exists.' `
+        -Needs @(
+            'Docker Engine running, mutagen.exe and the Mutagen daemon running. No running container is needed, not even one.'
+        ) `
+        -Steps @(
+            'Lists all the Mutagen sessions.',
+            'An orphan is a session whose container endpoint points to a Docker container that does not exist (any session name); a dkdb- session without a readable endpoint is one when it matches no container.',
+            'Shows the orphans in a menu, with an option for all of them, and asks [y/N].',
+            'Terminates the chosen ones.'
+        ) `
+        -Changes @(
+            'Terminates the chosen orphan sessions.'
+        ) `
+        -Never @(
+            'Touches the host folders or the sessions of living containers.'
+        ) `
+        -Next 'dkdb-mutagen-status checks the remaining sessions.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

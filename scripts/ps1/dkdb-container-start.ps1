@@ -1,9 +1,10 @@
 # Start one stopped devbox container chosen from a menu.
-# Version: 0.3.0
+# Version: 0.4.0
 # For a Mutagen container a menu chooses what to synchronize (No sync is the first option and the default).
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -18,6 +19,27 @@ if ($Help) {
             'For a container that uses Mutagen a menu asks what to synchronize: No sync (the first option, the default: the daemon is started and the existing sessions are paused), a folder already registered as a session, All registered, or Add... (a new folder). Registering projects separately is the recommended way. A folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). All registered activates the sessions that are not inside another one. Nothing is ever terminated.',
             'An image older than the scripts only produces a warning: the container keeps working.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Starts one stopped devbox container chosen from a menu.' `
+        -Needs @(
+            'Docker Engine running and a stopped dkdb- container.'
+        ) `
+        -Steps (@(
+            'Warns, never stops, when the package or the image of the container have another version.',
+            'Shows the menu of stopped containers and runs docker start.'
+        ) + $DevboxSyncMenuMan) `
+        -Changes @(
+            'The container is running.',
+            'With Mutagen, sessions may be created, resumed or paused according to the choice.'
+        ) `
+        -Never @(
+            'Is blocked by versions.',
+            'Terminates sessions or touches files.'
+        ) `
+        -Next 'dkdb-container-connect.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

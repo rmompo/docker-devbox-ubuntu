@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.3.0
+# Version: 0.4.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -47,7 +47,7 @@ function Show-DevboxHelp {
         if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
     } catch { $width = 100 }
     if (-not $Name -and $Script) { $Name = [System.IO.Path]::GetFileNameWithoutExtension($Script) }
-    $Parameters = @($Parameters) + @(@{ Name = '-Help'; Description = 'Show this help and exit.' })
+    $Parameters = @($Parameters) + @(@{ Name = '-Help'; Description = 'Show this help and exit.' }, @{ Name = '-Man'; Description = 'Show the manual (what the script does, step by step) and exit.' })
     if ($Script) { Show-DevboxVersion -Script $Script }
     Write-Host ''
     Write-Host 'NAME' -ForegroundColor Cyan
@@ -83,6 +83,73 @@ function Show-DevboxHelp {
             Write-Host "    - $($lines[0])"
             foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host "      $line" }
         }
+    }
+    Write-Host ''
+}
+
+# --- Manual (-Man): what a script does, in colors (spec 01) ---
+# The synchronization menu, shared by the manuals of the scripts that show it.
+$DevboxSyncMenuMan = @(
+    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: No sync (the first option and the default), the folders already registered as sessions of the container, All registered, or Add... (a new folder).',
+    'No sync pauses every session of the container: nothing is synchronized.',
+    'A folder is activated and added to what is already active, so several folders can be synchronized at once. Activating one that covers active sessions pauses them; choosing one that is inside an active session changes nothing (somebody may be using it).',
+    'All registered activates the registered sessions that are not inside another one. A session of the whole projects folder is never created by the menu.',
+    'Add... asks for a folder (relative to the host projects folder, or absolute inside it) that must exist, creates its session and activates it.',
+    'Sessions are only paused, never terminated, and no file is touched.'
+)
+
+# Print the manual of a script: PURPOSE, REQUIREMENTS, WHAT IT DOES (numbered), WHAT IT CHANGES, WHAT IT
+# NEVER DOES and NEXT STEP. Headings in cyan, the name and the step numbers in green, the next step in
+# yellow; lines wrapped to the window.
+function Show-DevboxMan {
+    param(
+        [Parameter(Mandatory)][string]$Purpose,
+        [string[]]$Needs = @(),
+        [string[]]$Steps = @(),
+        [string[]]$Changes = @(),
+        [string[]]$Never = @(),
+        [string]$Next = '',
+        [string]$Name = '',
+        [string]$Script = ''
+    )
+    $width = 100
+    try {
+        $window = $Host.UI.RawUI.WindowSize.Width
+        if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
+    } catch { $width = 100 }
+    if (-not $Name -and $Script) { $Name = [System.IO.Path]::GetFileNameWithoutExtension($Script) }
+    if ($Script) { Show-DevboxVersion -Script $Script }
+    Write-Host ''
+    Write-Host 'MANUAL' -ForegroundColor Cyan
+    Write-Host "    $Name" -ForegroundColor Green
+    Write-Host ''
+    Write-Host 'PURPOSE' -ForegroundColor Cyan
+    foreach ($line in (Get-DevboxWrappedLines -Text $Purpose -Width ($width - 4))) { Write-Host "    $line" }
+    $sections = @(
+        @{ Title = 'REQUIREMENTS'; Items = $Needs; Numbered = $false },
+        @{ Title = 'WHAT IT DOES'; Items = $Steps; Numbered = $true },
+        @{ Title = 'WHAT IT CHANGES'; Items = $Changes; Numbered = $false },
+        @{ Title = 'WHAT IT NEVER DOES'; Items = $Never; Numbered = $false }
+    )
+    foreach ($section in $sections) {
+        if (@($section.Items).Count -eq 0) { continue }
+        Write-Host ''
+        Write-Host $section.Title -ForegroundColor Cyan
+        $number = 0
+        foreach ($item in $section.Items) {
+            $number++
+            $marker = if ($section.Numbered) { ('{0,2}. ' -f $number) } else { '  - ' }
+            $lines = @(Get-DevboxWrappedLines -Text $item -Width ($width - 8))
+            Write-Host '    ' -NoNewline
+            Write-Host $marker -NoNewline -ForegroundColor Green
+            Write-Host $lines[0]
+            foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host ('        ' + $line) }
+        }
+    }
+    if ($Next) {
+        Write-Host ''
+        Write-Host 'NEXT STEP' -ForegroundColor Cyan
+        foreach ($line in (Get-DevboxWrappedLines -Text $Next -Width ($width - 4))) { Write-Host "    $line" -ForegroundColor Yellow }
     }
     Write-Host ''
 }
@@ -1162,7 +1229,7 @@ function Enable-DevboxFolderSession {
 #   - only No sync pauses everything. Nothing is ever terminated and no file is touched.
 # A session of the whole projects folder is never created here, it only appears when it exists.
 # Returns Ok ($false on failure; the reason is printed) and Active ($true when something is synchronized).
-function Invoke-DevboxSyncPick {
+function Invoke-DevboxSyncPickCore {
     param([Parameter(Mandatory)][string]$Container, [switch]$Flush)
     $result = [pscustomobject]@{ Ok = $true; Active = $false }
     $fail = { $result.Ok = $false; return $result }
@@ -1264,6 +1331,65 @@ function Invoke-DevboxSyncPick {
     if ($fresh.Count -gt 0) { $target = $fresh[0] }
     if (-not (Enable-DevboxFolderSession -Target $target -Sessions $current -Flush:$Flush)) { return (& $fail) }
     $result.Active = $true
+    return $result
+}
+
+# --- State file inside the container (spec 08) ---
+# The bash scripts of the container (dkdb-info.sh, dkdb-version.sh) cannot see the host: this writes
+# ~/.devbox-state inside the container (key=value and key|field|field lines): the versions of the
+# package, the bash files of the manifest and, with Mutagen, the daemon and the sessions as the host
+# sees them. It never fails loudly: when the container is not running or the write fails it returns
+# $false, and the file may be out of date (it carries the time it was written).
+function Update-DevboxContainerState {
+    param([Parameter(Mandatory)][string]$Container)
+    $user = Get-DevboxContainerUser -Container $Container
+    if (-not $user) { return $false }
+    $clean = { param($text) ([string]$text -replace '[\r\n|]', ' ').Trim() }
+    $lines = @(
+        '# written by the host scripts of docker-devbox-ubuntu; do not edit',
+        ('updated=' + (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss') + ' UTC'),
+        ('package=' + (Get-DevboxVersion)),
+        ('image_expected=' + (Get-DevboxImageVersion)),
+        ('container=' + $Container)
+    )
+    $manifestPath = Join-Path (Get-DevboxBase) 'manifest.json'
+    if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+        try {
+            $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+            foreach ($entry in ($manifest.files.PSObject.Properties | Where-Object { $_.Name -like 'scripts/bash/*' } | Sort-Object Name)) {
+                $lines += ('file|' + $entry.Name + '|' + $entry.Value)
+            }
+        } catch { Write-Verbose 'manifest.json could not be read' }
+    }
+    if ((Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_SYNC') -eq 'mutagen') {
+        $lines += 'volume=mutagen'
+        $lines += ('host_projects=' + (& $clean (Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_SYNC_PATH')))
+        if (-not (Test-DevboxMutagen)) { $lines += 'daemon=not installed' }
+        elseif (-not (Test-DevboxMutagenDaemon)) { $lines += 'daemon=stopped' }
+        else {
+            $lines += 'daemon=running'
+            foreach ($session in @(Get-DevboxContainerSyncSessions -Container $Container)) {
+                $state = $session.Status
+                if ($session.Paused) { $state = "$state (paused)" }
+                if ($null -ne $session.Total -and $session.Total -gt 0) { $state = "$state, $($session.Done) of $($session.Total) files" }
+                $lines += ('session|' + (& $clean $session.AlphaPath) + '|' + (& $clean $session.BetaPath) + '|' + (& $clean $state) + '|' + [int]$session.Conflicts + '|' + (& $clean $session.LastError))
+            }
+        }
+    } else {
+        $lines += 'volume=bind'
+    }
+    # base64: one safe token as an argument, with no quotes or line breaks for Windows PowerShell 5.1.
+    $encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($lines -join "`n") + "`n"))
+    docker exec -u $user $Container bash -c 'echo $1 | base64 -d > ~/.devbox-state' _ $encoded *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
+# The menu (Invoke-DevboxSyncPickCore) and, afterwards, the refresh of the state file of the container,
+# so that dkdb-info.sh and dkdb-version.sh inside it show the new situation.
+function Invoke-DevboxSyncPick {
+    param([Parameter(Mandatory)][string]$Container, [switch]$Flush)
+    $result = Invoke-DevboxSyncPickCore -Container $Container -Flush:$Flush
+    $null = Update-DevboxContainerState -Container $Container
     return $result
 }
 

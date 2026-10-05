@@ -1,9 +1,10 @@
 # Check the installed package against manifest.json: every listed file must exist and carry
-# Version: 0.1.3
+# Version: 0.2.0
 # the version that the manifest says. Exit code 1 when something is inconsistent.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -17,6 +18,25 @@ if ($Help) {
         -Notes @(
             'Exit code 1 when something is inconsistent; files that the manifest does not list are reported as notes.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Checks the installed package against manifest.json.' `
+        -Needs @(
+            'The package installed by install.ps1.'
+        ) `
+        -Steps @(
+            'Reads manifest.json and checks that every listed file exists and has the version of the manifest.',
+            'Reports files under scripts or install that the manifest does not list, as notes.'
+        ) `
+        -Changes @(
+            'Nothing: it only reads.'
+        ) `
+        -Never @(
+            'Downloads or repairs files (run install.ps1 again for that).'
+        ) `
+        -Next 'dkdb-image-create builds the image, then dkdb-container-create.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

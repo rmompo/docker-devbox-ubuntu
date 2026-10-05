@@ -1,5 +1,5 @@
 # Delete one stopped devbox container chosen from a menu.
-# Version: 0.1.3
+# Version: 0.2.0
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # With a Mutagen container, only its Mutagen sessions (the whole projects folder and its
@@ -7,6 +7,7 @@
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -21,6 +22,29 @@ if ($Help) {
             'Its home, the installed AI client and (with Mutagen) its copy of the projects are lost; the host folders are not touched.',
             'For a Mutagen container it also terminates its Mutagen sessions.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Deletes one stopped devbox container chosen from a menu.' `
+        -Needs @(
+            'Docker Engine running and a stopped dkdb- container (stop a running one first).'
+        ) `
+        -Steps @(
+            'Shows the menu of stopped containers.',
+            'Asks [y/N]: its home and installed AI client are lost (with Mutagen, also the container copy of the projects).',
+            'For a Mutagen container, reads the names of its sessions first (they depend on the container ID).',
+            'Runs docker rm.',
+            'With Mutagen, terminates the sessions of that container (the whole projects folder and its folders) when the daemon is running; otherwise dkdb-mutagen-clean removes them later.'
+        ) `
+        -Changes @(
+            'Removes the container and, with Mutagen, its sessions.'
+        ) `
+        -Never @(
+            'Touches the host folders (projects, tools, bash).',
+            'Stops the Mutagen daemon or touches the sessions of other containers.'
+        ) `
+        -Next 'dkdb-container-create creates another one.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

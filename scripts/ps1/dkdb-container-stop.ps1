@@ -1,9 +1,10 @@
 # Stop one running devbox container chosen from a menu.
-# Version: 0.1.3
+# Version: 0.2.0
 # It never touches Mutagen (daemon or session): see dkdb-mutagen-stop for that.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -17,6 +18,26 @@ if ($Help) {
         -Notes @(
             'It never touches Mutagen.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Stops one running devbox container chosen from a menu.' `
+        -Needs @(
+            'Docker Engine running and a running dkdb- container.'
+        ) `
+        -Steps @(
+            'Shows the menu of running containers.',
+            'Runs docker stop.'
+        ) `
+        -Changes @(
+            'The container is stopped (its data is kept).'
+        ) `
+        -Never @(
+            'Touches Mutagen (the daemon or any session): their sessions stay and reconnect by themselves when the container is up.',
+            'Deletes anything.'
+        ) `
+        -Next 'dkdb-container-start starts it again, or dkdb-container-delete removes it.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

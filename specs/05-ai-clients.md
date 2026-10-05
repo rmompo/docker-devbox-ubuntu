@@ -13,6 +13,7 @@ One AI client (Claude Code or GitHub Copilot CLI) is installed inside the contai
 
 ## Decision
 - **Source of truth:** `scripts/bash/` in the repository (versioned in git): `dkdb-install-claudecode.sh` and `dkdb-install-ghcopilot-cli.sh`. Run them inside the container with `bash ~/devbox/bash/<script>`.
+- **Information scripts:** `dkdb-info.sh` and `dkdb-version.sh` show, inside the container, the same as `dkdb-info` and `dkdb-version` on the host (same layout; only what the container can see). They source `dkdb-common.sh` (colors, `-h` and `man`, version comparison, reading the state file). What the host knows (package and manifest versions, the Mutagen sessions) comes from `~/.devbox-state`, written by `Update-DevboxContainerState` (spec 08).
 - **Installed copy:** `<root>\devbox\scripts\bash\`, downloaded by `install.ps1` (spec 07) and mounted read-only inside the container at `/home/<user>/devbox/bash/`. To update, re-run `install.ps1`.
 - **Claude Code:** `curl -fsSL https://claude.ai/install.sh | bash` (latest version; leaves `~/.local/bin/claude`).
 - **Copilot CLI:** `curl -fsSL https://gh.io/copilot-install | bash` (no Node needed; installs into `$HOME/.local` for non-root users).

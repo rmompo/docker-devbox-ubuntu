@@ -1,8 +1,9 @@
 # Build a devbox image named <prefix>-<name>.
-# Version: 0.1.4
+# Version: 0.2.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -17,6 +18,29 @@ if ($Help) {
             'The tag is the image version (the ''image'' field of manifest.json), never latest.',
             'After an update that changes the Dockerfile or the entrypoint, build the image again and recreate the containers.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Builds the Docker image of the devbox (Ubuntu 26.04 LTS with the development tools) and tags it with the image version of the manifest, never with latest.' `
+        -Needs @(
+            'Docker Engine running.',
+            'The installed package must be consistent with manifest.json (it stops otherwise).'
+        ) `
+        -Steps @(
+            'Checks the package against manifest.json and checks Docker.',
+            'Reads the image version (the image field of manifest.json).',
+            'Asks for the image name (default devbox-ubuntu, so dkdb-devbox-ubuntu:<version>).',
+            'Runs docker build with the Dockerfile of scripts\docker, passing the version as a build argument.'
+        ) `
+        -Changes @(
+            'Adds the local Docker image dkdb-<name>:<version>.'
+        ) `
+        -Never @(
+            'Tags latest.',
+            'Touches existing containers, other images or any host folder.'
+        ) `
+        -Next 'dkdb-container-create.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

@@ -1,9 +1,10 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.1.3
+# Version: 0.2.0
 # volumes and Mutagen. For the versions, see dkdb-version.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -17,6 +18,27 @@ if ($Help) {
         -Notes @(
             'For the versions see dkdb-version.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Shows how everything is set up.' `
+        -Needs @(
+            'Nothing for the first sections; Docker for images and containers.'
+        ) `
+        -Steps @(
+            'Prints the shared root and its folders and the PATH.',
+            'Prints Docker.',
+            'Lists images and containers with their state, user, volume type and mounts.',
+            'Prints the Mutagen daemon and, per container, its sessions with their progress, the overlaps of active sessions and the host folders shared by several containers.'
+        ) `
+        -Changes @(
+            'Nothing: it only reads.'
+        ) `
+        -Never @(
+            'Changes anything.'
+        ) `
+        -Next 'dkdb-version shows the versions.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath

@@ -1,8 +1,9 @@
 # Show the Mutagen sync status (state and conflicts) of a devbox container chosen from a menu.
-# Version: 0.1.5
+# Version: 0.2.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -16,6 +17,26 @@ if ($Help) {
         -Notes @(
             'It also shows paused sessions, the last error and conflicts.'
         )
+    exit 0
+}
+if ($Man) {
+    Show-DevboxMan -Script $PSCommandPath `
+        -Purpose 'Shows the state of the Mutagen sessions of one container and whether they are progressing.' `
+        -Needs @(
+            'Docker Engine running, mutagen.exe and the Mutagen daemon running.'
+        ) `
+        -Steps @(
+            'Shows the menu of the dkdb- containers that use Mutagen (running or stopped).',
+            'For every session of the container prints its host and container folder, its state and conflicts, and a progress summary (so far X of Y files) compared with the previous query.',
+            'Checks that no two active sessions of the container overlap and shows them in red if they do.'
+        ) `
+        -Changes @(
+            'Nothing: it only reads.'
+        ) `
+        -Never @(
+            'Creates, resumes, pauses or terminates sessions.'
+        ) `
+        -Next 'Run it again to see whether it moves; dkdb-container-connect works meanwhile.'
     exit 0
 }
 Show-DevboxVersion -Script $PSCommandPath
@@ -69,6 +90,9 @@ foreach ($sessionInfo in $sessions) {
     if ($progress) { $complete = Show-DevboxSyncProgress -Session $session -Progress $progress }
     if (-not $complete) { $allComplete = $false }
 }
+
+# The state file of the container (what dkdb-info.sh shows inside it) is refreshed with what was just read.
+$null = Update-DevboxContainerState -Container $selected
 
 # Rule: the sessions of one container never overlap (several containers may share a host folder).
 Write-Host ''

@@ -1,5 +1,5 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
-# Version: 0.1.4
+# Version: 0.2.0
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -7,6 +7,7 @@
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [switch]$Man,
     [switch]$Help
 )
 
@@ -93,7 +94,7 @@ function Show-UninstallHelp {
         $window = $Host.UI.RawUI.WindowSize.Width
         if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
     } catch { $width = 100 }
-    $parameters = @(@{ Name = '-Help'; Description = 'Show this help and exit.' })
+    $parameters = @(@{ Name = '-Help'; Description = 'Show this help and exit.' }, @{ Name = '-Man'; Description = 'Show the manual (what the script does, step by step) and exit.' })
     if ($VersionLine) { Write-Host $VersionLine -ForegroundColor DarkGray }
     Write-Host ''
     Write-Host 'NAME' -ForegroundColor Cyan
@@ -131,6 +132,57 @@ function Show-UninstallHelp {
     Write-Host ''
 }
 
+# Manual (-Man): what the script does, in colors (same layout as the dkdb-* scripts, spec 01).
+function Show-UninstallMan {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Purpose,
+        [string[]]$Needs = @(),
+        [string[]]$Steps = @(),
+        [string[]]$Changes = @(),
+        [string[]]$Never = @(),
+        [string]$Next = ''
+    )
+    $width = 100
+    try {
+        $window = $Host.UI.RawUI.WindowSize.Width
+        if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
+    } catch { $width = 100 }
+    Write-Host ''
+    Write-Host 'MANUAL' -ForegroundColor Cyan
+    Write-Host "    $Name" -ForegroundColor Green
+    Write-Host ''
+    Write-Host 'PURPOSE' -ForegroundColor Cyan
+    foreach ($line in (Get-UninstallWrappedLines -Text $Purpose -Width ($width - 4))) { Write-Host "    $line" }
+    $sections = @(
+        @{ Title = 'REQUIREMENTS'; Items = $Needs; Numbered = $false },
+        @{ Title = 'WHAT IT DOES'; Items = $Steps; Numbered = $true },
+        @{ Title = 'WHAT IT CHANGES'; Items = $Changes; Numbered = $false },
+        @{ Title = 'WHAT IT NEVER DOES'; Items = $Never; Numbered = $false }
+    )
+    foreach ($section in $sections) {
+        if (@($section.Items).Count -eq 0) { continue }
+        Write-Host ''
+        Write-Host $section.Title -ForegroundColor Cyan
+        $number = 0
+        foreach ($item in $section.Items) {
+            $number++
+            $marker = if ($section.Numbered) { ('{0,2}. ' -f $number) } else { '  - ' }
+            $lines = @(Get-UninstallWrappedLines -Text $item -Width ($width - 8))
+            Write-Host '    ' -NoNewline
+            Write-Host $marker -NoNewline -ForegroundColor Green
+            Write-Host $lines[0]
+            foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host ('        ' + $line) }
+        }
+    }
+    if ($Next) {
+        Write-Host ''
+        Write-Host 'NEXT STEP' -ForegroundColor Cyan
+        foreach ($line in (Get-UninstallWrappedLines -Text $Next -Width ($width - 4))) { Write-Host "    $line" -ForegroundColor Yellow }
+    }
+    Write-Host ''
+}
+
 if ($Help) {
     $helpVersion = 'unknown'
     foreach ($line in (Get-Content -LiteralPath $PSCommandPath -TotalCount 15)) {
@@ -147,6 +199,34 @@ if ($Help) {
             'Run it from <root>\devbox\install.',
             'If the Mutagen daemon is running it asks before stopping it (that stops all your Mutagen sessions).'
         )
+    exit 0
+}
+if ($Man) {
+    $manVersion = 'unknown'
+    foreach ($line in (Get-Content -LiteralPath $PSCommandPath -TotalCount 15)) {
+        if ($line -match '^#\s*Version:\s*(\d+\.\d+\.\d+)\s*$') { $manVersion = $Matches[1]; break }
+    }
+    Write-Host "uninstall $manVersion (docker-devbox-ubuntu uninstaller)" -ForegroundColor DarkGray
+    Show-UninstallMan -Name 'uninstall.ps1' `
+        -Purpose 'Removes the scripts and Mutagen of this installation and their user PATH entries.' `
+        -Needs @(
+            'Run it from <root>\devbox\install.'
+        ) `
+        -Steps @(
+            'Checks that it runs from <root>\devbox\install.',
+            'Lists what will be removed and asks for confirmation.',
+            'If the Mutagen daemon is running, asks before stopping it (that stops all your Mutagen sessions).',
+            'Removes the PATH entries of the scripts and of Mutagen.',
+            'Removes <root>\devbox\scripts and <root>\devbox\mutagen.'
+        ) `
+        -Changes @(
+            'The two folders above and the user PATH.'
+        ) `
+        -Never @(
+            'Removes the install folder, the tools folder, your projects, containers or images.',
+            'Stops the Mutagen daemon without asking.'
+        ) `
+        -Next 'To install again, run install.ps1.'
     exit 0
 }
 
