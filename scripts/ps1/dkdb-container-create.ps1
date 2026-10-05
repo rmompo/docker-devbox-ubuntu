@@ -1,6 +1,26 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.1.3
+# Version: 0.1.4
+# PositionalBinding is off so that a stray argument is an error.
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [switch]$Help
+)
 . "$PSScriptRoot\dkdb-common.ps1"
+if ($Help) {
+    Show-DevboxHelp -Script $PSCommandPath `
+        -Description 'Creates a devbox container from a devbox image; it is not started. It asks for the image, the container name, the user, the host projects path, the host tools path and the projects volume type (Docker bind mount or Mutagen sync).' `
+        -Usage 'dkdb-container-create [-Help]' `
+        -Examples @(
+            @{ Command = 'dkdb-container-create'; Description = 'Asks for everything, with defaults, and creates the container.' }
+        ) `
+        -Notes @(
+            'Folders inside the container: ~/devbox/projects (bind mount, or a copy synchronized by Mutagen), ~/devbox/tools (read/write) and ~/devbox/bash (read-only).',
+            'The host paths must exist: nothing is created for you.',
+            'The password of the user is its name (weak by design: local development only).',
+            'Mutagen is downloaded on demand if you choose it and it is not installed (about 100 MB, checksum verified).'
+        )
+    exit 0
+}
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxIntegrity
 Assert-DevboxDocker

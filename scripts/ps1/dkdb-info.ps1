@@ -1,7 +1,24 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.1.0
+# Version: 0.1.1
 # volumes and Mutagen. For the versions, see dkdb-version.
+# PositionalBinding is off so that a stray argument is an error.
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [switch]$Help
+)
 . "$PSScriptRoot\dkdb-common.ps1"
+if ($Help) {
+    Show-DevboxHelp -Script $PSCommandPath `
+        -Description 'Shows how everything is set up: folders, PATH, Docker, images, containers, volumes and Mutagen.' `
+        -Usage 'dkdb-info [-Help]' `
+        -Examples @(
+            @{ Command = 'dkdb-info'; Description = 'Prints the installation, Docker, containers and Mutagen sessions.' }
+        ) `
+        -Notes @(
+            'For the versions see dkdb-version.'
+        )
+    exit 0
+}
 Show-DevboxVersion -Script $PSCommandPath
 
 function Show-InfoPath {

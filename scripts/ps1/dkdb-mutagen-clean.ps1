@@ -1,8 +1,25 @@
 # Terminate the orphan Mutagen sessions: dkdb- sessions whose container no longer exists
-# Version: 0.1.2
+# Version: 0.1.3
 # (left by containers deleted outside dkdb-container-delete, or while the Mutagen daemon was
 # stopped). The host folders are not touched.
+# PositionalBinding is off so that a stray argument is an error.
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [switch]$Help
+)
 . "$PSScriptRoot\dkdb-common.ps1"
+if ($Help) {
+    Show-DevboxHelp -Script $PSCommandPath `
+        -Description 'Terminates leftover Mutagen sessions (dkdb-*) whose container no longer exists. It asks before terminating anything; the host folders are not touched.' `
+        -Usage 'dkdb-mutagen-clean [-Help]' `
+        -Examples @(
+            @{ Command = 'dkdb-mutagen-clean'; Description = 'Lists the leftover sessions and terminates the ones you choose.' }
+        ) `
+        -Notes @(
+            'Sessions of folders of a living container are not leftovers.'
+        )
+    exit 0
+}
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
@@ -23,7 +40,11 @@ if ($null -eq $sessions) {
 
 # Sessions of the containers that still exist are not orphans.
 $alive = @(Get-DevboxMutagenContainers | ForEach-Object { Get-DevboxSyncSessionName -Container $_ } | Where-Object { $_ })
-$orphans = @($sessions | Where-Object { $_ -like "$DevboxPrefix-*" -and $alive -notcontains $_ })
+# A session belongs to a living container when it is its session or one of its folders (<session>-f...).
+$orphans = @($sessions | Where-Object {
+    $name = $_
+    $_ -like "$DevboxPrefix-*" -and -not ($alive | Where-Object { $name -eq $_ -or $name -like "$_-f*" })
+})
 if ($orphans.Count -eq 0) {
     Write-Host 'No orphan Mutagen sessions were found.'
     exit 0

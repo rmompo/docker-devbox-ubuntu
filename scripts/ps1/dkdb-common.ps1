@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.1.3
+# Version: 0.1.4
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -12,6 +12,80 @@ $DevboxDefaultProjectsPath = 'C:\LocalFiles\proyectos\'
 # Optional Mutagen (file sync, spec 08), downloaded on demand by dkdb-container-create.
 # It is also the minimum accepted version (0.18.1 fixed the compatibility with Docker Engine 28+).
 $DevboxMutagenVersion = '0.18.1'
+
+# --- Help (-Help): one layout for every script (spec 01) ---
+# Words of $Text wrapped in lines of at most $Width characters.
+function Get-DevboxWrappedLines {
+    param([string]$Text, [int]$Width)
+    $lines = @()
+    $line = ''
+    foreach ($word in ($Text -split '\s+' | Where-Object { $_ })) {
+        if ($line -and (($line.Length + 1 + $word.Length) -gt $Width)) { $lines += $line; $line = $word }
+        elseif ($line) { $line = "$line $word" }
+        else { $line = $word }
+    }
+    if ($line) { $lines += $line }
+    return $lines
+}
+
+# Print the help of a script: NAME, DESCRIPTION, USAGE, PARAMETERS, EXAMPLES and NOTES. Headings in
+# cyan, names, usage and example commands in green, the text in the default color; columns aligned.
+# Parameters: @{ Name = '-SyncOff'; Description = '...' }; Examples: @{ Command = '...'; Description = '...' }.
+function Show-DevboxHelp {
+    param(
+        [string]$Name = '',
+        [Parameter(Mandatory)][string]$Description,
+        [Parameter(Mandatory)][string]$Usage,
+        [object[]]$Parameters = @(),
+        [object[]]$Examples = @(),
+        [string[]]$Notes = @(),
+        [string]$Script = ''
+    )
+    $width = 100
+    try {
+        $window = $Host.UI.RawUI.WindowSize.Width
+        if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
+    } catch { $width = 100 }
+    if (-not $Name -and $Script) { $Name = [System.IO.Path]::GetFileNameWithoutExtension($Script) }
+    $Parameters = @($Parameters) + @(@{ Name = '-Help'; Description = 'Show this help and exit.' })
+    if ($Script) { Show-DevboxVersion -Script $Script }
+    Write-Host ''
+    Write-Host 'NAME' -ForegroundColor Cyan
+    Write-Host "    $Name" -ForegroundColor Green
+    Write-Host ''
+    Write-Host 'DESCRIPTION' -ForegroundColor Cyan
+    foreach ($line in (Get-DevboxWrappedLines -Text $Description -Width ($width - 4))) { Write-Host "    $line" }
+    Write-Host ''
+    Write-Host 'USAGE' -ForegroundColor Cyan
+    Write-Host "    $Usage" -ForegroundColor Green
+    Write-Host ''
+    Write-Host 'PARAMETERS' -ForegroundColor Cyan
+    $nameWidth = ($Parameters | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum + 3
+    foreach ($parameter in $Parameters) {
+        $lines = @(Get-DevboxWrappedLines -Text $parameter.Description -Width ($width - 4 - $nameWidth))
+        Write-Host ('    ' + $parameter.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor Green
+        Write-Host $lines[0]
+        foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host ((' ' * (4 + $nameWidth)) + $line) }
+    }
+    if ($Examples.Count -gt 0) {
+        Write-Host ''
+        Write-Host 'EXAMPLES' -ForegroundColor Cyan
+        foreach ($example in $Examples) {
+            Write-Host "    $($example.Command)" -ForegroundColor Green
+            foreach ($line in (Get-DevboxWrappedLines -Text $example.Description -Width ($width - 8))) { Write-Host "        $line" }
+        }
+    }
+    if ($Notes.Count -gt 0) {
+        Write-Host ''
+        Write-Host 'NOTES' -ForegroundColor Cyan
+        foreach ($note in $Notes) {
+            $lines = @(Get-DevboxWrappedLines -Text $note -Width ($width - 6))
+            Write-Host "    - $($lines[0])"
+            foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host "      $line" }
+        }
+    }
+    Write-Host ''
+}
 
 # --- Version and integrity (spec 01) ---
 # <root>\devbox (the installed package) or the repository root: both have the same layout.
@@ -598,6 +672,7 @@ function ConvertTo-DevboxSyncProgress {
     if ($Session.conflicts) { $conflictCount = @($Session.conflicts).Count }
     return [pscustomobject]@{
         Name      = [string]$Session.name
+        AlphaPath = [string]$Session.alpha.path
         Status    = [string]$Session.status
         Done      = $done
         Total     = $total
@@ -691,17 +766,146 @@ function Show-DevboxSyncFailure {
     Write-DevboxNext 'Next: dkdb-mutagen-status shows the details and the progress; run it again to see whether it moves.'
 }
 
-# Create the session, or resume it when it already exists. The session is flushed when it
-# was just created or when -Flush is given. Returns $true on success; prints the reason
-# and returns $false otherwise.
+# --- Incremental synchronization (-SyncOff, -SyncFolder) ---
+
+# The sync switches of start, connect and dkdb-mutagen-sync are native PowerShell parameters
+# (-SyncOff, -SyncFolder a,b); this only normalizes them and checks that they do not contradict each
+# other. Returns SyncOff, Folders and Error.
+function Get-DevboxSyncOptions {
+    param(
+        [bool]$SyncOff = $false,
+        [string[]]$SyncFolder = @()
+    )
+    $options = [pscustomobject]@{ SyncOff = $SyncOff; Folders = @($SyncFolder | Where-Object { $_ }); Error = $null }
+    if ($options.SyncOff -and $options.Folders.Count -gt 0) { $options.Error = '-SyncOff and -SyncFolder cannot be used together' }
+    return $options
+}
+
+# A folder of the projects path: relative to it, or absolute inside it. Returns Relative (with
+# '/'), Full and Error (empty when the folder is valid: it exists and is inside the projects path).
+function Resolve-DevboxSyncFolder {
+    param([Parameter(Mandatory)][string]$HostPath, [Parameter(Mandatory)][string]$Folder)
+    $separator = [System.IO.Path]::DirectorySeparatorChar
+    $base = [System.IO.Path]::GetFullPath($HostPath).TrimEnd('\', '/')
+    $candidate = $Folder.Trim().Trim('"')
+    if (-not [System.IO.Path]::IsPathRooted($candidate)) { $candidate = Join-Path $base $candidate }
+    $full = [System.IO.Path]::GetFullPath($candidate).TrimEnd('\', '/')
+    $result = [pscustomobject]@{ Relative = $null; Full = $full; Error = $null }
+    # Windows paths are case-insensitive.
+    if ($full.Length -le $base.Length -or -not $full.StartsWith($base + $separator, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $result.Error = "it must be a folder inside the projects folder ($base); use no switch to synchronize everything"
+        return $result
+    }
+    if (-not (Test-Path -LiteralPath $full -PathType Container)) {
+        $result.Error = "the folder does not exist: $full"
+        return $result
+    }
+    $result.Relative = ($full.Substring($base.Length + 1)) -replace '\\', '/'
+    return $result
+}
+
+# Name of the session of a folder: <session of the container>-f<8 hex of the lowercase path>.
+function Get-DevboxFolderSessionName {
+    param([Parameter(Mandatory)][string]$MainSession, [Parameter(Mandatory)][string]$Relative)
+    $sha = [System.Security.Cryptography.SHA1]::Create()
+    $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Relative.ToLowerInvariant()))
+    $hex = -join ($bytes[0..3] | ForEach-Object { $_.ToString('x2') })
+    return "$MainSession-f$hex"
+}
+
+# Create a synchronization session (two-way-safe, everything including .git, symbolic links ignored).
+function New-DevboxSyncSession {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Alpha,
+        [Parameter(Mandatory)][string]$Beta,
+        [Parameter(Mandatory)][string]$User
+    )
+    $mutagen = Get-DevboxMutagenExe
+    $syncArgs = @(
+        'sync', 'create',
+        '--name', $Name,
+        '--sync-mode', 'two-way-safe',
+        '--no-ignore-vcs',
+        '--symlink-mode', 'ignore',
+        '--default-file-mode', '0644',
+        '--default-directory-mode', '0755',
+        '--default-owner-beta', $User,
+        '--default-group-beta', $User,
+        $Alpha,
+        $Beta
+    )
+    & $mutagen @syncArgs | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
+# Flush a session and wait for the cycle to end; on failure show why.
+function Invoke-DevboxSyncFlush {
+    param([Parameter(Mandatory)][string]$Session)
+    $mutagen = Get-DevboxMutagenExe
+    Write-Host "Synchronizing $Session ..."
+    Write-DevboxNext 'A large folder can take a while: follow it from another terminal with dkdb-mutagen-status.'
+    & $mutagen sync flush $Session | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-DevboxWarning 'Warning: the flush failed. Mutagen retries the connection by itself; the synchronization may still progress.'
+        Show-DevboxSyncFailure -Session $Session
+    }
+}
+
+# Resume sessions that already exist (and flush them when asked). Returns $false if one fails.
+function Resume-DevboxSyncSessions {
+    param([Parameter(Mandatory)][string[]]$Names, [switch]$Flush)
+    $mutagen = Get-DevboxMutagenExe
+    $ok = $true
+    foreach ($name in $Names) {
+        & $mutagen sync resume $name | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-DevboxWarning "Error: could not resume the Mutagen session '$name'."
+            $ok = $false
+            continue
+        }
+        if ($Flush) { Invoke-DevboxSyncFlush -Session $name }
+    }
+    return $ok
+}
+
+# Sessions of a container: the one of the whole projects folder and those of its folders.
+function Get-DevboxContainerSyncSessions {
+    param([Parameter(Mandatory)][string]$Container)
+    $main = Get-DevboxSyncSessionName -Container $Container
+    if (-not $main) { return @() }
+    return @(Get-DevboxMutagenSessions | Where-Object { $_.Name -eq $main -or $_.Name -like "$main-f*" })
+}
+
+# Names of the sessions to terminate when a container is deleted. The daemon is not started for it:
+# when it is stopped, only the main name is returned.
+function Get-DevboxContainerSessionNames {
+    param([Parameter(Mandatory)][string]$Container)
+    $main = Get-DevboxSyncSessionName -Container $Container
+    if (-not $main) { return @() }
+    if (-not (Test-DevboxMutagen) -or -not (Test-DevboxMutagenDaemon)) { return @($main) }
+    $names = @(Get-DevboxContainerSyncSessions -Container $Container | ForEach-Object { $_.Name })
+    if ($names.Count -eq 0) { return @($main) }
+    return $names
+}
+
+# Start the synchronization of the projects of a Mutagen container.
+#   No -Folders: the session of the whole projects folder is created or resumed. If there are only
+#     sessions of folders (see below), those are resumed and the whole-folder session is not created.
+#   -Folders: one session per folder (relative to the projects path, or absolute inside it), added
+#     to the ones that already exist: a folder inside another synchronized one is skipped, one that
+#     contains synchronized folders is refused, and with the whole-folder session active nothing is added.
+# A session is flushed when it was just created or when -Flush is given. Returns $true on success;
+# prints the reason and returns $false otherwise.
 function Start-DevboxSync {
     param(
         [Parameter(Mandatory)][string]$Container,
-        [switch]$Flush
+        [switch]$Flush,
+        [string[]]$Folders = @()
     )
     $user = Get-DevboxContainerUser -Container $Container
     $hostPath = Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_SYNC_PATH'
-    # The session and its docker endpoint use the container ID, not the name: a recreated
+    # The sessions and their docker endpoints use the container ID, not the name: a recreated
     # container with the same name must not reuse a leftover session (its root would
     # look emptied and Mutagen would halt). Leftover sessions are never touched here.
     $containerId = Get-DevboxContainerId -Container $Container
@@ -726,46 +930,89 @@ function Start-DevboxSync {
         Write-DevboxWarning "Error: the container '$Container' did not become ready in time."
         return $false
     }
-    $mutagen = Get-DevboxMutagenExe
     if (-not (Start-DevboxMutagenDaemon)) {
         Write-DevboxWarning 'Error: the Mutagen daemon could not be started.'
         return $false
     }
-    $created = $false
-    & $mutagen sync list $session *> $null
-    if ($LASTEXITCODE -eq 0) {
-        & $mutagen sync resume $session | Out-Null
-    } else {
-        $syncArgs = @(
-            'sync', 'create',
-            '--name', $session,
-            '--sync-mode', 'two-way-safe',
-            '--no-ignore-vcs',
-            '--symlink-mode', 'ignore',
-            '--default-file-mode', '0644',
-            '--default-directory-mode', '0755',
-            '--default-owner-beta', $user,
-            '--default-group-beta', $user,
-            $hostPath,
-            "docker://$user@$containerId/home/$user/devbox/projects"
-        )
-        & $mutagen @syncArgs | Out-Null
-        $created = $true
+    $betaRoot = "docker://$user@$containerId/home/$user/devbox/projects"
+    $all = @(Get-DevboxContainerSyncSessions -Container $Container)
+    $main = @($all | Where-Object { $_.Name -eq $session })
+    $folderSessions = @($all | Where-Object { $_.Name -ne $session })
+
+    # --- The whole projects folder ---
+    if ($Folders.Count -eq 0) {
+        if ($main.Count -gt 0) { return (Resume-DevboxSyncSessions -Names @($session) -Flush:$Flush) }
+        if ($folderSessions.Count -gt 0) {
+            Write-Host "Resuming the $($folderSessions.Count) synchronized folder(s) of '$Container' (dkdb-mutagen-sync synchronizes everything)."
+            return (Resume-DevboxSyncSessions -Names @($folderSessions | ForEach-Object { $_.Name }) -Flush:$Flush)
+        }
+        if (-not (New-DevboxSyncSession -Name $session -Alpha $hostPath -Beta $betaRoot -User $user)) {
+            Write-DevboxWarning "Error: could not create the Mutagen session '$session'."
+            return $false
+        }
+        Invoke-DevboxSyncFlush -Session $session
+        return $true
     }
-    if ($LASTEXITCODE -ne 0) {
-        Write-DevboxWarning "Error: could not create or resume the Mutagen session '$session'."
-        return $false
+
+    # --- Folders, added one by one ---
+    if ($main.Count -gt 0) {
+        Write-Host "The whole projects folder is already synchronized by '$session': -SyncFolder adds nothing."
+        return (Resume-DevboxSyncSessions -Names @($session) -Flush:$Flush)
     }
-    if ($created -or $Flush) {
-        Write-Host 'Synchronizing ...'
-        Write-DevboxNext 'A large folder can take a while: follow it from another terminal with dkdb-mutagen-status.'
-        & $mutagen sync flush $session | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-DevboxWarning 'Warning: the flush failed. Mutagen retries the connection by itself; the synchronization may still progress.'
-            Show-DevboxSyncFailure -Session $session
+    # Phase 1: validate and decide, without touching anything.
+    $existing = @()
+    foreach ($folderSession in $folderSessions) {
+        $resolved = Resolve-DevboxSyncFolder -HostPath $hostPath -Folder $folderSession.AlphaPath
+        if (-not $resolved.Error) { $existing += [pscustomobject]@{ Name = $folderSession.Name; Relative = $resolved.Relative } }
+    }
+    $plan = @()
+    foreach ($folder in $Folders) {
+        $resolved = Resolve-DevboxSyncFolder -HostPath $hostPath -Folder $folder
+        if ($resolved.Error) {
+            Write-DevboxWarning "Error: -SyncFolder '$folder': $($resolved.Error)"
+            return $false
+        }
+        $plan += $resolved
+    }
+    $actions = @()
+    $planned = @()
+    $refused = $false
+    foreach ($item in ($plan | Sort-Object { $_.Relative.Length })) {
+        $relative = $item.Relative
+        $lower = $relative.ToLowerInvariant()
+        $same = @($existing | Where-Object { $_.Relative.ToLowerInvariant() -eq $lower })
+        $coveredBy = @(($existing + $planned) | Where-Object { $lower.StartsWith($_.Relative.ToLowerInvariant() + '/') })
+        $contains = @($existing | Where-Object { $_.Relative.ToLowerInvariant().StartsWith($lower + '/') })
+        if ($same.Count -gt 0) { $actions += [pscustomobject]@{ Kind = 'resume'; Name = $same[0].Name; Item = $item } }
+        elseif ($coveredBy.Count -gt 0) { Write-Host "'$relative' is already covered by the synchronized folder '$($coveredBy[0].Relative)'." }
+        elseif ($contains.Count -gt 0) {
+            Write-DevboxWarning "Error: '$relative' contains the synchronized folder(s): $(($contains | ForEach-Object { $_.Relative }) -join ', ')."
+            Write-DevboxNext "Next: terminate those sessions first (mutagen sync terminate $(($contains | ForEach-Object { $_.Name }) -join ' ')) or synchronize everything with dkdb-mutagen-sync."
+            $refused = $true
+        } else {
+            $planned += [pscustomobject]@{ Relative = $relative }
+            $actions += [pscustomobject]@{ Kind = 'create'; Name = (Get-DevboxFolderSessionName -MainSession $session -Relative $relative); Item = $item }
         }
     }
-    return $true
+    if ($refused) { return $false }
+    # Phase 2: do it.
+    $ok = $true
+    foreach ($action in $actions) {
+        $relative = $action.Item.Relative
+        if ($action.Kind -eq 'resume') {
+            if (-not (Resume-DevboxSyncSessions -Names @($action.Name) -Flush:$Flush)) { $ok = $false }
+            continue
+        }
+        docker exec -u $user $Container mkdir -p "/home/$user/devbox/projects/$relative" *> $null
+        if (-not (New-DevboxSyncSession -Name $action.Name -Alpha $action.Item.Full -Beta "$betaRoot/$relative" -User $user)) {
+            Write-DevboxWarning "Error: could not create the Mutagen session for the folder '$relative'."
+            $ok = $false
+            continue
+        }
+        Write-DevboxSuccess "Folder '$relative' added to the synchronization."
+        Invoke-DevboxSyncFlush -Session $action.Name
+    }
+    return $ok
 }
 
 # Terminate one Mutagen session (the host folder is not touched). It never starts the daemon:

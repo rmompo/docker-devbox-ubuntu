@@ -1,8 +1,14 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.1.3
+# Version: 0.1.4
 # It downloads manifest.json and every file it lists (scripts and uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
+
+# PositionalBinding is off so that a stray argument is an error.
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [switch]$Help
+)
 
 # --- Settings ---
 $RepoUrl = 'https://github.com/rmompo/docker-devbox-ubuntu'
@@ -90,9 +96,90 @@ function Test-InstallVersionCompatible {
     return ($a.Major -eq $b.Major)
 }
 
+# --- Help (-Help): same layout as the dkdb-* scripts (spec 01) ---
+function Get-InstallWrappedLines {
+    param([string]$Text, [int]$Width)
+    $lines = @()
+    $line = ''
+    foreach ($word in ($Text -split '\s+' | Where-Object { $_ })) {
+        if ($line -and (($line.Length + 1 + $word.Length) -gt $Width)) { $lines += $line; $line = $word }
+        elseif ($line) { $line = "$line $word" }
+        else { $line = $word }
+    }
+    if ($line) { $lines += $line }
+    return $lines
+}
+
+function Show-InstallHelp {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Description,
+        [Parameter(Mandatory)][string]$Usage,
+        [object[]]$Examples = @(),
+        [string[]]$Notes = @(),
+        [string]$VersionLine = ''
+    )
+    $width = 100
+    try {
+        $window = $Host.UI.RawUI.WindowSize.Width
+        if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
+    } catch { $width = 100 }
+    $parameters = @(@{ Name = '-Help'; Description = 'Show this help and exit.' })
+    if ($VersionLine) { Write-Host $VersionLine -ForegroundColor DarkGray }
+    Write-Host ''
+    Write-Host 'NAME' -ForegroundColor Cyan
+    Write-Host "    $Name" -ForegroundColor Green
+    Write-Host ''
+    Write-Host 'DESCRIPTION' -ForegroundColor Cyan
+    foreach ($line in (Get-InstallWrappedLines -Text $Description -Width ($width - 4))) { Write-Host "    $line" }
+    Write-Host ''
+    Write-Host 'USAGE' -ForegroundColor Cyan
+    Write-Host "    $Usage" -ForegroundColor Green
+    Write-Host ''
+    Write-Host 'PARAMETERS' -ForegroundColor Cyan
+    $nameWidth = ($parameters | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum + 3
+    foreach ($parameter in $parameters) {
+        Write-Host ('    ' + $parameter.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor Green
+        Write-Host $parameter.Description
+    }
+    if ($Examples.Count -gt 0) {
+        Write-Host ''
+        Write-Host 'EXAMPLES' -ForegroundColor Cyan
+        foreach ($example in $Examples) {
+            Write-Host "    $($example.Command)" -ForegroundColor Green
+            foreach ($line in (Get-InstallWrappedLines -Text $example.Description -Width ($width - 8))) { Write-Host "        $line" }
+        }
+    }
+    if ($Notes.Count -gt 0) {
+        Write-Host ''
+        Write-Host 'NOTES' -ForegroundColor Cyan
+        foreach ($note in $Notes) {
+            $lines = @(Get-InstallWrappedLines -Text $note -Width ($width - 6))
+            Write-Host "    - $($lines[0])"
+            foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host "      $line" }
+        }
+    }
+    Write-Host ''
+}
+
 $selfVersion = Get-InstallFileVersion -Path $PSCommandPath
 if (-not $selfVersion) { $selfVersion = 'unknown' }
 Write-Host "install $selfVersion (docker-devbox-ubuntu installer)" -ForegroundColor DarkGray
+if ($Help) {
+    Show-InstallHelp -Name 'install.ps1' `
+        -Description 'Installs docker-devbox-ubuntu: downloads manifest.json and every file it lists into <root>\devbox, creates <root>\tools and adds <root>\devbox\scripts\ps1 to the user PATH. It asks for the shared root and for the branch or tag to download.' `
+        -Usage 'install.ps1 [-Help]' `
+        -Examples @(
+            @{ Command = '& "C:\shared\devbox\install\install.ps1"'; Description = 'Installs from the console where you run it (the PATH is already updated there).' },
+            @{ Command = 'powershell -ExecutionPolicy Bypass -File "C:\shared\devbox\install\install.ps1"'; Description = 'Same, from a console where scripts are blocked by the execution policy.' }
+        ) `
+        -Notes @(
+            'The default shared root is C:\shared\ and the default branch is main; both are asked.',
+            'Run it again to update: it asks before overwriting an existing installation.',
+            'Nothing needs administrator rights: only the user PATH is changed.'
+        )
+    exit 0
+}
 
 # The repository URL must be a GitHub one (the files are downloaded from raw.githubusercontent.com).
 if ($RepoUrl.TrimEnd('/') -match '^https://github\.com/([^/]+/[^/]+)$') {

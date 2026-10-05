@@ -1,6 +1,23 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.1.0
+# Version: 0.1.1
+# PositionalBinding is off so that a stray argument is an error.
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [switch]$Help
+)
 . "$PSScriptRoot\dkdb-common.ps1"
+if ($Help) {
+    Show-DevboxHelp -Script $PSCommandPath `
+        -Description 'Shows every version: the project and the image version, each file (manifest against its header), the tools (PowerShell, Docker, Mutagen), and the images and containers with their compatibility.' `
+        -Usage 'dkdb-version [-Help]' `
+        -Examples @(
+            @{ Command = 'dkdb-version'; Description = 'Prints all the versions; it works without Docker for the first sections.' }
+        ) `
+        -Notes @(
+            'An image or container older than the scripts is only reported; it keeps working.'
+        )
+    exit 0
+}
 Show-DevboxVersion -Script $PSCommandPath
 
 $scripts = Get-DevboxVersion

@@ -1,10 +1,28 @@
 # Delete one stopped devbox container chosen from a menu.
-# Version: 0.1.2
+# Version: 0.1.3
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
-# With a Mutagen container, only the Mutagen session of this container is terminated
-# (never the daemon or other sessions).
+# With a Mutagen container, only its Mutagen sessions (the whole projects folder and its
+# folders) are terminated (never the daemon or sessions of other containers).
+# PositionalBinding is off so that a stray argument is an error.
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [switch]$Help
+)
 . "$PSScriptRoot\dkdb-common.ps1"
+if ($Help) {
+    Show-DevboxHelp -Script $PSCommandPath `
+        -Description 'Deletes one stopped devbox container chosen from a menu, after asking for confirmation.' `
+        -Usage 'dkdb-container-delete [-Help]' `
+        -Examples @(
+            @{ Command = 'dkdb-container-delete'; Description = 'Shows the stopped containers and deletes the one you pick.' }
+        ) `
+        -Notes @(
+            'Its home, the installed AI client and (with Mutagen) its copy of the projects are lost; the host folders are not touched.',
+            'For a Mutagen container it also terminates its Mutagen sessions.'
+        )
+    exit 0
+}
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
@@ -26,10 +44,12 @@ if ($answer -notmatch '^[yY]$') {
     exit 0
 }
 
-# The session name depends on the container ID: read it before the container is removed.
-$session = $null
+# The session names depend on the container ID: read them before the container is removed (the
+# session of the whole projects folder and those of its folders).
+$sessionNames = @()
+$usesMutagen = $false
 if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
-    $session = Get-DevboxSyncSessionName -Container $selected
+    $sessionNames = @(Get-DevboxContainerSessionNames -Container $selected)
     $usesMutagen = $true
 }
 
@@ -39,5 +59,5 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-DevboxSuccess "Container '$selected' deleted."
-if ($usesMutagen) { Remove-DevboxSyncSession -SessionName $session }
+if ($usesMutagen) { foreach ($sessionName in $sessionNames) { Remove-DevboxSyncSession -SessionName $sessionName } }
 Write-DevboxNext 'Next: dkdb-container-create creates another one.'

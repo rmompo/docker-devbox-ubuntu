@@ -1,7 +1,24 @@
 # Stop the Mutagen daemon if it is running (it only checks when it is not).
-# Version: 0.1.2
+# Version: 0.1.3
 # It is one daemon per user: stopping it stops ALL Mutagen sessions, not only dkdb-* ones.
+# PositionalBinding is off so that a stray argument is an error.
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [switch]$Help
+)
 . "$PSScriptRoot\dkdb-common.ps1"
+if ($Help) {
+    Show-DevboxHelp -Script $PSCommandPath `
+        -Description 'Stops the Mutagen daemon if it is running, after flushing the running Mutagen containers.' `
+        -Usage 'dkdb-mutagen-stop [-Help]' `
+        -Examples @(
+            @{ Command = 'dkdb-mutagen-stop'; Description = 'Checks the daemon and stops it if it is running.' }
+        ) `
+        -Notes @(
+            'There is one daemon per user: it stops ALL your Mutagen sessions, not only the dkdb- ones.'
+        )
+    exit 0
+}
 Show-DevboxVersion -Script $PSCommandPath
 
 if (-not (Test-DevboxMutagen)) {
