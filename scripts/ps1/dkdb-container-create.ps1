@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.1.5
+# Version: 0.1.6
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -138,10 +138,10 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-DevboxSuccess "Container '$containerName' created from image '$imageRef' (user '$userName', password equal to the user name)."
 if ($useMutagen) {
-    Write-Host "Projects: with Mutagen, '$projectsPath' is synchronized only when you ask for it (-SyncAll or -SyncFolder on dkdb-container-start, dkdb-container-connect or dkdb-mutagen-sync)."
+    Write-Host "Projects: with Mutagen, '$projectsPath' is synchronized only when you choose it in the menu of dkdb-container-start, dkdb-container-connect or dkdb-mutagen-sync."
 }
 if ($useMutagen) {
-    Write-DevboxNext 'Next: dkdb-container-start -SyncAll (or -SyncFolder <path>) to start it and synchronize the projects, then dkdb-container-connect.'
+    Write-DevboxNext 'Next: dkdb-container-start to start it (its menu lets you choose what to synchronize), then dkdb-container-connect.'
 } else {
     Write-DevboxNext 'Next: dkdb-container-start, then dkdb-container-connect.'
 }

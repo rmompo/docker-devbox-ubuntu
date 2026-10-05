@@ -1,5 +1,5 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.1.2
+# Version: 0.1.3
 # volumes and Mutagen. For the versions, see dkdb-version.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -107,21 +107,31 @@ if (-not (Test-DevboxMutagen)) {
         Write-DevboxSuccess '  Daemon           running'
         $sessions = @(Get-DevboxMutagenSessions)
         if ($mutagenContainers.Count -eq 0 -and $sessions.Count -eq 0) { Write-Host '  Sessions         none' }
+        $byHostFolder = @{}
         foreach ($container in $mutagenContainers) {
-            $main = Get-DevboxSyncSessionName -Container $container
-            $mine = @($sessions | Where-Object { $main -and ($_.Name -eq $main -or $_.Name -like "$main-f*") })
+            $mine = @(Get-DevboxContainerSyncSessions -Container $container)
             if ($mine.Count -eq 0) { Write-Host "  ${container}: no session yet (dkdb-mutagen-sync creates it)" }
             foreach ($session in $mine) {
                 $counts = ''
                 if ($null -ne $session.Total -and $session.Total -gt 0) { $counts = ", $($session.Done) of $($session.Total) files" }
-                $text = "  ${container}: $($session.Name) $($session.Status)$counts"
-                if ($session.Paused -or $session.LastError -or $session.Conflicts -gt 0) {
-                    Write-DevboxWarning "$text [paused: $($session.Paused); conflicts: $($session.Conflicts); last error: $($session.LastError)]"
+                $state = $session.Status
+                if ($session.Paused) { $state = "$state (paused)" }
+                $text = "  ${container}: $($session.AlphaPath) <-> $($session.BetaPath) [$state$counts]"
+                if ($session.LastError -or $session.Conflicts -gt 0) {
+                    Write-DevboxWarning "$text [conflicts: $($session.Conflicts); last error: $($session.LastError)]"
                 } else {
                     Write-Host $text
                 }
+                $key = $session.AlphaPath.TrimEnd('\', '/').ToLowerInvariant()
+                if (-not $byHostFolder.ContainsKey($key)) { $byHostFolder[$key] = @() }
+                $byHostFolder[$key] += $container
             }
+            # The sessions of one container must never overlap.
+            $null = Show-DevboxSessionOverlaps -Container $container -Sessions $mine
         }
+        # Host folders that several containers synchronize (allowed: the host is the common repository).
+        $shared = @($byHostFolder.GetEnumerator() | Where-Object { @($_.Value | Select-Object -Unique).Count -gt 1 })
+        foreach ($entry in $shared) { Write-Host "  Shared host folder $($entry.Key): $((@($entry.Value | Select-Object -Unique)) -join ', ')" }
     }
 }
 

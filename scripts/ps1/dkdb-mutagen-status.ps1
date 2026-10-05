@@ -1,5 +1,5 @@
 # Show the Mutagen sync status (state and conflicts) of a devbox container chosen from a menu.
-# Version: 0.1.4
+# Version: 0.1.5
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -47,7 +47,7 @@ $main = Get-DevboxSyncSessionName -Container $selected
 $mutagen = Get-DevboxMutagenExe
 $sessions = @(Get-DevboxContainerSyncSessions -Container $selected)
 if ($sessions.Count -eq 0) {
-    Write-DevboxNext "There is no Mutagen session for '$selected' yet: dkdb-mutagen-sync (or -SyncAll / -SyncFolder on dkdb-container-start or dkdb-container-connect) creates it."
+    Write-DevboxNext "There is no Mutagen session for '$selected' yet: dkdb-mutagen-sync (or the menu of dkdb-container-start or dkdb-container-connect) creates it."
     exit 1
 }
 
@@ -56,8 +56,7 @@ if ($sessions.Count -eq 0) {
 $allComplete = $true
 foreach ($sessionInfo in $sessions) {
     $session = $sessionInfo.Name
-    $label = 'the whole projects folder'
-    if ($session -ne $main) { $label = "folder $($sessionInfo.AlphaPath)" }
+    $label = "host $($sessionInfo.AlphaPath) <-> container $($sessionInfo.BetaPath)"
     Write-Host ''
     Write-Host "=== $session ($label)"
     $listing = Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list', $session)
@@ -71,9 +70,15 @@ foreach ($sessionInfo in $sessions) {
     if (-not $complete) { $allComplete = $false }
 }
 
+# Rule: the sessions of one container never overlap (several containers may share a host folder).
+Write-Host ''
+$overlapCount = Show-DevboxSessionOverlaps -Container $selected -Sessions $sessions
+if ($overlapCount -gt 0) { $allComplete = $false }
+else { Write-Host 'No overlapping sessions in this container.' }
+
 Write-Host ''
 if ($allComplete) {
-    Write-DevboxNext 'Next: dkdb-container-connect to work in the container; add folders with dkdb-mutagen-sync -SyncFolder <path>; if there are conflicts, see TROUBLESHOOTING.md.'
+    Write-DevboxNext 'Next: dkdb-container-connect to work in the container; change the synchronized folder with dkdb-mutagen-sync; if there are conflicts, see TROUBLESHOOTING.md.'
 } else {
     Write-DevboxNext 'Next: run dkdb-mutagen-status again to see the progress; dkdb-container-connect works meanwhile (the container may have only part of the files).'
 }

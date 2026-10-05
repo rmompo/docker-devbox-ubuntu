@@ -1,5 +1,5 @@
 # Terminate the orphan Mutagen sessions: dkdb- sessions whose container no longer exists
-# Version: 0.1.3
+# Version: 0.1.4
 # (left by containers deleted outside dkdb-container-delete, or while the Mutagen daemon was
 # stopped). The host folders are not touched.
 # PositionalBinding is off so that a stray argument is an error.
@@ -10,7 +10,7 @@ param(
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Terminates leftover Mutagen sessions (dkdb-*) whose container no longer exists. It asks before terminating anything; the host folders are not touched.' `
+        -Description 'Terminates leftover Mutagen sessions whose container (the docker endpoint of the session) no longer exists. It does not need any running container, only Mutagen and Docker. It asks before terminating anything; the host folders are not touched.' `
         -Usage 'dkdb-mutagen-clean [-Help]' `
         -Examples @(
             @{ Command = 'dkdb-mutagen-clean'; Description = 'Lists the leftover sessions and terminates the ones you choose.' }
@@ -32,32 +32,37 @@ if (-not (Test-DevboxMutagenDaemon)) {
     exit 0
 }
 
-$sessions = Get-DevboxMutagenSessionNames
-if ($null -eq $sessions) {
-    Write-DevboxWarning 'Error: the Mutagen sessions could not be listed.'
-    exit 1
+$allSessions = @(Get-DevboxMutagenSessions)
+if ($allSessions.Count -eq 0) {
+    Write-Host 'There are no Mutagen sessions: nothing to clean.'
+    exit 0
 }
 
-# Sessions of the containers that still exist are not orphans.
+# An orphan is a session whose beta points to a Docker container that no longer exists, whatever its
+# name (it works even when no container exists at all, running or stopped).
+$refs = @(Get-DevboxAllContainerRefs)
 $alive = @(Get-DevboxMutagenContainers | ForEach-Object { Get-DevboxSyncSessionName -Container $_ } | Where-Object { $_ })
-# A session belongs to a living container when it is its session or one of its folders (<session>-f...).
-$orphans = @($sessions | Where-Object {
-    $name = $_
-    $_ -like "$DevboxPrefix-*" -and -not ($alive | Where-Object { $name -eq $_ -or $name -like "$_-f*" })
-})
+$orphans = @($allSessions | Where-Object { Test-DevboxSessionOrphan -Session $_ -ContainerRefs $refs -AliveMainSessions $alive })
 if ($orphans.Count -eq 0) {
     Write-Host 'No orphan Mutagen sessions were found.'
     exit 0
 }
 
+# The menu shows where each orphan pointed to.
+$labels = @{}
+foreach ($orphan in $orphans) {
+    $target = $orphan.BetaHost
+    if ($target) { $target = "$target`:$($orphan.BetaPath)" } else { $target = 'unknown target' }
+    $labels["$($orphan.Name)  [$target]"] = $orphan.Name
+}
 $allItem = '(all orphan sessions)'
-$selected = Select-DevboxItem -Title 'Select the orphan Mutagen session to terminate:' -Items (@($orphans) + $allItem)
+$selected = Select-DevboxItem -Title 'Select the orphan Mutagen session to terminate:' -Items (@($labels.Keys | Sort-Object) + $allItem)
 if (-not $selected) {
     Write-Host 'Cancelled.'
     exit 0
 }
-$targets = @($selected)
-if ($selected -eq $allItem) { $targets = $orphans }
+$targets = @($labels.Values | Sort-Object)
+if ($selected -ne $allItem) { $targets = @($labels[$selected]) }
 
 Write-Host 'Sessions to terminate:'
 $targets | ForEach-Object { Write-Host "  $_" }

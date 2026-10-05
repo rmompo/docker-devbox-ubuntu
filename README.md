@@ -69,8 +69,8 @@ From any folder, in a new terminal:
 |---|---------|--------------|
 | 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
 | 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path and the projects volume type: Docker bind mount or Mutagen). |
-| 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container the projects are **not** synchronized by default: add `-SyncAll` (everything) or `-SyncFolder <path>[,<path>...]` (only those folders). |
-| 4 | `dkdb-container-connect` | Opens a shell in a running container; the same sync parameters as `dkdb-container-start`. |
+| 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container it then shows the synchronization menu; the first option, **No sync**, is the default. |
+| 4 | `dkdb-container-connect` | Opens a shell in a running container; for a Mutagen container it shows the same synchronization menu first. |
 | 5 | `dkdb-container-stop` | Stops a running container. |
 | 6 | `dkdb-container-delete` | Deletes a stopped container (asks for confirmation). |
 | 7 | `dkdb-image-delete` | Deletes an image. |
@@ -79,35 +79,31 @@ From any folder, in a new terminal:
 | 10 | `dkdb-mutagen-status` | Shows the sync state, conflicts and progress (`So far X of Y files`, and whether it moved since the previous query) of a Mutagen container (menu). |
 | 11 | `dkdb-mutagen-clean` | Terminates leftover Mutagen sessions (container deleted outside the scripts, or daemon stopped at that time; menu, asks first). |
 | 12 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
-| 13 | `dkdb-mutagen-sync` | Synchronizes the projects of a running Mutagen container (menu): everything with `-SyncAll`, or only the folders of `-SyncFolder <path>[,<path>...]`, added one call at a time. One of them is required. |
+| 13 | `dkdb-mutagen-sync` | Chooses a running Mutagen container and shows the synchronization menu (the same one as start and connect). |
 | 14 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers. |
 | 15 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes and Mutagen. |
 
 ### Synchronization with Mutagen
 
-Three levels, from the most to the least conservative, because the last one can take very long:
+There are no sync parameters: `dkdb-container-start`, `dkdb-container-connect` and `dkdb-mutagen-sync` show a menu for a Mutagen container:
 
-| # | Level | Parameter | What happens |
-|---|-------|-----------|--------------|
-| 1 | Nothing (the default) | none, or `-SyncOff` | The Mutagen daemon is started and the sessions that already exist are **paused**. Nothing is created and nothing is synchronized. |
-| 2 | Some folders | `-SyncFolder <path>[,<path>...]` | Only those folders are synchronized, added to the ones already synchronized. |
-| 3 | Everything | `-SyncAll` | The whole projects folder. |
-
-```powershell
-dkdb-container-start                            # level 1: starts the container and the daemon, nothing is synchronized
-dkdb-container-start -SyncFolder repo1          # level 2: only repo1
-dkdb-mutagen-sync -SyncFolder repo2             # add repo2 to the synchronized folders
-dkdb-container-connect -SyncFolder repo3,repo4  # add repo3 and repo4 and open a shell
-dkdb-mutagen-sync -SyncAll                      # level 3: synchronize everything
+```
+1  No sync                      <- the first option and the default (Enter)
+2  repo2  [active]              <- folders already registered as sessions of the container
+3  repo3  [paused]
+4  All registered
+5  Add...                       <- asks for a new folder
 ```
 
-A very large projects folder can make the full first synchronization slow or fail; adding folders one by one avoids that.
+The recommended way is to register the projects **separately** (repo1, repo2, ...); one session each.
 
-1. The three parameters exclude each other. `dkdb-mutagen-sync` has no default: without `-SyncFolder` or `-SyncAll` it shows its usage and does nothing.
-2. A folder path is relative to the projects folder (or absolute inside it) and must exist. Several folders go in one comma-separated list; to add more later, run the command again.
-3. **Sessions:** each folder has its own Mutagen session, named from the container and the folder, so starting and stopping the container with the same `-SyncFolder` reuses the same session; a different folder adds one more, and `-SyncAll` adds the whole-folder session. Stopping a container never touches Mutagen, and deleting it terminates its sessions.
-4. A level-2 run resumes or creates only the folders you name; other existing sessions stay as they are (paused or not). To keep several folders going, name them all.
-5. A folder inside one already synchronized is skipped; one that contains synchronized folders is refused (terminate those sessions first); with the whole-folder session active nothing is added; `-SyncAll` with only folder sessions asks before replacing them (the files are not touched).
+1. **No sync:** the Mutagen daemon is started and every session of the container is **paused**. Nothing is synchronized.
+2. **A registered folder:** it is activated and added to what is already active, so repo1 and repo2 can be synchronized at the same time in one container, whatever the shell you work in (all shells of a container see the same files).
+3. **All registered:** activates every registered session that is not inside another registered one.
+4. **Add...:** asks for a folder, relative to the host projects folder or absolute inside it, which must exist. Its session is created, activated and joins the list.
+5. **Folders that contain each other** (for example `madridDigital` and `madridDigital/folder1`): only one of them can be active. Activating the outer one pauses the active inner ones; choosing an inner one while the outer one is active changes nothing (somebody may be using it). Nothing is terminated and no file is touched.
+6. Each session covers one folder, not the whole container. The registry is Mutagen itself: the list comes from the sessions of the container (recognized by their beta endpoint, whatever their name). Stopping a container never touches Mutagen, and deleting it terminates its sessions. The menu never creates a session of the whole projects folder (it could take very long).
+7. Two **active** sessions of the same container never overlap; different containers can share a host folder (the host is the real copy, each container subscribes and publishes).
 
 ### Help
 
