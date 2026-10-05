@@ -1,5 +1,5 @@
 # Delete one stopped devbox container chosen from a menu.
-# Version: 0.1.1
+# Version: 0.1.2
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # With a Mutagen container, only the Mutagen session of this container is terminated
@@ -40,3 +40,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-DevboxSuccess "Container '$selected' deleted."
 if ($usesMutagen) { Remove-DevboxSyncSession -SessionName $session }
+Write-DevboxNext 'Next: dkdb-container-create creates another one.'

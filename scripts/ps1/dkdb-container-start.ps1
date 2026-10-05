@@ -1,8 +1,8 @@
 # Start one stopped devbox container chosen from a menu.
-# Version: 0.1.1
+# Version: 0.1.2
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
-Assert-DevboxIntegrity
+Assert-DevboxIntegrity -WarnOnly
 Assert-DevboxDocker
 
 $containers = Get-DevboxContainers -Running $false
@@ -17,7 +17,7 @@ if (-not $selected) {
     exit 0
 }
 
-Assert-DevboxContainerVersion -Container $selected
+$null = Test-DevboxContainerVersion -Container $selected
 
 docker start $selected | Out-Null
 if ($LASTEXITCODE -ne 0) {
@@ -34,3 +34,5 @@ if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutag
         exit 1
     }
 }
+
+Write-DevboxNext 'Next: dkdb-container-connect.'

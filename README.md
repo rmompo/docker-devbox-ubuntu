@@ -76,7 +76,7 @@ From any folder, in a new terminal:
 | 7 | `dkdb-image-delete` | Deletes an image. |
 | 8 | `dkdb-mutagen-start` | Starts the Mutagen daemon if it is not running (optional Mutagen). |
 | 9 | `dkdb-mutagen-stop` | Stops the Mutagen daemon if it is running (stops all Mutagen sessions). |
-| 10 | `dkdb-mutagen-status` | Shows the sync state and conflicts of a Mutagen container (menu). |
+| 10 | `dkdb-mutagen-status` | Shows the sync state, conflicts and progress (`So far X of Y files`, and whether it moved since the previous query) of a Mutagen container (menu). |
 | 11 | `dkdb-mutagen-clean` | Terminates leftover Mutagen sessions (container deleted outside the scripts, or daemon stopped at that time; menu, asks first). |
 | 12 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
 
@@ -84,12 +84,12 @@ Problems? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## Version and integrity
 
-`manifest.json` lists the project version and every file with its own version (each file also carries a `# Version: x.y.z` line). It is installed as `<root>\devbox\manifest.json`, and:
+`manifest.json` lists the project version, the image version and every file with its own version (each file also carries a `# Version: x.y.z` line). It is installed as `<root>\devbox\manifest.json`, and:
 
 1. Every script prints its own version and the project version when it starts.
 2. `install.ps1` downloads the manifest first and then exactly the files it lists, checking that each file has the version the manifest says (a mixed or partial download stops the installation). When an update changes the major.minor version (0.x), it tells you to rebuild the images and recreate the containers.
-3. `dkdb-verify` checks the installed package against the manifest. `dkdb-image-create`, `dkdb-container-create`, `dkdb-container-start` and `dkdb-container-connect` run the same check and stop if it fails.
-4. Images are tagged with the version (`dkdb-<name>:<version>`, never `latest`). `dkdb-container-create` uses the highest tag that is compatible with the scripts (same major.minor in 0.x, same major from 1.0), and `start` and `connect` refuse to work with a container created from an incompatible image: rebuild the image and recreate the container.
+3. `dkdb-verify` checks the installed package against the manifest. `dkdb-image-create` and `dkdb-container-create`, which create things, stop if the package is inconsistent. `dkdb-container-start` and `dkdb-container-connect` only warn: **a version bump never blocks the use of an existing container.**
+4. Images have their own version (`image` in the manifest, bumped only when the `Dockerfile` or the entrypoint change, so a new project version never touches them) and are tagged with it (`dkdb-<name>:<image version>`, never `latest`). `dkdb-container-create` uses the highest tag that is compatible with the scripts (same major.minor in 0.x, same major from 1.0) with the image version the scripts expect; when only older images exist it uses the highest of them with a warning. `start` and `connect` show the version of the image the container was created from and, when it is not compatible with the scripts, only warn: the container keeps working with its image, and you update it by rebuilding the image and recreating the container when you want.
 
 ## Folders
 

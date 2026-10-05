@@ -1,5 +1,5 @@
 # Show the Mutagen sync status (state and conflicts) of a devbox container chosen from a menu.
-# Version: 0.1.1
+# Version: 0.1.2
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
@@ -28,8 +28,25 @@ if (-not (Test-DevboxMutagenDaemon)) {
 
 $session = Get-DevboxSyncSessionName -Container $selected
 $mutagen = Get-DevboxMutagenExe
-& $mutagen sync list $session
-if ($LASTEXITCODE -ne 0) {
+$output = & $mutagen sync list $session 2>&1
+$code = $LASTEXITCODE
+$output | Out-Host
+if ($code -ne 0) {
     Write-DevboxNext "There is no Mutagen session for '$selected' yet: dkdb-container-start or dkdb-container-connect create it."
     exit 1
+}
+
+# Progress summary and comparison with the previous query of this session.
+Write-Host ''
+$complete = $false
+$json = (& $mutagen sync list --template '{{json .}}' $session 2>&1 | Out-String)
+$progress = Get-DevboxSyncProgress -Json $json
+if ($progress) {
+    $complete = Show-DevboxSyncProgress -Session $session -Progress $progress
+}
+
+if ($complete) {
+    Write-DevboxNext 'Next: dkdb-container-connect to work in the container; if there are conflicts, see TROUBLESHOOTING.md.'
+} else {
+    Write-DevboxNext 'Next: run dkdb-mutagen-status again to see the progress; dkdb-container-connect works meanwhile (the container may have only part of the files).'
 }

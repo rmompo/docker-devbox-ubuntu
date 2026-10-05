@@ -1,5 +1,5 @@
 # Start the Mutagen daemon if it is not running (it only checks when it is).
-# Version: 0.1.1
+# Version: 0.1.2
 # dkdb-container-start and dkdb-container-connect already do this for Mutagen containers.
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
@@ -14,7 +14,7 @@ if (Test-DevboxMutagenDaemon) {
 }
 if (Start-DevboxMutagenDaemon) {
     Write-DevboxSuccess 'The Mutagen daemon is running.'
-    Write-DevboxNext 'Sessions are resumed by dkdb-container-start or dkdb-container-connect.'
+    Write-DevboxNext 'Next: dkdb-container-start or dkdb-container-connect resume the sessions.'
 } else {
     Write-DevboxWarning 'Error: the Mutagen daemon could not be started.'
     exit 1

@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.1.2
+# Version: 0.1.3
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxIntegrity
@@ -9,6 +9,7 @@ Assert-DevboxDocker
 # The default image is shown with the version that will be used (the highest compatible tag).
 $defaultImageName = Get-DevboxFullName $DevboxDefaultName
 $defaultImageRef = Get-DevboxCompatibleImage -ImageName $defaultImageName
+if (-not $defaultImageRef) { $defaultImageRef = Get-DevboxCompatibleImage -ImageName $defaultImageName -AnyVersion }
 $defaultImageSuffix = ''
 if ($defaultImageRef) { $defaultImageSuffix = $defaultImageRef.Substring($defaultImageName.Length) }
 $imageInput = Read-DevboxName -Prompt 'Image name' -Default $DevboxDefaultName -DefaultSuffix $defaultImageSuffix
@@ -42,8 +43,15 @@ $bashPath = (Get-DevboxBashPath).TrimEnd('\')
 
 # --- Validate everything before doing anything ---
 $errors = @()
+# The highest compatible tag; when only older images exist, the highest of them (an update of
+# the scripts must not stop anybody from creating a container): it only warns.
 $imageRef = Get-DevboxCompatibleImage -ImageName $imageName
-if (-not $imageRef) { $errors += "No image '$imageName' with a version compatible with the scripts ($(Get-DevboxVersion)) was found. Run dkdb-image-create first." }
+$imageIsOlder = $false
+if (-not $imageRef) {
+    $imageRef = Get-DevboxCompatibleImage -ImageName $imageName -AnyVersion
+    $imageIsOlder = [bool]$imageRef
+}
+if (-not $imageRef) { $errors += "No image '$imageName' was found. Run dkdb-image-create first." }
 docker container inspect $containerName *> $null
 if ($LASTEXITCODE -eq 0) { $errors += "A container named '$containerName' already exists." }
 foreach ($path in @($projectsPath, $toolsPath, $bashPath)) {
@@ -56,6 +64,10 @@ if ($errors.Count -gt 0) {
     foreach ($e in $errors) { Write-DevboxWarning "Error: $e" }
     Write-DevboxWarning 'Aborted. Nothing was created.'
     exit 1
+}
+
+if ($imageIsOlder) {
+    Write-DevboxWarning "Warning: '$imageRef' is not compatible with the image version that the scripts expect ($(Get-DevboxImageVersion)). The container is created from it anyway and works, but newer features may be missing."
 }
 
 # --- Install Mutagen on demand (only when chosen and missing) ---
@@ -109,3 +121,6 @@ if ($useMutagen) {
     Write-Host "Projects: Mutagen will synchronize '$projectsPath' with the container when it is started."
 }
 Write-DevboxNext 'Next: dkdb-container-start, then dkdb-container-connect.'
+if ($imageIsOlder) {
+    Write-DevboxNext 'Next (optional): dkdb-image-create builds an image for the current scripts; recreate the container from it when you want the newer features.'
+}

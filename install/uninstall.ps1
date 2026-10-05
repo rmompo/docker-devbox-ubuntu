@@ -1,5 +1,5 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
-# Version: 0.1.1
+# Version: 0.1.2
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -122,3 +122,4 @@ foreach ($folder in @($scriptsPath, $(if ($removeMutagen) { $mutagenPath }))) {
 Write-Host ''
 Write-UninstallSuccess 'Uninstalled.'
 Write-Host "Kept: $installDir (delete $devboxPath by hand to remove it completely), the tools folder and your projects."
+Write-UninstallNext 'Next: open a new terminal so that the PATH is refreshed. To install again, download install.ps1 as the README says.'

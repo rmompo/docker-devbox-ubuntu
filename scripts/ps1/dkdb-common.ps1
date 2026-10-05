@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.1.2
+# Version: 0.1.3
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -26,6 +26,22 @@ function Get-DevboxVersion {
     if (Test-Path -LiteralPath $manifest -PathType Leaf) {
         try {
             $version = (Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json).version
+            if ($version) { return [string]$version }
+        } catch {
+            return 'unknown'
+        }
+    }
+    return 'unknown'
+}
+
+# Version of the image that these scripts build and expect ("image" in manifest.json). It changes
+# only when the Dockerfile or the entrypoint change; a new project version does not touch it.
+# 'unknown' when the manifest is missing or unreadable.
+function Get-DevboxImageVersion {
+    $manifest = Join-Path (Get-DevboxBase) 'manifest.json'
+    if (Test-Path -LiteralPath $manifest -PathType Leaf) {
+        try {
+            $version = (Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json).image
             if ($version) { return [string]$version }
         } catch {
             return 'unknown'
@@ -78,6 +94,7 @@ function Get-DevboxIntegrity {
     if (-not $manifest.files) {
         return [pscustomobject]@{ Errors = @('manifest.json has no files list'); Notes = @(); Checked = 0 }
     }
+    if (-not $manifest.image) { $errors += "manifest.json has no 'image' version" }
     $listed = @{}
     foreach ($entry in $manifest.files.PSObject.Properties) {
         $relative = $entry.Name
@@ -100,10 +117,19 @@ function Get-DevboxIntegrity {
     return [pscustomobject]@{ Errors = @($errors); Notes = @($notes); Checked = $listed.Count }
 }
 
-# Stop when the installed package is inconsistent with manifest.json.
+# Stop when the installed package is inconsistent with manifest.json. With -WarnOnly it only
+# warns and returns: scripts that use an existing container (start, connect) must never be
+# blocked by versions.
 function Assert-DevboxIntegrity {
+    param([switch]$WarnOnly)
     $result = Get-DevboxIntegrity -Base (Get-DevboxBase)
     if ($result.Errors.Count -eq 0) { return }
+    if ($WarnOnly) {
+        Write-DevboxWarning 'Warning: the installed package is inconsistent with manifest.json (continuing anyway):'
+        foreach ($problem in $result.Errors) { Write-DevboxWarning "  - $problem" }
+        Write-DevboxNext 'Next: run install.ps1 again (dkdb-verify shows the details).'
+        return
+    }
     Write-DevboxWarning 'Error: the installed package is inconsistent with manifest.json:'
     foreach ($problem in $result.Errors) { Write-DevboxWarning "  - $problem" }
     Write-DevboxNext 'Run install.ps1 again (dkdb-verify shows the details).'
@@ -120,11 +146,15 @@ function Test-DevboxVersionCompatible {
     return ($a.Major -eq $b.Major)
 }
 
-# Highest tag of the image $ImageName (with prefix) compatible with the scripts, as
-# name:tag; $null when there is none. Images are tagged with a version, never latest.
+# Highest tag of the image $ImageName (with prefix) compatible with the image version that the scripts expect, as
+# name:tag; $null when there is none. With -AnyVersion, the highest version tag whatever its
+# version (an older image still works). Images are tagged with a version, never latest.
 function Get-DevboxCompatibleImage {
-    param([Parameter(Mandatory)][string]$ImageName)
-    $scripts = Get-DevboxVersion
+    param(
+        [Parameter(Mandatory)][string]$ImageName,
+        [switch]$AnyVersion
+    )
+    $expected = Get-DevboxImageVersion
     $best = $null
     foreach ($line in (docker images --format '{{.Repository}}:{{.Tag}}')) {
         $separator = $line.LastIndexOf(':')
@@ -133,26 +163,28 @@ function Get-DevboxCompatibleImage {
         $tag = $line.Substring($separator + 1)
         $parsed = $null
         if (-not [version]::TryParse($tag, [ref]$parsed)) { continue }
-        if (-not (Test-DevboxVersionCompatible -Left $tag -Right $scripts)) { continue }
+        if (-not $AnyVersion -and -not (Test-DevboxVersionCompatible -Left $tag -Right $expected)) { continue }
         if ($null -eq $best -or $parsed -gt $best) { $best = $parsed }
     }
     if ($null -eq $best) { return $null }
     return "${ImageName}:$best"
 }
 
-# Stop when the container was created from an image that is not compatible with the scripts.
-function Assert-DevboxContainerVersion {
+# Tell whether the container was created from an image compatible with the image version that the
+# scripts expect (same major.minor in 0.x, same major from 1.0; a new project version does not
+# matter). It only warns and never blocks: an update must not stop anybody from using an existing
+# container, which keeps working with the image it was created from. Returns $true when compatible.
+function Test-DevboxContainerVersion {
     param([Parameter(Mandatory)][string]$Container)
-    $imageVersion = Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_VERSION'
-    $scripts = Get-DevboxVersion
-    if ($imageVersion) { Write-Host "Container image version: $imageVersion" }
-    if (-not $imageVersion -or -not (Test-DevboxVersionCompatible -Left $imageVersion -Right $scripts)) {
-        $shown = $imageVersion
-        if (-not $shown) { $shown = 'unknown' }
-        Write-DevboxWarning "Error: '$Container' was created from an image with version $shown, not compatible with the scripts ($scripts)."
-        Write-DevboxNext 'Rebuild the image (dkdb-image-create) and recreate the container. Your data stays reachable with docker: docker start, docker exec -it -u <user> <container> bash, docker cp.'
-        exit 1
-    }
+    $imageVersion = Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_IMAGE_VERSION'
+    $expected = Get-DevboxImageVersion
+    $shown = $imageVersion
+    if (-not $shown) { $shown = 'unknown' }
+    Write-Host "Container image version: $shown"
+    if ($imageVersion -and (Test-DevboxVersionCompatible -Left $imageVersion -Right $expected)) { return $true }
+    Write-DevboxWarning "Warning: '$Container' was created from an image with version $shown, not compatible with the image version that the scripts expect ($expected). It keeps working, but newer features may be missing."
+    Write-DevboxNext 'Next: to update, rebuild the image (dkdb-image-create) and recreate the container (copy your data out first, for example with docker cp).'
+    return $false
 }
 
 # Linux limits user names to 32 characters; the prefix and the hyphen use some.
@@ -487,15 +519,20 @@ function Start-DevboxMutagenDaemon {
     return $false
 }
 
-# Wait until the container entrypoint has created the user (marker file in /dev/shm,
-# a tmpfs that Docker recreates at every container start).
+# Wait until the container entrypoint has created the user: marker file in /dev/shm (a tmpfs that
+# Docker recreates at every container start). Images built before the version support
+# (no DEVBOX_IMAGE_VERSION) do not create the marker: for them it waits until the user exists, so an
+# old image is never left waiting for something it cannot provide.
 function Wait-DevboxContainerReady {
     param(
         [Parameter(Mandatory)][string]$Container,
+        [string]$User,
         [int]$TimeoutSeconds = 60
     )
+    $hasMarker = [bool](Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_IMAGE_VERSION')
     for ($i = 0; $i -lt $TimeoutSeconds; $i++) {
-        docker exec $Container test -f /dev/shm/devbox-ready *> $null
+        if ($hasMarker -or -not $User) { docker exec $Container test -f /dev/shm/devbox-ready *> $null }
+        else { docker exec $Container id -u $User *> $null }
         if ($LASTEXITCODE -eq 0) { return $true }
         Start-Sleep -Seconds 1
     }
@@ -539,6 +576,121 @@ function Get-DevboxMutagenSessionNames {
     return @($lines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() })
 }
 
+# Progress of one session object of 'mutagen sync list --template "{{json .}}"' (the field names
+# are those of Mutagen's public session model, checked in the 0.18.1 source). Done/Total are
+# files: while files are being transferred (stagingProgress) they are the received and expected
+# files; otherwise they are the files of the beta and of the alpha endpoint.
+function ConvertTo-DevboxSyncProgress {
+    param([Parameter(Mandatory)]$Session)
+    $done = $null
+    $total = $null
+    $staging = $Session.beta.stagingProgress
+    if (-not $staging) { $staging = $Session.alpha.stagingProgress }
+    if ($staging -and $staging.expectedFiles -gt 0) {
+        $done = [int64]$staging.receivedFiles
+        $total = [int64]$staging.expectedFiles
+    } elseif ($Session.alpha.scanned -and $Session.beta.scanned) {
+        $done = [int64]$Session.beta.files
+        $total = [int64]$Session.alpha.files
+    }
+    # Mutagen omits 'conflicts' when there are none: @($null).Count would be 1.
+    $conflictCount = 0
+    if ($Session.conflicts) { $conflictCount = @($Session.conflicts).Count }
+    return [pscustomobject]@{
+        Name      = [string]$Session.name
+        Status    = [string]$Session.status
+        Done      = $done
+        Total     = $total
+        Paused    = [bool]$Session.paused
+        LastError = [string]$Session.lastError
+        Conflicts = $conflictCount
+    }
+}
+
+# Progress of the first session of a JSON (an array of sessions); $null when there is none.
+function Get-DevboxSyncProgress {
+    param([Parameter(Mandatory)][string]$Json)
+    try { $sessions = @($Json | ConvertFrom-Json) } catch { return $null }
+    $session = $sessions | Select-Object -First 1
+    if (-not $session) { return $null }
+    return ConvertTo-DevboxSyncProgress -Session $session
+}
+
+# Progress of every session known by the daemon (it must be running); empty when there are none.
+function Get-DevboxMutagenSessions {
+    $mutagen = Get-DevboxMutagenExe
+    if (-not $mutagen) { return @() }
+    $json = (& $mutagen sync list --template '{{json .}}' 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0) { return @() }
+    try { $sessions = @($json | ConvertFrom-Json) } catch { return @() }
+    return @($sessions | Where-Object { $_ } | ForEach-Object { ConvertTo-DevboxSyncProgress -Session $_ })
+}
+
+# Show where the synchronization is and whether it moved since the previous query. The previous
+# query is kept in a small file in the temp folder, one per session.
+function Show-DevboxSyncProgress {
+    param(
+        [Parameter(Mandatory)][string]$Session,
+        [Parameter(Mandatory)]$Progress
+    )
+    $statePath = Join-Path ([System.IO.Path]::GetTempPath()) "dkdb-mutagen-status-$Session.json"
+    $now = Get-Date
+    $complete = ($null -ne $Progress.Total -and $Progress.Total -gt 0 -and $Progress.Done -ge $Progress.Total -and $Progress.Status -eq 'watching' -and -not $Progress.Paused)
+    if ($null -ne $Progress.Total -and $Progress.Total -gt 0 -and $null -ne $Progress.Done) {
+        $percent = [math]::Min(100, [int][math]::Floor(100 * $Progress.Done / $Progress.Total))
+        Write-Host "So far $($Progress.Done) of $($Progress.Total) files ($percent%) - status: $($Progress.Status)"
+    } else {
+        Write-Host "No file counts yet - status: $($Progress.Status)"
+    }
+    if ($Progress.Paused) { Write-DevboxWarning 'The session is paused: dkdb-container-start or dkdb-container-connect resume it.' }
+    if ($Progress.LastError) { Write-DevboxWarning "Mutagen reports an error: $($Progress.LastError)" }
+    if ($Progress.Conflicts -gt 0) { Write-DevboxWarning "$($Progress.Conflicts) conflicts: see TROUBLESHOOTING.md." }
+    $previous = $null
+    if (Test-Path -LiteralPath $statePath -PathType Leaf) {
+        try { $previous = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json } catch { $previous = $null }
+    }
+    if ($previous) {
+        $seconds = [int](($now - [datetime]$previous.Time).TotalSeconds)
+        $ago = "$seconds s ago"
+        if ($seconds -ge 120) { $ago = "$([int]($seconds / 60)) min ago" }
+        if ($complete) {
+            Write-DevboxSuccess "The synchronization is up to date (previous query: $ago)."
+        } elseif ($null -ne $Progress.Done -and $null -ne $previous.Done -and $Progress.Done -gt $previous.Done) {
+            Write-DevboxSuccess "Progress: +$($Progress.Done - $previous.Done) files since the previous query ($ago)."
+        } elseif ($null -ne $Progress.Done -and $null -ne $previous.Done -and $Progress.Done -lt $previous.Done) {
+            Write-Host "The counters restarted since the previous query ($ago): a new synchronization cycle began."
+        } elseif ($Progress.Status -ne $previous.Status) {
+            Write-Host "The status changed since the previous query ($ago): $($previous.Status) -> $($Progress.Status)"
+        } else {
+            Write-DevboxWarning "No progress since the previous query ($ago)."
+        }
+    } elseif ($complete) {
+        Write-DevboxSuccess 'The synchronization is up to date.'
+    } else {
+        Write-Host 'First query of this session: run it again to see the progress.'
+    }
+    $snapshot = [pscustomobject]@{ Time = $now.ToString('o'); Status = $Progress.Status; Done = $Progress.Done; Total = $Progress.Total }
+    try { $snapshot | ConvertTo-Json | Set-Content -LiteralPath $statePath } catch { $statePath = $null }
+    return $complete
+}
+
+# After a failed flush, show why: the status of the session and its last error (the flush message
+# only says that the synchronization failed while waiting).
+function Show-DevboxSyncFailure {
+    param([Parameter(Mandatory)][string]$Session)
+    $mutagen = Get-DevboxMutagenExe
+    $json = (& $mutagen sync list --template '{{json .}}' $Session 2>&1 | Out-String)
+    $info = Get-DevboxSyncProgress -Json $json
+    if (-not $info) {
+        Write-DevboxWarning "The session '$Session' could not be read. Check it with: dkdb-mutagen-status"
+        return
+    }
+    Write-DevboxWarning "Mutagen status: $($info.Status)"
+    if ($info.LastError) { Write-DevboxWarning "Mutagen last error: $($info.LastError)" }
+    else { Write-Host 'Mutagen reports no error for the session (it may be reconnecting).' }
+    Write-DevboxNext 'Next: dkdb-mutagen-status shows the details and the progress; run it again to see whether it moves.'
+}
+
 # Create the session, or resume it when it already exists. The session is flushed when it
 # was just created or when -Flush is given. Returns $true on success; prints the reason
 # and returns $false otherwise.
@@ -570,7 +722,7 @@ function Start-DevboxSync {
         Write-DevboxWarning "Error: the host projects path does not exist: $hostPath"
         return $false
     }
-    if (-not (Wait-DevboxContainerReady -Container $Container)) {
+    if (-not (Wait-DevboxContainerReady -Container $Container -User $user)) {
         Write-DevboxWarning "Error: the container '$Container' did not become ready in time."
         return $false
     }
@@ -606,9 +758,11 @@ function Start-DevboxSync {
     }
     if ($created -or $Flush) {
         Write-Host 'Synchronizing ...'
+        Write-DevboxNext 'A large folder can take a while: follow it from another terminal with dkdb-mutagen-status.'
         & $mutagen sync flush $session | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-DevboxWarning "Warning: the flush failed. Check it with: dkdb-mutagen-status"
+            Write-DevboxWarning 'Warning: the flush failed. Mutagen retries the connection by itself; the synchronization may still progress.'
+            Show-DevboxSyncFailure -Session $session
         }
     }
     return $true

@@ -1,5 +1,5 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.1.2
+# Version: 0.1.3
 # It downloads manifest.json and every file it lists (scripts and uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -247,4 +247,4 @@ if ($previousVersion -and -not (Test-InstallVersionCompatible -Left $previousVer
     Write-InstallNext "Updated from ${previousVersion} to ${version}: rebuild the images (dkdb-image-create) and recreate the containers."
 }
 Write-InstallWarning 'Make sure Docker Engine is running (start Docker Desktop and wait until it is ready).'
-Write-InstallNext 'Then open a new terminal (so the PATH is refreshed) and run: dkdb-image-create'
+Write-InstallNext 'Next: open a new terminal (so the PATH is refreshed) and run: dkdb-image-create'

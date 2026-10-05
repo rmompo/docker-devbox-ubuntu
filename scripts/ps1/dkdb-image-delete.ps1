@@ -1,5 +1,5 @@
 # Delete one devbox image chosen from a menu.
-# Version: 0.1.1
+# Version: 0.1.2
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
@@ -22,3 +22,4 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-DevboxSuccess "Image '$selected' deleted."
+Write-DevboxNext 'Next: dkdb-image-create builds a new image when you need one.'

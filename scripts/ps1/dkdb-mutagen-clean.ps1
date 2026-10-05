@@ -1,5 +1,5 @@
 # Terminate the orphan Mutagen sessions: dkdb- sessions whose container no longer exists
-# Version: 0.1.1
+# Version: 0.1.2
 # (left by containers deleted outside dkdb-container-delete, or while the Mutagen daemon was
 # stopped). The host folders are not touched.
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -55,3 +55,5 @@ foreach ($target in $targets) {
         Write-DevboxWarning "Error: could not terminate '$target'."
     }
 }
+
+Write-DevboxNext 'Next: dkdb-mutagen-status checks the remaining sessions.'

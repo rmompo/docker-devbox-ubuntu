@@ -1,5 +1,5 @@
 # Check the installed package against manifest.json: every listed file must exist and carry
-# Version: 0.1.1
+# Version: 0.1.2
 # the version that the manifest says. Exit code 1 when something is inconsistent.
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
@@ -14,3 +14,4 @@ if ($result.Errors.Count -gt 0) {
     exit 1
 }
 Write-DevboxSuccess 'The package is consistent with manifest.json.'
+Write-DevboxNext 'Next: dkdb-image-create builds the image, then dkdb-container-create.'
