@@ -19,8 +19,11 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     if ($LASTEXITCODE -eq 0) {
         foreach ($container in (Get-DevboxContainers -Running $true)) {
             if ((Get-DevboxContainerEnv -Container $container -Name 'DEVBOX_SYNC') -eq 'mutagen') {
-                Write-Host "Flushing '$container' ..."
-                & $mutagen sync flush $container *> $null
+                $session = Get-DevboxSyncSessionName -Container $container
+                if ($session) {
+                    Write-Host "Flushing '$session' ..."
+                    & $mutagen sync flush $session *> $null
+                }
             }
         }
     }

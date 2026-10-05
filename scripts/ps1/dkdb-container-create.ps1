@@ -15,6 +15,8 @@ $userName = Get-DevboxFullName $userInput
 
 $projectsPath = Read-Host "Host projects path [$DevboxDefaultProjectsPath]"
 if ([string]::IsNullOrWhiteSpace($projectsPath)) { $projectsPath = $DevboxDefaultProjectsPath }
+$resourcesPath = Read-Host "Host resources path [$DevboxDefaultResourcesPath]"
+if ([string]::IsNullOrWhiteSpace($resourcesPath)) { $resourcesPath = $DevboxDefaultResourcesPath }
 
 # Volume type for the projects folder (Mutagen is downloaded later if needed).
 $syncMode = Select-DevboxItem -Title 'Projects volume type:' -Items @($DevboxSyncModeBind, $DevboxSyncModeMutagen)
@@ -26,6 +28,7 @@ $useMutagen = ($syncMode -eq $DevboxSyncModeMutagen)
 
 # Docker mount sources must not end with a backslash.
 $projectsPath = $projectsPath.Trim().TrimEnd('\')
+$resourcesPath = $resourcesPath.Trim().TrimEnd('\')
 $bashPath = (Get-DevboxBashPath).TrimEnd('\')
 
 # --- Validate everything before doing anything ---
@@ -34,7 +37,7 @@ docker image inspect $imageName *> $null
 if ($LASTEXITCODE -ne 0) { $errors += "Image '$imageName' does not exist. Run dkdb-image-create first." }
 docker container inspect $containerName *> $null
 if ($LASTEXITCODE -eq 0) { $errors += "A container named '$containerName' already exists." }
-foreach ($path in @($projectsPath, $bashPath)) {
+foreach ($path in @($projectsPath, $resourcesPath, $bashPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Container)) {
         $errors += "Host path does not exist (nothing is created): $path"
     }
@@ -67,9 +70,13 @@ if ($useMutagen) {
     # synchronizes it with the host path when the container is started.
     $createArgs += @('-e', 'DEVBOX_SYNC=mutagen', '-e', "DEVBOX_SYNC_PATH=$projectsPath")
 } else {
-    $createArgs += @('--mount', "type=bind,source=$projectsPath,target=$mountBase/proyectos")
+    $createArgs += @('--mount', "type=bind,source=$projectsPath,target=$mountBase/projects")
 }
-$createArgs += @('--mount', "type=bind,source=$bashPath,target=$mountBase/bash,readonly", $imageName)
+$createArgs += @(
+    '--mount', "type=bind,source=$resourcesPath,target=$mountBase/resources",
+    '--mount', "type=bind,source=$bashPath,target=$mountBase/bash,readonly",
+    $imageName
+)
 docker @createArgs | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host 'Error: docker create failed.' -ForegroundColor Red

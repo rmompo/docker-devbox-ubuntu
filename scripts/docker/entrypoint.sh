@@ -36,15 +36,15 @@ chown "${DEVBOX_USER}:${DEVBOX_USER}" "${user_home}/devbox"
 # With Mutagen (DEVBOX_SYNC=mutagen) there is no projects bind mount: the folder
 # lives in the container and Mutagen synchronizes it with the host.
 if [ "${DEVBOX_SYNC:-}" = "mutagen" ]; then
-    mkdir -p "${user_home}/devbox/proyectos"
-    chown "${DEVBOX_USER}:${DEVBOX_USER}" "${user_home}/devbox/proyectos"
+    mkdir -p "${user_home}/devbox/projects"
+    chown "${DEVBOX_USER}:${DEVBOX_USER}" "${user_home}/devbox/projects"
 fi
 
 # The projects mount (9p on Docker Desktop) shows every file as owned by root,
 # so git reports "dubious ownership" for the user. Trust only the repositories
 # under the projects mount instead of using '*'. The "/path/*" pattern needs
 # git 2.46 or newer (Ubuntu 26.04 ships 2.53). Added once (idempotent).
-safe_dir="${user_home}/devbox/proyectos/*"
+safe_dir="${user_home}/devbox/projects/*"
 if ! git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$safe_dir"; then
     git config --system --add safe.directory "$safe_dir"
 fi

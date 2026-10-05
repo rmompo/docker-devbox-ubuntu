@@ -1,5 +1,5 @@
 # Delete one stopped devbox container chosen from a menu.
-# The host folders (projects, bash) are NOT touched, but everything stored only
+# The host folders (projects, resources, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # It never touches Mutagen (daemon or session).
 . "$PSScriptRoot\dkdb-common.ps1"

@@ -23,6 +23,7 @@ The scripts must be easy to get and to call from any folder, without cloning the
 
 ## Consequences
 - The repository must be public.
+- The installer does not install Mutagen: `dkdb-container-create` does it on demand (spec 08).
 - `$OldFiles` is frozen: it only lists names used by earlier versions.
 - `$Files` must be updated whenever a file is added, renamed or removed under `scripts/bash`, `scripts/ps1` or `scripts/docker`; otherwise it is not installed.
 - Open terminals need to be reopened to see the new PATH.

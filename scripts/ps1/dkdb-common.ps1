@@ -6,6 +6,8 @@
 $DevboxPrefix = 'dkdb'
 $DevboxDefaultName = 'ubuntu'
 $DevboxDefaultProjectsPath = 'C:\Localfiles\proyectos\'
+# Shared tools (Maven, JDKs, ...): one installation for every container.
+$DevboxDefaultResourcesPath = 'C:\shared\'
 
 # Optional Mutagen (file sync, spec 08), downloaded on demand by dkdb-container-create.
 $DevboxMutagenVersion = '0.18.1'
@@ -284,6 +286,23 @@ function Wait-DevboxContainerReady {
     return $false
 }
 
+# Full ID of a container ($null when it cannot be read).
+function Get-DevboxContainerId {
+    param([Parameter(Mandatory)][string]$Container)
+    $id = (docker inspect --format '{{.Id}}' $Container)
+    if ($LASTEXITCODE -ne 0 -or -not $id) { return $null }
+    return $id
+}
+
+# Mutagen session name of a container: <container>-<first 12 characters of its ID>.
+# Single place for the naming rule (see Start-DevboxSync). $null when the ID is unknown.
+function Get-DevboxSyncSessionName {
+    param([Parameter(Mandatory)][string]$Container)
+    $id = Get-DevboxContainerId -Container $Container
+    if (-not $id) { return $null }
+    return "$Container-$($id.Substring(0, 12))"
+}
+
 # Create the session, or resume it when it already exists, then flush it.
 # Returns $true on success; prints the reason and returns $false otherwise.
 function Start-DevboxSync {
@@ -293,12 +312,12 @@ function Start-DevboxSync {
     # The session and its docker endpoint use the container ID, not the name: a recreated
     # container with the same name must not reuse a leftover session (its root would
     # look emptied and Mutagen would halt). Leftover sessions are never touched here.
-    $containerId = (docker inspect --format '{{.Id}}' $Container)
+    $containerId = Get-DevboxContainerId -Container $Container
     if (-not $containerId) {
         Write-Host "Error: could not read the ID of '$Container'." -ForegroundColor Red
         return $false
     }
-    $session = "$Container-$($containerId.Substring(0, 12))"
+    $session = Get-DevboxSyncSessionName -Container $Container
     if (-not $user -or -not $hostPath) {
         Write-Host "Error: '$Container' has no DEVBOX_USER or DEVBOX_SYNC_PATH variable." -ForegroundColor Red
         return $false
@@ -335,7 +354,7 @@ function Start-DevboxSync {
             '--default-owner-beta', $user,
             '--default-group-beta', $user,
             $hostPath,
-            "docker://$user@$containerId/home/$user/devbox/proyectos"
+            "docker://$user@$containerId/home/$user/devbox/projects"
         )
         & $mutagen @syncArgs | Out-Null
     }

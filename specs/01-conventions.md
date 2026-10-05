@@ -6,7 +6,7 @@ Several scripts and the image share names, encoding and ways of interacting with
 ## Reasoning
 1. Scripts must find the project's resources on their own -> a common prefix lets them filter without touching foreign resources.
 2. Filtering by plain `dkdb` would also match `dkdbfoo` -> filter by `dkdb-`, with the hyphen.
-3. The prefix may change (it already changed twice) -> define it in a single file loaded by every script.
+3. The prefix may change (it already changed twice) -> define it in a single file loaded by every script (file names carry the prefix too, see "Script names").
 4. Files are used from both Linux and Windows -> everything is UTF-8 without BOM and LF; a BOM breaks `#!/bin/bash`.
 5. Windows PowerShell 5.1 reads a BOM-less `.ps1` as ANSI and corrupts non-ASCII characters -> `.ps1` files are pure ASCII, so no BOM is needed and the PowerShell version does not matter.
 6. The project owner wants everything in English -> documentation, scripts, prompts, messages and comments are English, which is also naturally ASCII.
@@ -25,5 +25,5 @@ Several scripts and the image share names, encoding and ways of interacting with
 - **Menu:** common function `Select-DevboxItem`, navigation only: up/down arrows, Enter confirms, Esc cancels. No numbers. ASCII, no external modules.
 
 ## Consequences
-- Changing the prefix means editing one line.
+- Changing the prefix means editing one line plus renaming the `dkdb-*` files and updating their references (scripts, installer file lists, docs).
 - The menu needs an interactive console; it does not work without a keyboard.
