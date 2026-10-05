@@ -4,7 +4,8 @@
 
 # Prefix shared by every image, container and user name. Change it here only.
 $DevboxPrefix = 'dkdb'
-$DevboxDefaultName = 'ubuntu'
+# Default name of the image, the container and the user (typed without the prefix): dkdb-devbox-ubuntu.
+$DevboxDefaultName = 'devbox-ubuntu'
 $DevboxDefaultProjectsPath = 'C:\LocalFiles\proyectos\'
 
 # Optional Mutagen (file sync, spec 08), downloaded on demand by dkdb-container-create.

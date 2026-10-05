@@ -13,7 +13,7 @@ Daily management of images and containers must be fast, without remembering Dock
 
 | Script | Behavior |
 |---|---|
-| `dkdb-image-create` | Asks only for the image name (default `ubuntu`) and builds `dkdb-<name>`. |
+| `dkdb-image-create` | Asks only for the image name (default `devbox-ubuntu`, so `dkdb-devbox-ubuntu`) and builds `dkdb-<name>`. |
 | `dkdb-image-delete` | Menu of `dkdb-` images; deletes the chosen one (single selection). |
 | `dkdb-container-create` | Asks for the image (as `dkdb-image-create` does), container name, user and the host projects and tools paths (spec 04) and, if Mutagen is installed, the projects volume type (menu; spec 08); the `bash` volume is fixed. |
 | `dkdb-container-start` | Menu of **stopped** `dkdb-` containers. For a Mutagen container it also makes sure the Mutagen daemon is running and creates or resumes the sync session (spec 08). |
