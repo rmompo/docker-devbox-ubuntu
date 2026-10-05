@@ -176,4 +176,5 @@ if ($policy -in @('Restricted', 'AllSigned')) {
 
 Write-Host ''
 Write-Host "Installed in $devboxPath (shared tools folder: $toolsPath)" -ForegroundColor Green
-Write-Host 'Open a new terminal (so the PATH is refreshed) and run: dkdb-image-create'
+Write-Host 'Make sure Docker Engine is running (start Docker Desktop and wait until it is ready).' -ForegroundColor Red
+Write-Host 'Then open a new terminal (so the PATH is refreshed) and run: dkdb-image-create'

@@ -20,6 +20,7 @@ The scripts must be easy to get and to call from any folder, without cloning the
 - **Branch or tag:** asked with `main` as default (letters, digits, `.`, `_`, `-` and `/` only); it lets you test a branch before merging it. The README downloads `install.ps1` itself from `main`.
 - **Uninstaller:** `install/uninstall.ps1` is part of `$Files` and lands in `<root>\devbox\install\`. It removes the PATH entries, `<root>\devbox\scripts` and `<root>\devbox\mutagen` after a `[y/N]` confirmation (stopping the Mutagen daemon first, also after confirmation). It keeps `install`, `tools`, projects, containers and images.
 - **PATH:** `<root>\devbox\scripts\ps1` is appended to the user PATH (registry) without duplicates, and to the current session. Other user PATH entries that contain `dkdb-common.ps1` (a previous installation, for example in another root) are listed and removed only after a `[y/N]` confirmation; their files are not deleted.
+- **Final message:** reminds the user to make sure Docker Engine is running (Docker Desktop started and ready), then to open a new terminal and run `dkdb-image-create`.
 - **Execution policy:** if `Restricted` or `AllSigned`, a warning with the fix is printed; it is never changed.
 
 ## Consequences
