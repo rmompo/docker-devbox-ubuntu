@@ -1,5 +1,5 @@
 # Delete one stopped devbox container chosen from a menu.
-# Version: 0.1.0
+# Version: 0.1.1
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # With a Mutagen container, only the Mutagen session of this container is terminated
@@ -35,8 +35,8 @@ if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutag
 
 docker rm $selected | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Error: could not delete '$selected'." -ForegroundColor Red
+    Write-DevboxWarning "Error: could not delete '$selected'."
     exit 1
 }
-Write-Host "Container '$selected' deleted." -ForegroundColor Green
+Write-DevboxSuccess "Container '$selected' deleted."
 if ($usesMutagen) { Remove-DevboxSyncSession -SessionName $session }

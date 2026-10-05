@@ -1,5 +1,5 @@
 # Terminate the orphan Mutagen sessions: dkdb- sessions whose container no longer exists
-# Version: 0.1.0
+# Version: 0.1.1
 # (left by containers deleted outside dkdb-container-delete, or while the Mutagen daemon was
 # stopped). The host folders are not touched.
 . "$PSScriptRoot\dkdb-common.ps1"
@@ -7,7 +7,7 @@ Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
 if (-not (Test-DevboxMutagen)) {
-    Write-Host 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).' -ForegroundColor Red
+    Write-DevboxWarning 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).'
     exit 1
 }
 if (-not (Test-DevboxMutagenDaemon)) {
@@ -17,7 +17,7 @@ if (-not (Test-DevboxMutagenDaemon)) {
 
 $sessions = Get-DevboxMutagenSessionNames
 if ($null -eq $sessions) {
-    Write-Host 'Error: the Mutagen sessions could not be listed.' -ForegroundColor Red
+    Write-DevboxWarning 'Error: the Mutagen sessions could not be listed.'
     exit 1
 }
 
@@ -50,8 +50,8 @@ $mutagen = Get-DevboxMutagenExe
 foreach ($target in $targets) {
     & $mutagen sync terminate $target | Out-Null
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "Terminated: $target" -ForegroundColor Green
+        Write-DevboxSuccess "Terminated: $target"
     } else {
-        Write-Host "Error: could not terminate '$target'." -ForegroundColor Red
+        Write-DevboxWarning "Error: could not terminate '$target'."
     }
 }

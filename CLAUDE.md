@@ -39,4 +39,5 @@ How to bump the project while it is `0.x`: raise the minor number (0.1.0 -> 0.2.
 1. Documentation, scripts, prompts, messages and comments are in English.
 2. `.ps1` files are pure ASCII; every file is UTF-8 without BOM and LF.
 3. Every file under `scripts/ps1/` and `scripts/bash/` is named `dkdb-<name>`.
-4. Never commit unless the owner asks for it.
+4. Message colors in every script: green only for success (something was done correctly), red for warnings and errors, yellow for the natural next step, default color for anything else (spec 01). Use the helpers (`Write-DevboxSuccess`, `Write-DevboxWarning`, `Write-DevboxNext`; `ok`, `warn`, `next` in bash) instead of raw `-ForegroundColor`.
+5. Never commit unless the owner asks for it.

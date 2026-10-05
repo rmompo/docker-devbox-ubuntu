@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.1.1
+# Version: 0.1.2
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -104,9 +104,9 @@ function Get-DevboxIntegrity {
 function Assert-DevboxIntegrity {
     $result = Get-DevboxIntegrity -Base (Get-DevboxBase)
     if ($result.Errors.Count -eq 0) { return }
-    Write-Host 'Error: the installed package is inconsistent with manifest.json:' -ForegroundColor Red
-    foreach ($problem in $result.Errors) { Write-Host "  - $problem" -ForegroundColor Red }
-    Write-Host 'Run install.ps1 again (dkdb-verify shows the details).' -ForegroundColor Red
+    Write-DevboxWarning 'Error: the installed package is inconsistent with manifest.json:'
+    foreach ($problem in $result.Errors) { Write-DevboxWarning "  - $problem" }
+    Write-DevboxNext 'Run install.ps1 again (dkdb-verify shows the details).'
     exit 1
 }
 
@@ -149,8 +149,8 @@ function Assert-DevboxContainerVersion {
     if (-not $imageVersion -or -not (Test-DevboxVersionCompatible -Left $imageVersion -Right $scripts)) {
         $shown = $imageVersion
         if (-not $shown) { $shown = 'unknown' }
-        Write-Host "Error: '$Container' was created from an image with version $shown, not compatible with the scripts ($scripts)." -ForegroundColor Red
-        Write-Host 'Rebuild the image (dkdb-image-create) and recreate the container. Your data stays reachable with docker: docker start, docker exec -it -u <user> <container> bash, docker cp.' -ForegroundColor Red
+        Write-DevboxWarning "Error: '$Container' was created from an image with version $shown, not compatible with the scripts ($scripts)."
+        Write-DevboxNext 'Rebuild the image (dkdb-image-create) and recreate the container. Your data stays reachable with docker: docker start, docker exec -it -u <user> <container> bash, docker cp.'
         exit 1
     }
 }
@@ -158,14 +158,30 @@ function Assert-DevboxContainerVersion {
 # Linux limits user names to 32 characters; the prefix and the hyphen use some.
 $DevboxMaxInputLength = 32 - ($DevboxPrefix.Length + 1)
 
+# --- Message colors (spec 01): success (something was done correctly) in green, warnings and
+# errors in red, the natural next step in yellow. Other messages keep the default color.
+# The menu (Select-DevboxItem) keeps its own colors.
+function Write-DevboxSuccess {
+    param([string]$Text)
+    Write-Host $Text -ForegroundColor Green
+}
+function Write-DevboxWarning {
+    param([string]$Text)
+    Write-Host $Text -ForegroundColor Red
+}
+function Write-DevboxNext {
+    param([string]$Text)
+    Write-Host $Text -ForegroundColor Yellow
+}
+
 function Assert-DevboxDocker {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        Write-Host 'Error: docker was not found in the PATH.' -ForegroundColor Red
+        Write-DevboxWarning 'Error: docker was not found in the PATH.'
         exit 1
     }
     docker info *> $null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host 'Error: the Docker daemon is not reachable. Is Docker Desktop running?' -ForegroundColor Red
+        Write-DevboxWarning 'Error: the Docker daemon is not reachable. Is Docker Desktop running?'
         exit 1
     }
 }
@@ -189,11 +205,11 @@ function Read-DevboxName {
         if ([string]::IsNullOrWhiteSpace($value)) { $value = $Default }
         $value = $value.Trim()
         if ($value -cnotmatch '^[a-z][a-z0-9_-]*$') {
-            Write-Host 'Use lowercase letters, digits, "-" or "_", starting with a letter.' -ForegroundColor Yellow
+            Write-DevboxWarning 'Use lowercase letters, digits, "-" or "_", starting with a letter.'
             continue
         }
         if ($value.Length -gt $DevboxMaxInputLength) {
-            Write-Host "Maximum $DevboxMaxInputLength characters (the prefix '$DevboxPrefix-' is added)." -ForegroundColor Yellow
+            Write-DevboxWarning "Maximum $DevboxMaxInputLength characters (the prefix '$DevboxPrefix-' is added)."
             continue
         }
         return $value
@@ -289,7 +305,7 @@ function Get-DevboxRoot {
     $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
     $expected = Join-Path $root 'devbox\scripts\ps1'
     if ($PSScriptRoot.TrimEnd('\') -ine $expected.TrimEnd('\')) {
-        Write-Host "Error: the scripts must be in <root>\devbox\scripts\ps1 (found: $PSScriptRoot). Run install.ps1 again." -ForegroundColor Red
+        Write-DevboxWarning "Error: the scripts must be in <root>\devbox\scripts\ps1 (found: $PSScriptRoot). Run install.ps1 again."
         exit 1
     }
     return $root
@@ -306,7 +322,7 @@ function Get-DevboxDefaultToolsPath {
 function Get-DevboxBashPath {
     $path = Join-Path $PSScriptRoot '..\bash'
     if (-not (Test-Path -LiteralPath $path -PathType Container)) {
-        Write-Host "Error: bash folder not found: $path" -ForegroundColor Red
+        Write-DevboxWarning "Error: bash folder not found: $path"
         exit 1
     }
     return (Resolve-Path -LiteralPath $path).Path
@@ -357,7 +373,7 @@ function Add-DevboxUserPath {
     }
     if (-not ($entries | Where-Object { $_.TrimEnd('\') -ieq $Folder.TrimEnd('\') })) {
         [Environment]::SetEnvironmentVariable('Path', (($entries + $Folder) -join ';'), 'User')
-        Write-Host "Added to the user PATH: $Folder (open a new terminal to use it by hand)"
+        Write-DevboxSuccess "Added to the user PATH: $Folder (open a new terminal to use it by hand)"
     }
     $sessionEntries = @($env:Path -split ';' | Where-Object { $_ -ne '' })
     if (-not ($sessionEntries | Where-Object { $_.TrimEnd('\') -ieq $Folder.TrimEnd('\') })) {
@@ -369,10 +385,10 @@ function Add-DevboxUserPath {
 # Returns $true when Mutagen is available afterwards, $false when declined or failed.
 function Install-DevboxMutagen {
     Write-Host ''
-    Write-Host "Mutagen $DevboxMutagenVersion is not installed." -ForegroundColor Cyan
-    Write-Host 'It synchronizes the projects folder with a copy inside the container, avoiding the slow' -ForegroundColor Cyan
-    Write-Host 'Docker Desktop mounts. Download: about 100 MB from github.com/mutagen-io/mutagen.' -ForegroundColor Cyan
-    Write-Host 'License: MIT, plus SSPL for part of the official builds; it is a separate third-party tool (spec 08).' -ForegroundColor Cyan
+    Write-Host "Mutagen $DevboxMutagenVersion is not installed."
+    Write-Host 'It synchronizes the projects folder with a copy inside the container, avoiding the slow'
+    Write-Host 'Docker Desktop mounts. Download: about 100 MB from github.com/mutagen-io/mutagen.'
+    Write-Host 'License: MIT, plus SSPL for part of the official builds; it is a separate third-party tool (spec 08).'
     $answer = Read-Host 'Download and install it? [y/N]'
     if ($answer.Trim() -notmatch '^(y|yes)$') { return $false }
 
@@ -397,24 +413,24 @@ function Install-DevboxMutagen {
         if (-not $expected) { throw "no checksum found for $asset in SHA256SUMS" }
         $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
         if ($actual -ine $expected) { throw "checksum mismatch for $asset (expected $expected, got $actual)" }
-        Write-Host 'Checksum OK.'
+        Write-DevboxSuccess 'Checksum OK.'
         if (-not (Test-Path -LiteralPath $target -PathType Container)) {
             New-Item -ItemType Directory -Path $target | Out-Null
         }
         Expand-Archive -LiteralPath $zip -DestinationPath $target -Force
     } catch {
-        Write-Host "Error: could not install Mutagen ($($_.Exception.Message))." -ForegroundColor Red
+        Write-DevboxWarning "Error: could not install Mutagen ($($_.Exception.Message))."
         return $false
     } finally {
         $ProgressPreference = $previousProgress
         if (Test-Path -LiteralPath $tempDir) { Remove-Item -LiteralPath $tempDir -Recurse -Force }
     }
     if (-not (Test-Path -LiteralPath (Join-Path $target 'mutagen.exe') -PathType Leaf)) {
-        Write-Host "Error: mutagen.exe was not found after extracting into $target" -ForegroundColor Red
+        Write-DevboxWarning "Error: mutagen.exe was not found after extracting into $target"
         return $false
     }
     Add-DevboxUserPath -Folder $target
-    Write-Host "Mutagen installed in $target" -ForegroundColor Green
+    Write-DevboxSuccess "Mutagen installed in $target"
     return $true
 }
 
@@ -434,14 +450,41 @@ function Test-DevboxMutagenDaemon {
     }
 }
 
+# What 'mutagen sync list' answers with autostart disabled: the reason why the daemon does not
+# respond (not running, version mismatch with the executable, ...). Empty when it responds.
+function Get-DevboxMutagenDaemonError {
+    $mutagen = Get-DevboxMutagenExe
+    if (-not $mutagen) { return 'mutagen.exe was not found' }
+    $previous = $env:MUTAGEN_DISABLE_AUTOSTART
+    $env:MUTAGEN_DISABLE_AUTOSTART = '1'
+    try {
+        $text = (& $mutagen sync list 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0) { return '' }
+        return $text
+    } finally {
+        if ($null -eq $previous) { Remove-Item Env:MUTAGEN_DISABLE_AUTOSTART -ErrorAction SilentlyContinue }
+        else { $env:MUTAGEN_DISABLE_AUTOSTART = $previous }
+    }
+}
+
 # Make sure the daemon is running: nothing to do when it is, start it otherwise.
+# 'mutagen daemon start' only launches the daemon in the background and returns at once,
+# so this waits (up to about 10 seconds) until the daemon answers.
 function Start-DevboxMutagenDaemon {
     if (Test-DevboxMutagenDaemon) { return $true }
     $mutagen = Get-DevboxMutagenExe
     if (-not $mutagen) { return $false }
     Write-Host 'Starting the Mutagen daemon ...'
-    & $mutagen daemon start | Out-Null
-    return (Test-DevboxMutagenDaemon)
+    $startOutput = (& $mutagen daemon start 2>&1 | Out-String).Trim()
+    $startCode = $LASTEXITCODE
+    for ($i = 0; $i -lt 20; $i++) {
+        if (Test-DevboxMutagenDaemon) { return $true }
+        Start-Sleep -Milliseconds 500
+    }
+    Write-DevboxWarning "Mutagen: 'daemon start' exited with code $startCode. $startOutput"
+    Write-DevboxWarning "Mutagen: the daemon does not answer: $(Get-DevboxMutagenDaemonError)"
+    Write-DevboxNext 'If it mentions a version mismatch, another Mutagen daemon is running: stop it with dkdb-mutagen-stop (or mutagen daemon stop) and try again.'
+    return $false
 }
 
 # Wait until the container entrypoint has created the user (marker file in /dev/shm,
@@ -511,29 +554,29 @@ function Start-DevboxSync {
     # look emptied and Mutagen would halt). Leftover sessions are never touched here.
     $containerId = Get-DevboxContainerId -Container $Container
     if (-not $containerId) {
-        Write-Host "Error: could not read the ID of '$Container'." -ForegroundColor Red
+        Write-DevboxWarning "Error: could not read the ID of '$Container'."
         return $false
     }
     $session = Get-DevboxSyncSessionName -Container $Container
     if (-not $user -or -not $hostPath) {
-        Write-Host "Error: '$Container' has no DEVBOX_USER or DEVBOX_SYNC_PATH variable." -ForegroundColor Red
+        Write-DevboxWarning "Error: '$Container' has no DEVBOX_USER or DEVBOX_SYNC_PATH variable."
         return $false
     }
     if (-not (Test-DevboxMutagen)) {
-        Write-Host 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).' -ForegroundColor Red
+        Write-DevboxWarning 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).'
         return $false
     }
     if (-not (Test-Path -LiteralPath $hostPath -PathType Container)) {
-        Write-Host "Error: the host projects path does not exist: $hostPath" -ForegroundColor Red
+        Write-DevboxWarning "Error: the host projects path does not exist: $hostPath"
         return $false
     }
     if (-not (Wait-DevboxContainerReady -Container $Container)) {
-        Write-Host "Error: the container '$Container' did not become ready in time." -ForegroundColor Red
+        Write-DevboxWarning "Error: the container '$Container' did not become ready in time."
         return $false
     }
     $mutagen = Get-DevboxMutagenExe
     if (-not (Start-DevboxMutagenDaemon)) {
-        Write-Host 'Error: the Mutagen daemon could not be started.' -ForegroundColor Red
+        Write-DevboxWarning 'Error: the Mutagen daemon could not be started.'
         return $false
     }
     $created = $false
@@ -558,14 +601,14 @@ function Start-DevboxSync {
         $created = $true
     }
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: could not create or resume the Mutagen session '$session'." -ForegroundColor Red
+        Write-DevboxWarning "Error: could not create or resume the Mutagen session '$session'."
         return $false
     }
     if ($created -or $Flush) {
         Write-Host 'Synchronizing ...'
         & $mutagen sync flush $session | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "Warning: the flush failed. Check it with: dkdb-mutagen-status" -ForegroundColor Yellow
+            Write-DevboxWarning "Warning: the flush failed. Check it with: dkdb-mutagen-status"
         }
     }
     return $true
@@ -576,17 +619,17 @@ function Start-DevboxSync {
 function Remove-DevboxSyncSession {
     param([string]$SessionName)
     if (-not $SessionName) {
-        Write-Host 'Warning: the Mutagen session name is unknown; run dkdb-mutagen-clean to look for leftover sessions.' -ForegroundColor Yellow
+        Write-DevboxWarning 'Warning: the Mutagen session name is unknown; run dkdb-mutagen-clean to look for leftover sessions.'
         return
     }
     if (-not (Test-DevboxMutagen) -or -not (Test-DevboxMutagenDaemon)) {
-        Write-Host "Warning: the Mutagen daemon is not running, so the session '$SessionName' was not terminated. Run dkdb-mutagen-clean later." -ForegroundColor Yellow
+        Write-DevboxWarning "Warning: the Mutagen daemon is not running, so the session '$SessionName' was not terminated. Run dkdb-mutagen-clean later."
         return
     }
     & (Get-DevboxMutagenExe) sync terminate $SessionName *> $null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Warning: could not terminate the Mutagen session '$SessionName'. Run dkdb-mutagen-clean later." -ForegroundColor Yellow
+        Write-DevboxWarning "Warning: could not terminate the Mutagen session '$SessionName'. Run dkdb-mutagen-clean later."
         return
     }
-    Write-Host "Mutagen session terminated: $SessionName"
+    Write-DevboxSuccess "Mutagen session terminated: $SessionName"
 }

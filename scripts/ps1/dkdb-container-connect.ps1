@@ -1,5 +1,5 @@
 # Open a bash shell, as the container's user, in a running devbox container.
-# Version: 0.1.0
+# Version: 0.1.1
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxIntegrity
@@ -19,7 +19,7 @@ if (-not $selected) {
 
 $userName = Get-DevboxContainerUser -Container $selected
 if (-not $userName) {
-    Write-Host "Error: '$selected' has no DEVBOX_USER variable; it was not created by dkdb-container-create." -ForegroundColor Red
+    Write-DevboxWarning "Error: '$selected' has no DEVBOX_USER variable; it was not created by dkdb-container-create."
     exit 1
 }
 
@@ -31,7 +31,7 @@ Assert-DevboxContainerVersion -Container $selected
 # The shell opens even if this fails.
 if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
     if (-not (Start-DevboxSync -Container $selected)) {
-        Write-Host 'Opening the shell anyway, but the projects are NOT synchronized.' -ForegroundColor Yellow
+        Write-DevboxWarning 'Opening the shell anyway, but the projects are NOT synchronized.'
     }
 }
 

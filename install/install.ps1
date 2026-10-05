@@ -1,5 +1,5 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.1.1
+# Version: 0.1.2
 # It downloads manifest.json and every file it lists (scripts and uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -12,10 +12,25 @@ $DefaultRootPath = 'C:\shared\'
 
 $ErrorActionPreference = 'Stop'
 
+# Message colors (spec 01): success (something was done correctly) in green, warnings and errors in red,
+# the natural next step in yellow. Other messages keep the default color.
+function Write-InstallSuccess {
+    param([string]$Text)
+    Write-Host $Text -ForegroundColor Green
+}
+function Write-InstallWarning {
+    param([string]$Text)
+    Write-Host $Text -ForegroundColor Red
+}
+function Write-InstallNext {
+    param([string]$Text)
+    Write-Host $Text -ForegroundColor Yellow
+}
+
 function Stop-Install {
     param([Parameter(Mandatory)][string]$Message)
-    Write-Host "Error: $Message" -ForegroundColor Red
-    Write-Host 'Installation stopped.' -ForegroundColor Red
+    Write-InstallWarning "Error: $Message"
+    Write-InstallWarning 'Installation stopped.'
     exit 1
 }
 
@@ -37,7 +52,7 @@ function Add-InstallUserPath {
         Write-Host "PATH (user) already contains $Folder"
     } else {
         [Environment]::SetEnvironmentVariable('Path', (($entries + $Folder) -join ';'), 'User')
-        Write-Host "Added to the user PATH: $Folder"
+        Write-InstallSuccess "Added to the user PATH: $Folder"
     }
     $sessionEntries = @($env:Path -split ';' | Where-Object { $_ -ne '' })
     if (-not ($sessionEntries | Where-Object { $_.TrimEnd('\') -ieq $Folder.TrimEnd('\') })) {
@@ -111,8 +126,8 @@ $toolsPath = Join-Path $rootPath 'tools'
 
 # --- Previous installation ---
 if (Test-Path -LiteralPath $scriptsPath) {
-    Write-Host "An installation already exists in $scriptsPath." -ForegroundColor Yellow
-    Write-Host 'Files will be overwritten (manual edits are lost); files that no longer exist in the repository are not deleted.' -ForegroundColor Yellow
+    Write-InstallWarning "An installation already exists in $scriptsPath."
+    Write-InstallWarning 'Files will be overwritten (manual edits are lost); files that no longer exist in the repository are not deleted.'
     if (-not (Confirm-Install 'Continue?')) { Stop-Install 'Cancelled by the user.' }
 }
 
@@ -164,14 +179,14 @@ $entries = @()
 if ($manifest.files) { $entries = @($manifest.files.PSObject.Properties) }
 if ($entries.Count -eq 0) { Stop-Install 'manifest.json does not list any file.' }
 $version = Get-InstallVersion -ManifestPath $manifestFile
-Write-Host "Version: $version" -ForegroundColor Cyan
+Write-Host "Version: $version"
 
 foreach ($entry in $entries) {
     $relative = $entry.Name
     # The installer itself was downloaded by hand: only its version is compared.
     if ($relative -eq 'install/install.ps1') {
         if ($selfVersion -ne [string]$entry.Value) {
-            Write-Host "Warning: this installer is version $selfVersion but $Branch expects $($entry.Value). Download install.ps1 again from that branch." -ForegroundColor Yellow
+            Write-InstallWarning "Warning: this installer is version $selfVersion but $Branch expects $($entry.Value). Download install.ps1 again from that branch."
         }
         continue
     }
@@ -188,7 +203,7 @@ foreach ($entry in $entries) {
 if (-not (Test-Path -LiteralPath $toolsPath -PathType Container)) {
     try {
         New-Item -ItemType Directory -Path $toolsPath | Out-Null
-        Write-Host "Created $toolsPath"
+        Write-InstallSuccess "Created $toolsPath"
     } catch {
         Stop-Install "Could not create the tools folder $toolsPath ($($_.Exception.Message))"
     }
@@ -206,15 +221,15 @@ if (-not [string]::IsNullOrEmpty($currentUserPath)) {
         $_.TrimEnd('\') -ine $ps1Path.TrimEnd('\') -and (Test-Path -LiteralPath (Join-Path $_ 'dkdb-common.ps1') -PathType Leaf)
     })
     if ($stale.Count -gt 0) {
-        Write-Host 'The user PATH has entries of a previous installation:' -ForegroundColor Yellow
+        Write-InstallWarning 'The user PATH has entries of a previous installation:'
         $stale | ForEach-Object { Write-Host "  $_" }
         if (Confirm-Install 'Remove them from the user PATH? (the files are not deleted)') {
             $kept = @($userEntries | Where-Object { $stale -notcontains $_ })
             [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User')
             $env:Path = (@($env:Path -split ';' | Where-Object { $_ -ne '' -and $stale -notcontains $_ }) -join ';')
-            Write-Host 'Removed from the user PATH.'
+            Write-InstallSuccess 'Removed from the user PATH.'
         } else {
-            Write-Host 'Kept. Two installations on the PATH may run the wrong scripts.' -ForegroundColor Yellow
+            Write-InstallWarning 'Kept. Two installations on the PATH may run the wrong scripts.'
         }
     }
 }
@@ -222,14 +237,14 @@ if (-not [string]::IsNullOrEmpty($currentUserPath)) {
 # --- Execution policy (warn only, never change it) ---
 $policy = Get-ExecutionPolicy
 if ($policy -in @('Restricted', 'AllSigned')) {
-    Write-Host "Warning: the execution policy is '$policy' and the scripts will not run." -ForegroundColor Yellow
-    Write-Host 'Fix (current user only): Set-ExecutionPolicy RemoteSigned -Scope CurrentUser' -ForegroundColor Yellow
+    Write-InstallWarning "Warning: the execution policy is '$policy' and the scripts will not run."
+    Write-InstallNext 'Fix (current user only): Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
 }
 
 Write-Host ''
-Write-Host "Installed in $devboxPath (shared tools folder: $toolsPath), version $version" -ForegroundColor Green
+Write-InstallSuccess "Installed in $devboxPath (shared tools folder: $toolsPath), version $version"
 if ($previousVersion -and -not (Test-InstallVersionCompatible -Left $previousVersion -Right $version)) {
-    Write-Host "Updated from ${previousVersion} to ${version}: rebuild the images (dkdb-image-create) and recreate the containers." -ForegroundColor Yellow
+    Write-InstallNext "Updated from ${previousVersion} to ${version}: rebuild the images (dkdb-image-create) and recreate the containers."
 }
-Write-Host 'Make sure Docker Engine is running (start Docker Desktop and wait until it is ready).' -ForegroundColor Red
-Write-Host 'Then open a new terminal (so the PATH is refreshed) and run: dkdb-image-create' -ForegroundColor Yellow
+Write-InstallWarning 'Make sure Docker Engine is running (start Docker Desktop and wait until it is ready).'
+Write-InstallNext 'Then open a new terminal (so the PATH is refreshed) and run: dkdb-image-create'

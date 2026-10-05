@@ -1,5 +1,5 @@
 # Delete one devbox image chosen from a menu.
-# Version: 0.1.0
+# Version: 0.1.1
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
@@ -18,7 +18,7 @@ if (-not $selected) {
 
 docker rmi $selected
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Error: could not delete '$selected' (is a container using it?)." -ForegroundColor Red
+    Write-DevboxWarning "Error: could not delete '$selected' (is a container using it?)."
     exit 1
 }
-Write-Host "Image '$selected' deleted." -ForegroundColor Green
+Write-DevboxSuccess "Image '$selected' deleted."

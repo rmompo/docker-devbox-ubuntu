@@ -1,11 +1,11 @@
 # Show the Mutagen sync status (state and conflicts) of a devbox container chosen from a menu.
-# Version: 0.1.0
+# Version: 0.1.1
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
 if (-not (Test-DevboxMutagen)) {
-    Write-Host 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).' -ForegroundColor Red
+    Write-DevboxWarning 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).'
     exit 1
 }
 
@@ -30,6 +30,6 @@ $session = Get-DevboxSyncSessionName -Container $selected
 $mutagen = Get-DevboxMutagenExe
 & $mutagen sync list $session
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "There is no Mutagen session for '$selected' yet: dkdb-container-start or dkdb-container-connect create it." -ForegroundColor Yellow
+    Write-DevboxNext "There is no Mutagen session for '$selected' yet: dkdb-container-start or dkdb-container-connect create it."
     exit 1
 }

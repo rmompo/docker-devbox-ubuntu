@@ -1,16 +1,14 @@
 #!/bin/bash
-# Version: 0.1.0
+# Version: 0.1.1
 # Container entrypoint (runs as root).
 # Creates the user given in DEVBOX_USER (password = user name, sudo with
 # password), then hands the main process over to that user.
 set -euo pipefail
 
-if [ -z "${DEVBOX_USER:-}" ]; then
-    echo "entrypoint: DEVBOX_USER is not set" >&2
-    exit 1
-fi
-
-# Project version baked into the image: shown in the container logs and kept in a file.
+# Message colors (spec 01): warnings and errors in red (only when stderr is a terminal; in the
+# container logs there are no colors).
+if [ -t 2 ]; then c_red=$'\033[31m'; c_off=$'\033[0m'; else c_red=''; c_off=''; fi
+warn() { printf '%s%s%s\n' "$c_red" "$*" "$c_off" >&2; }
 script_version="$(sed -n 's/^# Version: *//p' "$0" | head -n 1)"
 echo "$(basename "$0") ${script_version:-unknown} (docker-devbox-ubuntu ${DEVBOX_VERSION:-unknown})"
 echo "${DEVBOX_VERSION:-unknown}" > /etc/devbox-version

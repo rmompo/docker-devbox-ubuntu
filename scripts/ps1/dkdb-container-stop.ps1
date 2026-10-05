@@ -1,5 +1,5 @@
 # Stop one running devbox container chosen from a menu.
-# Version: 0.1.0
+# Version: 0.1.1
 # It never touches Mutagen (daemon or session): see dkdb-mutagen-stop for that.
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
@@ -19,7 +19,7 @@ if (-not $selected) {
 
 docker stop $selected | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Error: could not stop '$selected'." -ForegroundColor Red
+    Write-DevboxWarning "Error: could not stop '$selected'."
     exit 1
 }
-Write-Host "Container '$selected' stopped." -ForegroundColor Green
+Write-DevboxSuccess "Container '$selected' stopped."

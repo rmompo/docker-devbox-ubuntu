@@ -35,6 +35,7 @@ Typical problems and their fixes. Commands in `PowerShell` run on the Windows ho
 | 6 | "Mutagen ... is older than ..." in `dkdb-container-create` | Update Mutagen, or remove the old one from the PATH so that the script installs its own (`<root>\devbox\mutagen`). |
 | 7 | I want to stop Mutagen | `dkdb-mutagen-stop` stops the daemon for **all** your Mutagen sessions. `dkdb-container-stop` never touches Mutagen, and `dkdb-container-delete` only terminates the session of the deleted container. |
 | 8 | Symbolic links are missing on the other side | They are ignored on purpose (`--symlink-mode=ignore`): repositories are cloned on Windows and must not depend on them. |
+| 9 | "the Mutagen daemon could not be started" | The script waits about 10 seconds for the daemon and then prints why it does not answer. If it mentions a **version mismatch**, another Mutagen daemon (an older or different installation) is running: `dkdb-mutagen-stop` (or `mutagen daemon stop`) and try again; this stops all your Mutagen sessions. Otherwise run `mutagen daemon start` and `mutagen sync list` by hand and look at the error; security software can also block the daemon process. |
 
 ## Containers
 

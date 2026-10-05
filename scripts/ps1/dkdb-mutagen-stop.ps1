@@ -1,11 +1,11 @@
 # Stop the Mutagen daemon if it is running (it only checks when it is not).
-# Version: 0.1.0
+# Version: 0.1.1
 # It is one daemon per user: stopping it stops ALL Mutagen sessions, not only dkdb-* ones.
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
 
 if (-not (Test-DevboxMutagen)) {
-    Write-Host 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).' -ForegroundColor Red
+    Write-DevboxWarning 'Error: mutagen.exe was not found (dkdb-container-create installs it on demand).'
     exit 1
 }
 if (-not (Test-DevboxMutagenDaemon)) {
@@ -33,8 +33,8 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
 
 & $mutagen daemon stop | Out-Null
 if (Test-DevboxMutagenDaemon) {
-    Write-Host 'Error: the Mutagen daemon is still running.' -ForegroundColor Red
+    Write-DevboxWarning 'Error: the Mutagen daemon is still running.'
     exit 1
 }
-Write-Host 'The Mutagen daemon is stopped.' -ForegroundColor Green
-Write-Host 'Nothing is synchronized until dkdb-mutagen-start, dkdb-container-start or dkdb-container-connect.'
+Write-DevboxSuccess 'The Mutagen daemon is stopped.'
+Write-DevboxNext 'Nothing is synchronized until dkdb-mutagen-start, dkdb-container-start or dkdb-container-connect.'

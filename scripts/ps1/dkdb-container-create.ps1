@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.1.1
+# Version: 0.1.2
 . "$PSScriptRoot\dkdb-common.ps1"
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxIntegrity
@@ -53,15 +53,15 @@ foreach ($path in @($projectsPath, $toolsPath, $bashPath)) {
     if ($path.Contains(',')) { $errors += "Host path must not contain commas: $path" }
 }
 if ($errors.Count -gt 0) {
-    foreach ($e in $errors) { Write-Host "Error: $e" -ForegroundColor Red }
-    Write-Host 'Aborted. Nothing was created.' -ForegroundColor Red
+    foreach ($e in $errors) { Write-DevboxWarning "Error: $e" }
+    Write-DevboxWarning 'Aborted. Nothing was created.'
     exit 1
 }
 
 # --- Install Mutagen on demand (only when chosen and missing) ---
 if ($useMutagen -and -not (Test-DevboxMutagen)) {
     if (-not (Install-DevboxMutagen)) {
-        Write-Host 'Mutagen is not available. Aborted. Nothing was created.' -ForegroundColor Red
+        Write-DevboxWarning 'Mutagen is not available. Aborted. Nothing was created.'
         exit 1
     }
 }
@@ -70,12 +70,12 @@ if ($useMutagen -and -not (Test-DevboxMutagen)) {
 if ($useMutagen) {
     $mutagenFound = Get-DevboxMutagenVersion
     if ($mutagenFound -and $mutagenFound -lt [version]$DevboxMutagenVersion) {
-        Write-Host "Error: Mutagen $mutagenFound ($(Get-DevboxMutagenExe)) is older than $DevboxMutagenVersion, which Docker Engine 28+ needs." -ForegroundColor Red
-        Write-Host 'Update it, or remove it from the PATH so that this script installs its own. Aborted. Nothing was created.' -ForegroundColor Red
+        Write-DevboxWarning "Error: Mutagen $mutagenFound ($(Get-DevboxMutagenExe)) is older than $DevboxMutagenVersion, which Docker Engine 28+ needs."
+        Write-DevboxWarning 'Update it, or remove it from the PATH so that this script installs its own. Aborted. Nothing was created.'
         exit 1
     }
     if (-not $mutagenFound) {
-        Write-Host "Warning: could not read the Mutagen version; $DevboxMutagenVersion or newer is required." -ForegroundColor Yellow
+        Write-DevboxWarning "Warning: could not read the Mutagen version; $DevboxMutagenVersion or newer is required."
     }
 }
 
@@ -101,11 +101,11 @@ $createArgs += @(
 )
 docker @createArgs | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host 'Error: docker create failed.' -ForegroundColor Red
+    Write-DevboxWarning 'Error: docker create failed.'
     exit 1
 }
-Write-Host "Container '$containerName' created from image '$imageRef' (user '$userName', password equal to the user name)." -ForegroundColor Green
+Write-DevboxSuccess "Container '$containerName' created from image '$imageRef' (user '$userName', password equal to the user name)."
 if ($useMutagen) {
     Write-Host "Projects: Mutagen will synchronize '$projectsPath' with the container when it is started."
 }
-Write-Host 'Next: dkdb-container-start, then dkdb-container-connect.'
+Write-DevboxNext 'Next: dkdb-container-start, then dkdb-container-connect.'

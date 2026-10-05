@@ -1,10 +1,25 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
-# Version: 0.1.0
+# Version: 0.1.1
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
 $ErrorActionPreference = 'Stop'
+
+# Message colors (spec 01): success (something was done correctly) in green, warnings and errors in red,
+# the natural next step in yellow. Other messages keep the default color.
+function Write-UninstallSuccess {
+    param([string]$Text)
+    Write-Host $Text -ForegroundColor Green
+}
+function Write-UninstallWarning {
+    param([string]$Text)
+    Write-Host $Text -ForegroundColor Red
+}
+function Write-UninstallNext {
+    param([string]$Text)
+    Write-Host $Text -ForegroundColor Yellow
+}
 
 # Project version from <root>\devbox\manifest.json ('unknown' when it cannot be read).
 function Get-UninstallVersion {
@@ -18,8 +33,8 @@ function Get-UninstallVersion {
 
 function Stop-Uninstall {
     param([Parameter(Mandatory)][string]$Message)
-    Write-Host "Error: $Message" -ForegroundColor Red
-    Write-Host 'Uninstall stopped.' -ForegroundColor Red
+    Write-UninstallWarning "Error: $Message"
+    Write-UninstallWarning 'Uninstall stopped.'
     exit 1
 }
 
@@ -38,7 +53,7 @@ function Remove-UninstallUserPath {
         $kept = @($entries | Where-Object { $_.TrimEnd('\') -ine $Folder.TrimEnd('\') })
         if ($kept.Count -ne $entries.Count) {
             [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User')
-            Write-Host "Removed from the user PATH: $Folder"
+            Write-UninstallSuccess "Removed from the user PATH: $Folder"
         }
     }
     $env:Path = (@($env:Path -split ';' | Where-Object { $_ -ne '' -and $_.TrimEnd('\') -ine $Folder.TrimEnd('\') }) -join ';')
@@ -80,12 +95,12 @@ if (Test-Path -LiteralPath $mutagenExe) {
         else { $env:MUTAGEN_DISABLE_AUTOSTART = $previous }
     }
     if ($daemonRunning) {
-        Write-Host 'The Mutagen daemon is running and must stop to remove Mutagen. This stops ALL your Mutagen sessions.' -ForegroundColor Yellow
+        Write-UninstallWarning 'The Mutagen daemon is running and must stop to remove Mutagen. This stops ALL your Mutagen sessions.'
         if (Confirm-Uninstall 'Stop the Mutagen daemon?') {
             & $mutagenExe daemon stop | Out-Null
         } else {
             $removeMutagen = $false
-            Write-Host 'Mutagen is kept.' -ForegroundColor Yellow
+            Write-UninstallWarning 'Mutagen is kept.'
         }
     }
 }
@@ -97,7 +112,7 @@ foreach ($folder in @($scriptsPath, $(if ($removeMutagen) { $mutagenPath }))) {
     if ($folder -and (Test-Path -LiteralPath $folder)) {
         try {
             Remove-Item -LiteralPath $folder -Recurse -Force
-            Write-Host "Removed $folder"
+            Write-UninstallSuccess "Removed $folder"
         } catch {
             Stop-Uninstall "Could not remove $folder ($($_.Exception.Message))"
         }
@@ -105,5 +120,5 @@ foreach ($folder in @($scriptsPath, $(if ($removeMutagen) { $mutagenPath }))) {
 }
 
 Write-Host ''
-Write-Host 'Uninstalled.' -ForegroundColor Green
+Write-UninstallSuccess 'Uninstalled.'
 Write-Host "Kept: $installDir (delete $devboxPath by hand to remove it completely), the tools folder and your projects."
