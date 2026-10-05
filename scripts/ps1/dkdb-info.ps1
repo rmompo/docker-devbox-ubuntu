@@ -1,5 +1,5 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.1.1
+# Version: 0.1.2
 # volumes and Mutagen. For the versions, see dkdb-version.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -102,7 +102,7 @@ if (-not (Test-DevboxMutagen)) {
 } else {
     Write-Host "  Executable       $(Get-DevboxMutagenExe)"
     if (-not (Test-DevboxMutagenDaemon)) {
-        Write-Host '  Daemon           stopped (dkdb-mutagen-start, dkdb-container-start or dkdb-container-connect start it)'
+        Write-Host '  Daemon           stopped (dkdb-mutagen-start, dkdb-mutagen-sync, or starting or connecting a Mutagen container, start it)'
     } else {
         Write-DevboxSuccess '  Daemon           running'
         $sessions = @(Get-DevboxMutagenSessions)
@@ -110,7 +110,7 @@ if (-not (Test-DevboxMutagen)) {
         foreach ($container in $mutagenContainers) {
             $main = Get-DevboxSyncSessionName -Container $container
             $mine = @($sessions | Where-Object { $main -and ($_.Name -eq $main -or $_.Name -like "$main-f*") })
-            if ($mine.Count -eq 0) { Write-Host "  ${container}: no session yet (dkdb-container-start or dkdb-container-connect create it)" }
+            if ($mine.Count -eq 0) { Write-Host "  ${container}: no session yet (dkdb-mutagen-sync creates it)" }
             foreach ($session in $mine) {
                 $counts = ''
                 if ($null -ne $session.Total -and $session.Total -gt 0) { $counts = ", $($session.Done) of $($session.Total) files" }

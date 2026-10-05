@@ -1,5 +1,5 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
-# Version: 0.1.3
+# Version: 0.1.4
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -178,17 +178,24 @@ $removeMutagen = Test-Path -LiteralPath $mutagenPath
 if (Test-Path -LiteralPath $mutagenExe) {
     $previous = $env:MUTAGEN_DISABLE_AUTOSTART
     $env:MUTAGEN_DISABLE_AUTOSTART = '1'
+    # Windows PowerShell 5.1 turns the error output of a native program into a script-stopping
+    # error when ErrorActionPreference is Stop: it is Continue around the native calls.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
         & $mutagenExe sync list *> $null
         $daemonRunning = ($LASTEXITCODE -eq 0)
     } finally {
+        $ErrorActionPreference = $previousPreference
         if ($null -eq $previous) { Remove-Item Env:MUTAGEN_DISABLE_AUTOSTART -ErrorAction SilentlyContinue }
         else { $env:MUTAGEN_DISABLE_AUTOSTART = $previous }
     }
     if ($daemonRunning) {
         Write-UninstallWarning 'The Mutagen daemon is running and must stop to remove Mutagen. This stops ALL your Mutagen sessions.'
         if (Confirm-Uninstall 'Stop the Mutagen daemon?') {
-            & $mutagenExe daemon stop | Out-Null
+            $ErrorActionPreference = 'Continue'
+            & $mutagenExe daemon stop *> $null
+            $ErrorActionPreference = 'Stop'
         } else {
             $removeMutagen = $false
             Write-UninstallWarning 'Mutagen is kept.'

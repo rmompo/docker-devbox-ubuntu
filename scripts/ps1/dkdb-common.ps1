@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.1.4
+# Version: 0.1.5
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -460,11 +460,53 @@ function Test-DevboxMutagen {
     return [bool](Get-DevboxMutagenExe)
 }
 
+# --- Native programs (Windows PowerShell 5.1 and 7) ---
+# One argument quoted for a Windows command line (spaces, quotes and trailing backslashes).
+function ConvertTo-DevboxNativeArgument {
+    param([AllowEmptyString()][string]$Argument)
+    if ($Argument -ne '' -and $Argument -notmatch '[\s"]') { return $Argument }
+    $escaped = $Argument -replace '(\\*)"', '$1$1\"'
+    $escaped = $escaped -replace '(\\+)$', '$1$1'
+    return '"' + $escaped + '"'
+}
+
+# Run a program and capture its standard output and its error output SEPARATELY, with its exit
+# code. In Windows PowerShell 5.1 the error lines of a program become verbose error records when
+# they are mixed in with 2>&1, and they can even stop a script that sets ErrorActionPreference to
+# Stop; reading both streams directly avoids all of that. Do not use it for a program that leaves
+# a background process holding the streams (mutagen daemon start).
+function Invoke-DevboxNative {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string[]]$Arguments = @()
+    )
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Path
+    $startInfo.Arguments = (@($Arguments | ForEach-Object { ConvertTo-DevboxNativeArgument -Argument $_ })) -join ' '
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    try {
+        $process = [System.Diagnostics.Process]::Start($startInfo)
+    } catch {
+        return [pscustomobject]@{ ExitCode = -1; Output = ''; Error = $_.Exception.Message }
+    }
+    # Both streams are read at the same time so that a full pipe cannot block the program.
+    $outputTask = $process.StandardOutput.ReadToEndAsync()
+    $errorTask = $process.StandardError.ReadToEndAsync()
+    $process.WaitForExit()
+    $result = [pscustomobject]@{ ExitCode = $process.ExitCode; Output = $outputTask.Result; Error = $errorTask.Result }
+    $process.Dispose()
+    return $result
+}
+
 # Version of the installed Mutagen ([version]), or $null when it cannot be read.
 function Get-DevboxMutagenVersion {
     $mutagen = Get-DevboxMutagenExe
     if (-not $mutagen) { return $null }
-    $text = (& $mutagen version 2>&1 | Out-String)
+    $run = Invoke-DevboxNative -Path $mutagen -Arguments @('version')
+    $text = $run.Output + ' ' + $run.Error
     if ($text -match '(\d+\.\d+\.\d+)') { return [version]$Matches[1] }
     return $null
 }
@@ -564,9 +606,9 @@ function Get-DevboxMutagenDaemonError {
     $previous = $env:MUTAGEN_DISABLE_AUTOSTART
     $env:MUTAGEN_DISABLE_AUTOSTART = '1'
     try {
-        $text = (& $mutagen sync list 2>&1 | Out-String).Trim()
-        if ($LASTEXITCODE -eq 0) { return '' }
-        return $text
+        $run = Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list')
+        if ($run.ExitCode -eq 0) { return '' }
+        return ($run.Error + ' ' + $run.Output).Trim()
     } finally {
         if ($null -eq $previous) { Remove-Item Env:MUTAGEN_DISABLE_AUTOSTART -ErrorAction SilentlyContinue }
         else { $env:MUTAGEN_DISABLE_AUTOSTART = $previous }
@@ -581,13 +623,13 @@ function Start-DevboxMutagenDaemon {
     $mutagen = Get-DevboxMutagenExe
     if (-not $mutagen) { return $false }
     Write-Host 'Starting the Mutagen daemon ...'
-    $startOutput = (& $mutagen daemon start 2>&1 | Out-String).Trim()
+    & $mutagen daemon start *> $null
     $startCode = $LASTEXITCODE
     for ($i = 0; $i -lt 20; $i++) {
         if (Test-DevboxMutagenDaemon) { return $true }
         Start-Sleep -Milliseconds 500
     }
-    Write-DevboxWarning "Mutagen: 'daemon start' exited with code $startCode. $startOutput"
+    Write-DevboxWarning "Mutagen: 'daemon start' exited with code $startCode."
     Write-DevboxWarning "Mutagen: the daemon does not answer: $(Get-DevboxMutagenDaemonError)"
     Write-DevboxNext 'If it mentions a version mismatch, another Mutagen daemon is running: stop it with dkdb-mutagen-stop (or mutagen daemon stop) and try again.'
     return $false
@@ -654,18 +696,28 @@ function Get-DevboxMutagenSessionNames {
 # are those of Mutagen's public session model, checked in the 0.18.1 source). Done/Total are
 # files: while files are being transferred (stagingProgress) they are the received and expected
 # files; otherwise they are the files of the beta and of the alpha endpoint.
+# A count from the JSON of Mutagen as [int64]; $null when it is missing or not a single number.
+function ConvertTo-DevboxCount {
+    param($Value)
+    $number = [int64]0
+    if ($null -ne $Value -and $Value -isnot [System.Array] -and [int64]::TryParse([string]$Value, [ref]$number)) { return $number }
+    return $null
+}
+
 function ConvertTo-DevboxSyncProgress {
     param([Parameter(Mandatory)]$Session)
+    # Defensive: a list must never reach this point (see ConvertFrom-DevboxJsonList).
+    if ($Session -is [System.Array]) { $Session = $Session | Select-Object -First 1 }
     $done = $null
     $total = $null
     $staging = $Session.beta.stagingProgress
     if (-not $staging) { $staging = $Session.alpha.stagingProgress }
     if ($staging -and $staging.expectedFiles -gt 0) {
-        $done = [int64]$staging.receivedFiles
-        $total = [int64]$staging.expectedFiles
+        $done = ConvertTo-DevboxCount -Value $staging.receivedFiles
+        $total = ConvertTo-DevboxCount -Value $staging.expectedFiles
     } elseif ($Session.alpha.scanned -and $Session.beta.scanned) {
-        $done = [int64]$Session.beta.files
-        $total = [int64]$Session.alpha.files
+        $done = ConvertTo-DevboxCount -Value $Session.beta.files
+        $total = ConvertTo-DevboxCount -Value $Session.alpha.files
     }
     # Mutagen omits 'conflicts' when there are none: @($null).Count would be 1.
     $conflictCount = 0
@@ -682,10 +734,24 @@ function ConvertTo-DevboxSyncProgress {
     }
 }
 
+# Items of a JSON array (the sessions of 'mutagen sync list --template "{{json .}}"'), the same in
+# Windows PowerShell 5.1 and in PowerShell 7: ConvertFrom-Json emits a JSON array as ONE object in
+# 5.1 and element by element in 7, so the result is flattened. Returns @() when the text is not JSON.
+function ConvertFrom-DevboxJsonList {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Json)
+    if ([string]::IsNullOrWhiteSpace($Json)) { return @() }
+    try { $parsed = $Json | ConvertFrom-Json } catch { return @() }
+    $items = @()
+    foreach ($item in @($parsed)) {
+        if ($item -is [System.Array]) { $items += @($item) } elseif ($null -ne $item) { $items += $item }
+    }
+    return @($items)
+}
+
 # Progress of the first session of a JSON (an array of sessions); $null when there is none.
 function Get-DevboxSyncProgress {
     param([Parameter(Mandatory)][string]$Json)
-    try { $sessions = @($Json | ConvertFrom-Json) } catch { return $null }
+    $sessions = @(ConvertFrom-DevboxJsonList -Json $Json)
     $session = $sessions | Select-Object -First 1
     if (-not $session) { return $null }
     return ConvertTo-DevboxSyncProgress -Session $session
@@ -695,9 +761,10 @@ function Get-DevboxSyncProgress {
 function Get-DevboxMutagenSessions {
     $mutagen = Get-DevboxMutagenExe
     if (-not $mutagen) { return @() }
-    $json = (& $mutagen sync list --template '{{json .}}' 2>&1 | Out-String)
-    if ($LASTEXITCODE -ne 0) { return @() }
-    try { $sessions = @($json | ConvertFrom-Json) } catch { return @() }
+    $run = Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list', '--template', '{{json .}}')
+    if ($run.ExitCode -ne 0) { return @() }
+    $json = $run.Output
+    $sessions = @(ConvertFrom-DevboxJsonList -Json $json)
     return @($sessions | Where-Object { $_ } | ForEach-Object { ConvertTo-DevboxSyncProgress -Session $_ })
 }
 
@@ -754,7 +821,7 @@ function Show-DevboxSyncProgress {
 function Show-DevboxSyncFailure {
     param([Parameter(Mandatory)][string]$Session)
     $mutagen = Get-DevboxMutagenExe
-    $json = (& $mutagen sync list --template '{{json .}}' $Session 2>&1 | Out-String)
+    $json = (Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list', '--template', '{{json .}}', $Session)).Output
     $info = Get-DevboxSyncProgress -Json $json
     if (-not $info) {
         Write-DevboxWarning "The session '$Session' could not be read. Check it with: dkdb-mutagen-status"
@@ -766,18 +833,24 @@ function Show-DevboxSyncFailure {
     Write-DevboxNext 'Next: dkdb-mutagen-status shows the details and the progress; run it again to see whether it moves.'
 }
 
-# --- Incremental synchronization (-SyncOff, -SyncFolder) ---
+# --- Incremental synchronization (-SyncOff, -SyncAll, -SyncFolder) ---
 
-# The sync switches of start, connect and dkdb-mutagen-sync are native PowerShell parameters
-# (-SyncOff, -SyncFolder a,b); this only normalizes them and checks that they do not contradict each
-# other. Returns SyncOff, Folders and Error.
+# The sync parameters of start, connect and dkdb-mutagen-sync are native PowerShell parameters; this
+# normalizes them and checks that they do not contradict each other. By default (no parameter) Mutagen
+# is NOT touched: Mode is 'Off' (also for an explicit -SyncOff), 'All' (-SyncAll) or 'Folders'
+# (-SyncFolder). Returns Mode, SyncOff, SyncAll, Folders and Error.
 function Get-DevboxSyncOptions {
     param(
         [bool]$SyncOff = $false,
+        [bool]$SyncAll = $false,
         [string[]]$SyncFolder = @()
     )
-    $options = [pscustomobject]@{ SyncOff = $SyncOff; Folders = @($SyncFolder | Where-Object { $_ }); Error = $null }
-    if ($options.SyncOff -and $options.Folders.Count -gt 0) { $options.Error = '-SyncOff and -SyncFolder cannot be used together' }
+    $folders = @($SyncFolder | Where-Object { $_ })
+    $mode = 'Off'
+    if ($SyncAll) { $mode = 'All' } elseif ($folders.Count -gt 0) { $mode = 'Folders' }
+    $options = [pscustomobject]@{ Mode = $mode; SyncOff = $SyncOff; SyncAll = $SyncAll; Folders = $folders; Error = $null }
+    $chosen = ([int]$SyncOff) + ([int]$SyncAll) + ([int]($folders.Count -gt 0))
+    if ($chosen -gt 1) { $options.Error = '-SyncOff, -SyncAll and -SyncFolder cannot be used together' }
     return $options
 }
 
@@ -889,20 +962,51 @@ function Get-DevboxContainerSessionNames {
     return $names
 }
 
-# Start the synchronization of the projects of a Mutagen container.
-#   No -Folders: the session of the whole projects folder is created or resumed. If there are only
-#     sessions of folders (see below), those are resumed and the whole-folder session is not created.
+# Level 1 of the synchronization ladder (nothing is synchronized): for a Mutagen container the
+# daemon is started, so that it is available, and the sessions that already exist are PAUSED (an
+# active session reconnects by itself when its container is up). Nothing is created, resumed or
+# flushed. Returns $true on success; prints the reason and returns $false otherwise.
+function Suspend-DevboxSyncSessions {
+    param([Parameter(Mandatory)][string]$Container)
+    if (-not (Test-DevboxMutagen)) {
+        Write-DevboxWarning 'Warning: mutagen.exe was not found (dkdb-container-create installs it on demand): nothing is synchronized.'
+        return $false
+    }
+    if (-not (Start-DevboxMutagenDaemon)) {
+        Write-DevboxWarning 'Error: the Mutagen daemon could not be started.'
+        return $false
+    }
+    $mutagen = Get-DevboxMutagenExe
+    $paused = 0
+    foreach ($session in @(Get-DevboxContainerSyncSessions -Container $Container)) {
+        if ($session.Paused) { continue }
+        & $mutagen sync pause $session.Name *> $null
+        if ($LASTEXITCODE -eq 0) { $paused++ }
+        else { Write-DevboxWarning "Warning: could not pause the Mutagen session '$($session.Name)'." }
+    }
+    if ($paused -gt 0) { Write-Host "The Mutagen daemon is running; $paused session(s) of '$Container' paused: nothing is synchronized." }
+    else { Write-Host 'The Mutagen daemon is running; nothing is synchronized.' }
+    return $true
+}
+
+# Start the synchronization of the projects of a Mutagen container. It is only called when the user
+# asks for it (-SyncAll or -SyncFolder); nothing is synchronized by default.
+#   -All: the session of the whole projects folder is created or resumed. If only folder sessions
+#     exist, asks [y/N] before terminating them (the files are not touched) and replacing them.
 #   -Folders: one session per folder (relative to the projects path, or absolute inside it), added
-#     to the ones that already exist: a folder inside another synchronized one is skipped, one that
-#     contains synchronized folders is refused, and with the whole-folder session active nothing is added.
+#     to the ones that already exist: a folder already synchronized is resumed, one inside another
+#     synchronized folder is skipped, one that contains synchronized folders is refused, and with
+#     the whole-folder session active nothing is added.
 # A session is flushed when it was just created or when -Flush is given. Returns $true on success;
 # prints the reason and returns $false otherwise.
 function Start-DevboxSync {
     param(
         [Parameter(Mandatory)][string]$Container,
         [switch]$Flush,
+        [switch]$All,
         [string[]]$Folders = @()
     )
+    if (-not $All -and $Folders.Count -eq 0) { return $true }
     $user = Get-DevboxContainerUser -Container $Container
     $hostPath = Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_SYNC_PATH'
     # The sessions and their docker endpoints use the container ID, not the name: a recreated
@@ -935,16 +1039,23 @@ function Start-DevboxSync {
         return $false
     }
     $betaRoot = "docker://$user@$containerId/home/$user/devbox/projects"
-    $all = @(Get-DevboxContainerSyncSessions -Container $Container)
-    $main = @($all | Where-Object { $_.Name -eq $session })
-    $folderSessions = @($all | Where-Object { $_.Name -ne $session })
+    $current = @(Get-DevboxContainerSyncSessions -Container $Container)
+    $main = @($current | Where-Object { $_.Name -eq $session })
+    $folderSessions = @($current | Where-Object { $_.Name -ne $session })
 
     # --- The whole projects folder ---
-    if ($Folders.Count -eq 0) {
+    if ($All) {
         if ($main.Count -gt 0) { return (Resume-DevboxSyncSessions -Names @($session) -Flush:$Flush) }
         if ($folderSessions.Count -gt 0) {
-            Write-Host "Resuming the $($folderSessions.Count) synchronized folder(s) of '$Container' (dkdb-mutagen-sync synchronizes everything)."
-            return (Resume-DevboxSyncSessions -Names @($folderSessions | ForEach-Object { $_.Name }) -Flush:$Flush)
+            Write-DevboxWarning "'$Container' synchronizes only these folders:"
+            $folderSessions | ForEach-Object { Write-Host "  $($_.AlphaPath)" }
+            $answer = Read-Host 'Synchronizing everything replaces them (the files are not touched). Terminate those sessions and continue? [y/N]'
+            if ($answer -notmatch '^[yY]$') {
+                Write-Host 'Cancelled: the folder sessions were kept.'
+                return $false
+            }
+            $mutagen = Get-DevboxMutagenExe
+            foreach ($folderSession in $folderSessions) { & $mutagen sync terminate $folderSession.Name *> $null }
         }
         if (-not (New-DevboxSyncSession -Name $session -Alpha $hostPath -Beta $betaRoot -User $user)) {
             Write-DevboxWarning "Error: could not create the Mutagen session '$session'."
@@ -987,7 +1098,7 @@ function Start-DevboxSync {
         elseif ($coveredBy.Count -gt 0) { Write-Host "'$relative' is already covered by the synchronized folder '$($coveredBy[0].Relative)'." }
         elseif ($contains.Count -gt 0) {
             Write-DevboxWarning "Error: '$relative' contains the synchronized folder(s): $(($contains | ForEach-Object { $_.Relative }) -join ', ')."
-            Write-DevboxNext "Next: terminate those sessions first (mutagen sync terminate $(($contains | ForEach-Object { $_.Name }) -join ' ')) or synchronize everything with dkdb-mutagen-sync."
+            Write-DevboxNext "Next: terminate those sessions first (mutagen sync terminate $(($contains | ForEach-Object { $_.Name }) -join ' ')) or synchronize everything with -SyncAll."
             $refused = $true
         } else {
             $planned += [pscustomobject]@{ Relative = $relative }

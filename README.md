@@ -69,7 +69,7 @@ From any folder, in a new terminal:
 |---|---------|--------------|
 | 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
 | 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path and the projects volume type: Docker bind mount or Mutagen). |
-| 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container it also synchronizes the projects: everything, or with `-SyncOff` nothing, or with `-SyncFolder <path>[,<path>...]` only those folders. |
+| 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container the projects are **not** synchronized by default: add `-SyncAll` (everything) or `-SyncFolder <path>[,<path>...]` (only those folders). |
 | 4 | `dkdb-container-connect` | Opens a shell in a running container; the same sync parameters as `dkdb-container-start`. |
 | 5 | `dkdb-container-stop` | Stops a running container. |
 | 6 | `dkdb-container-delete` | Deletes a stopped container (asks for confirmation). |
@@ -79,25 +79,35 @@ From any folder, in a new terminal:
 | 10 | `dkdb-mutagen-status` | Shows the sync state, conflicts and progress (`So far X of Y files`, and whether it moved since the previous query) of a Mutagen container (menu). |
 | 11 | `dkdb-mutagen-clean` | Terminates leftover Mutagen sessions (container deleted outside the scripts, or daemon stopped at that time; menu, asks first). |
 | 12 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
-| 13 | `dkdb-mutagen-sync` | Synchronizes the projects of a running Mutagen container (menu): everything, or only the folders given with `-SyncFolder <path>[,<path>...]`, added one call at a time. |
+| 13 | `dkdb-mutagen-sync` | Synchronizes the projects of a running Mutagen container (menu): everything with `-SyncAll`, or only the folders of `-SyncFolder <path>[,<path>...]`, added one call at a time. One of them is required. |
 | 14 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers. |
 | 15 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes and Mutagen. |
 
-### Incremental synchronization (Mutagen)
+### Synchronization with Mutagen
 
-A very large projects folder can make the full first synchronization slow or fail. Instead of synchronizing everything, add folders one by one, as many times as you need:
+Three levels, from the most to the least conservative, because the last one can take very long:
+
+| # | Level | Parameter | What happens |
+|---|-------|-----------|--------------|
+| 1 | Nothing (the default) | none, or `-SyncOff` | The Mutagen daemon is started and the sessions that already exist are **paused**. Nothing is created and nothing is synchronized. |
+| 2 | Some folders | `-SyncFolder <path>[,<path>...]` | Only those folders are synchronized, added to the ones already synchronized. |
+| 3 | Everything | `-SyncAll` | The whole projects folder. |
 
 ```powershell
-dkdb-container-start -SyncFolder repo1          # start and synchronize only repo1
+dkdb-container-start                            # level 1: starts the container and the daemon, nothing is synchronized
+dkdb-container-start -SyncFolder repo1          # level 2: only repo1
 dkdb-mutagen-sync -SyncFolder repo2             # add repo2 to the synchronized folders
 dkdb-container-connect -SyncFolder repo3,repo4  # add repo3 and repo4 and open a shell
-dkdb-container-start -SyncOff                   # start without touching Mutagen
+dkdb-mutagen-sync -SyncAll                      # level 3: synchronize everything
 ```
 
-1. The path is relative to the projects folder (or absolute inside it) and must exist.
-2. Each folder has its own Mutagen session. Without switches, `start` and `connect` resume the synchronized folders (they do not create the whole-folder session); `dkdb-mutagen-sync` without switches synchronizes everything and asks before replacing the folder sessions.
-3. A folder inside one already synchronized is skipped; one that contains synchronized folders is refused (terminate those sessions first); with the whole-folder session active nothing is added.
-4. They are native PowerShell parameters: several folders go in one comma-separated list (`-SyncFolder repo1,repo2`); to add more later, run the command again. `-SyncOff` and `-SyncFolder` cannot be used together, and `-SyncOff` does not exist in `dkdb-mutagen-sync`.
+A very large projects folder can make the full first synchronization slow or fail; adding folders one by one avoids that.
+
+1. The three parameters exclude each other. `dkdb-mutagen-sync` has no default: without `-SyncFolder` or `-SyncAll` it shows its usage and does nothing.
+2. A folder path is relative to the projects folder (or absolute inside it) and must exist. Several folders go in one comma-separated list; to add more later, run the command again.
+3. **Sessions:** each folder has its own Mutagen session, named from the container and the folder, so starting and stopping the container with the same `-SyncFolder` reuses the same session; a different folder adds one more, and `-SyncAll` adds the whole-folder session. Stopping a container never touches Mutagen, and deleting it terminates its sessions.
+4. A level-2 run resumes or creates only the folders you name; other existing sessions stay as they are (paused or not). To keep several folders going, name them all.
+5. A folder inside one already synchronized is skipped; one that contains synchronized folders is refused (terminate those sessions first); with the whole-folder session active nothing is added; `-SyncAll` with only folder sessions asks before replacing them (the files are not touched).
 
 ### Help
 

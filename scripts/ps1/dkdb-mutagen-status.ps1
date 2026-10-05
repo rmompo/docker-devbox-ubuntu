@@ -1,5 +1,5 @@
 # Show the Mutagen sync status (state and conflicts) of a devbox container chosen from a menu.
-# Version: 0.1.3
+# Version: 0.1.4
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -47,7 +47,7 @@ $main = Get-DevboxSyncSessionName -Container $selected
 $mutagen = Get-DevboxMutagenExe
 $sessions = @(Get-DevboxContainerSyncSessions -Container $selected)
 if ($sessions.Count -eq 0) {
-    Write-DevboxNext "There is no Mutagen session for '$selected' yet: dkdb-container-start, dkdb-container-connect or dkdb-mutagen-sync create it."
+    Write-DevboxNext "There is no Mutagen session for '$selected' yet: dkdb-mutagen-sync (or -SyncAll / -SyncFolder on dkdb-container-start or dkdb-container-connect) creates it."
     exit 1
 }
 
@@ -60,10 +60,11 @@ foreach ($sessionInfo in $sessions) {
     if ($session -ne $main) { $label = "folder $($sessionInfo.AlphaPath)" }
     Write-Host ''
     Write-Host "=== $session ($label)"
-    $output = & $mutagen sync list $session 2>&1
-    $output | Out-Host
+    $listing = Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list', $session)
+    if ($listing.Output) { Write-Host $listing.Output.TrimEnd() }
+    if ($listing.Error) { Write-DevboxWarning $listing.Error.TrimEnd() }
     Write-Host ''
-    $json = (& $mutagen sync list --template '{{json .}}' $session 2>&1 | Out-String)
+    $json = (Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list', '--template', '{{json .}}', $session)).Output
     $progress = Get-DevboxSyncProgress -Json $json
     $complete = $false
     if ($progress) { $complete = Show-DevboxSyncProgress -Session $session -Progress $progress }

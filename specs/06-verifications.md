@@ -19,6 +19,12 @@
 | sudo | The `sudo` package is the classic sudo.ws 1.9.17; `sudo-rs` is only recommended, so it is not installed with `--no-install-recommends`. | https://packages.ubuntu.com/resolute/sudo |
 | Changes | `rust-coreutils` default (`cp`, `mv`, `rm` still GNU), APT 3 (`apt-key` removed), glibc 2.43, GCC 15. | https://documentation.ubuntu.com/release-notes/26.04/summary-for-lts-users/ |
 
+## Found on a real Windows PowerShell 5.1
+
+| Item | Result | Source |
+|---|---|---|
+| `dkdb-mutagen-status` with several sessions | It failed with `System.Object[]` cannot be converted to `Int64`: `ConvertFrom-Json` emits a JSON array as one object in 5.1 (element by element in PowerShell 7, which was the one used for the tests). Fixed with `ConvertFrom-DevboxJsonList`; the tests now simulate the 5.1 behavior. | Report of the project owner, 2026-10-06 |
+
 ## Re-verified (2026-10-05)
 
 | Item | Result | Source |
