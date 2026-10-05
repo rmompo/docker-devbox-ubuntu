@@ -10,7 +10,7 @@ A lightweight Ubuntu Docker image, managed with PowerShell scripts, for running 
 | 2 | Container | The user is created when the container is created (not in the image); the main process runs as that user. **One AI client per container.** |
 | 3 | PowerShell scripts | Create and delete images; create, start, stop, connect to and delete containers. |
 | 4 | Installer | `install/install.ps1`, the only file you download. It installs the rest. |
-| 5 | Volumes | `proyectos` (your projects) and `bash` (AI client installers, read-only). |
+| 5 | Volumes | `proyectos` (your projects) and `bash` (AI client installers, read-only). Optionally, `proyectos` can be synchronized with [Mutagen](https://mutagen.io) instead of a bind mount. |
 
 Conventions:
 
@@ -72,6 +72,8 @@ From any folder, in a new terminal:
 | 5 | `dkdb-container-stop` | Stops a running container. |
 | 6 | `dkdb-container-delete` | Deletes a stopped container (asks for confirmation). |
 | 7 | `dkdb-image-delete` | Deletes an image. |
+| 8 | `dkdb-mutagen-start` | Starts the Mutagen daemon if it is not running (optional Mutagen). |
+| 9 | `dkdb-mutagen-stop` | Stops the Mutagen daemon if it is running (stops all Mutagen sessions). |
 
 Containers created before the `bash` volume existed still mount the old `resources` folder; recreate them.
 
@@ -83,6 +85,8 @@ Containers created before the `bash` volume existed still mount the old `resourc
 | 2 | `<install path>\scripts\bash` (default: `C:\DataDocker\docker-devbox-ubuntu\scripts\bash`) | `~/devbox/bash` | read-only |
 
 The `bash` path is not asked: it is the `scripts\bash` folder next to the scripts, so it follows the install path you chose (the default install path gives the value shown above). The projects path must already exist; nothing is created for you.
+
+**Mutagen (optional):** `dkdb-container-create` asks whether the projects volume is a Docker bind mount or a Mutagen sync. If you pick Mutagen and it is not installed, the script asks before downloading it (about 100 MB, checksum verified, into `<install path>\mutagen`). With Mutagen, `~/devbox/proyectos` is a folder inside the container, kept in sync with the host projects path (everything, including `.git`; only symbolic links are ignored), and `dkdb-container-start` creates or resumes the session. Nothing else has to be run. Mutagen is third-party and is downloaded from its official release (MIT, with SSPL-licensed parts); see [spec 08](specs/08-mutagen.md).
 
 ## Repository layout
 
@@ -112,3 +116,4 @@ Each spec follows the pattern **Context -> Reasoning -> Decision -> Consequences
 | 05 | [AI client installation](specs/05-ai-clients.md) | Bash scripts for Claude Code and Copilot CLI |
 | 06 | [Verifications and open items](specs/06-verifications.md) | Checks already done and items still to validate |
 | 07 | [Installer](specs/07-installer.md) | install.ps1: download, install path, PATH |
+| 08 | [Mutagen](specs/08-mutagen.md) | Optional projects sync (avoids slow 9p mounts) |

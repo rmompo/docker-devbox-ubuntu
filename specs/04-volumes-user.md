@@ -15,6 +15,7 @@ VS Code and Docker must point to the same projects folder on the host. The conta
 - **Host paths** (projects is asked when creating the container):
   - Projects: `C:\Localfiles\proyectos\`
   - Bash: not asked; it is `<install path>\scripts\bash`, mounted `readonly` (the container cannot modify the installers).
+- **Mutagen (optional, spec 08):** instead of the projects bind mount, `~/devbox/proyectos` is a folder inside the container synchronized with the host projects path.
 - **Container targets:** `/home/<user>/devbox/proyectos` and `/home/<user>/devbox/bash`.
 - **Missing path:** `dkdb-container-create` aborts with an error and creates nothing.
 - **User:** `dkdb-<input>`; by default, the full container name. It is validated (lowercase, at most 32 characters) before creating anything.

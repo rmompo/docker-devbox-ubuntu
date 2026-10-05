@@ -1,4 +1,5 @@
 # Stop one running devbox container chosen from a menu.
+# It never touches Mutagen (daemon or session): see dkdb-mutagen-stop for that.
 . "$PSScriptRoot\dkdb-common.ps1"
 Assert-DevboxDocker
 

@@ -23,6 +23,8 @@ $Files = @(
     'scripts/ps1/dkdb-container-stop.ps1'
     'scripts/ps1/dkdb-image-create.ps1'
     'scripts/ps1/dkdb-image-delete.ps1'
+    'scripts/ps1/dkdb-mutagen-start.ps1'
+    'scripts/ps1/dkdb-mutagen-stop.ps1'
 )
 
 # Files installed by earlier versions under their old names (before the dkdb-
@@ -54,6 +56,26 @@ function Confirm-Install {
     param([Parameter(Mandatory)][string]$Question)
     $answer = Read-Host "$Question [y/N]"
     return ($answer.Trim() -match '^(y|yes)$')
+}
+
+# Add a folder to the user PATH (registry) and to this session, without duplicates.
+function Add-InstallUserPath {
+    param([Parameter(Mandatory)][string]$Folder)
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $entries = @()
+    if (-not [string]::IsNullOrEmpty($userPath)) {
+        $entries = @($userPath -split ';' | Where-Object { $_ -ne '' })
+    }
+    if ($entries | Where-Object { $_.TrimEnd('\') -ieq $Folder.TrimEnd('\') }) {
+        Write-Host "PATH (user) already contains $Folder"
+    } else {
+        [Environment]::SetEnvironmentVariable('Path', (($entries + $Folder) -join ';'), 'User')
+        Write-Host "Added to the user PATH: $Folder"
+    }
+    $sessionEntries = @($env:Path -split ';' | Where-Object { $_ -ne '' })
+    if (-not ($sessionEntries | Where-Object { $_.TrimEnd('\') -ieq $Folder.TrimEnd('\') })) {
+        $env:Path = "$env:Path;$Folder"
+    }
 }
 
 # Raw URL of the repository: https://github.com/<user>/<repo> -> raw.githubusercontent.com/<user>/<repo>
@@ -126,24 +148,7 @@ if ($oldFound.Count -gt 0) {
 }
 
 # --- User PATH ---
-$ps1Path = Join-Path $scriptsPath 'ps1'
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-$entries = @()
-if (-not [string]::IsNullOrEmpty($userPath)) {
-    $entries = @($userPath -split ';' | Where-Object { $_ -ne '' })
-}
-$alreadyInPath = $entries | Where-Object { $_.TrimEnd('\') -ieq $ps1Path.TrimEnd('\') }
-if ($alreadyInPath) {
-    Write-Host "PATH (user) already contains $ps1Path"
-} else {
-    [Environment]::SetEnvironmentVariable('Path', (($entries + $ps1Path) -join ';'), 'User')
-    Write-Host "Added to the user PATH: $ps1Path"
-}
-# Also make it available in this session.
-$sessionEntries = @($env:Path -split ';' | Where-Object { $_ -ne '' })
-if (-not ($sessionEntries | Where-Object { $_.TrimEnd('\') -ieq $ps1Path.TrimEnd('\') })) {
-    $env:Path = "$env:Path;$ps1Path"
-}
+Add-InstallUserPath -Folder (Join-Path $scriptsPath 'ps1')
 
 # --- Execution policy (warn only, never change it) ---
 $policy = Get-ExecutionPolicy

@@ -20,6 +20,15 @@ if (-not $userName) {
     exit 1
 }
 
+# Mutagen container: make sure the daemon is running and the sync session is active
+# (nothing does it when the container was started with plain docker).
+# The shell opens even if this fails.
+if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
+    if (-not (Start-DevboxSync -Container $selected)) {
+        Write-Host 'Opening the shell anyway, but the projects are NOT synchronized.' -ForegroundColor Yellow
+    }
+}
+
 # TERM is set explicitly: without it, docker exec may give a plain "xterm" and
 # the default Ubuntu .bashrc then shows no colored prompt.
 docker exec -it -u $userName -w "/home/$userName" -e TERM=xterm-256color -e COLORTERM=truecolor $selected bash
