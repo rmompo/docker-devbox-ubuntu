@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.9
+# Version: 0.5.10
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -93,7 +93,7 @@ $DevboxSyncMenuMan = @(
     'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: None (the first option and the default), Add (relative), Add (absolute), All registered or Custom.',
     'None pauses every session of the container: nothing is synchronized.',
     'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; %VAR% (for example %USERPROFILE%) and ~ are accepted for the host folder (your Windows user folder) and $HOME and ~ for the folder of the container (/home/<user>); they are stored resolved, not recalculated later.',
-    'Every Add and every activation checks both folders: if the host folder does not exist the operation is aborted; if the folder of the container exists it is used (a warning on Add), and if it does not exist you are asked whether to create it.',
+    'Every Add and every activation checks both folders: if a folder does not exist on the host you are asked whether to create it (No aborts); if the folder of the container exists it is used (a warning on Add), and if it does not exist you are asked whether to create it.',
     'A new folder is activated and added to what is already active, so several folders can be synchronized at once. Activating one that covers active sessions pauses them; choosing one that is inside an active session changes nothing (somebody may be using it).',
     'All registered activates the registered sessions that are not inside another one. A session of the whole projects folder is never created by the menu.',
     'Custom (shown when sessions are registered) is a checklist: Space checks or unchecks, Enter applies. The checked sessions are active and the unchecked ones paused. If two checked folders overlap, it warns and changes nothing.',
@@ -1071,7 +1071,7 @@ function Show-DevboxSyncFailure {
 
 # --- Incremental synchronization (menu of Invoke-DevboxSyncPick, spec 08) ---
 # A folder of the projects path: relative to it, or absolute inside it. Returns Relative (with
-# '/'), Full and Error (empty when the folder is valid: it exists and is inside the projects path).
+# '/'), Full and Error (empty when the folder is inside the projects path; it may not exist yet: the caller asks to create it).
 function Resolve-DevboxSyncFolder {
     param([Parameter(Mandatory)][string]$HostPath, [Parameter(Mandatory)][string]$Folder)
     $separator = [System.IO.Path]::DirectorySeparatorChar
@@ -1083,10 +1083,6 @@ function Resolve-DevboxSyncFolder {
     # Windows paths are case-insensitive.
     if ($full.Length -le $base.Length -or -not $full.StartsWith($base + $separator, [System.StringComparison]::OrdinalIgnoreCase)) {
         $result.Error = "it must be a folder inside the projects folder ($base); use Add (absolute) for a folder elsewhere"
-        return $result
-    }
-    if (-not (Test-Path -LiteralPath $full -PathType Container)) {
-        $result.Error = "the folder does not exist: $full"
         return $result
     }
     $result.Relative = ($full.Substring($base.Length + 1)) -replace '\\', '/'
@@ -1398,7 +1394,7 @@ function Confirm-DevboxContainerFolder {
         if (-not $Quiet) { Write-DevboxWarning "Warning: the folder already exists in the container and will be used: $Path" }
         return $true
     }
-    $answer = Read-DevboxLine "The folder does not exist in the container: $Path. Create it? [y/N] (Esc cancels)"
+    $answer = Read-DevboxLine "The folder does not exist in the container: $Path. Create it? [y/N] (Esc cancels)" -Badge 'CONTAINER' -BadgeColor $DevboxContainerColor
     if ($null -eq $answer) {
         Write-Host 'Cancelled: the folder was not created.'
         return $false
@@ -1416,14 +1412,34 @@ function Confirm-DevboxContainerFolder {
     return $true
 }
 
+# The host folder of a session must exist: when it does the script goes on; when it does not, it asks
+# whether to create it and aborts (returns $false) if the answer is not yes (Esc cancels).
+function Confirm-DevboxHostFolder {
+    param([Parameter(Mandatory)][string]$Path)
+    if (Test-Path -LiteralPath $Path -PathType Container) { return $true }
+    $answer = Read-DevboxLine "The folder does not exist on the host: $Path. Create it? [y/N] (Esc cancels)" -Badge 'HOST' -BadgeColor $DevboxHostColor
+    if ($null -eq $answer) {
+        Write-Host 'Cancelled: the folder was not created.'
+        return $false
+    }
+    if ($answer -notmatch '^\s*(y|yes)\s*$') {
+        Write-DevboxWarning "Error: the folder does not exist on the host and was not created: $Path. Operation aborted."
+        return $false
+    }
+    try { $null = New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop }
+    catch {
+        Write-DevboxWarning "Error: could not create the folder on the host: $Path. Operation aborted."
+        return $false
+    }
+    Write-DevboxSuccess "Folder created on the host: $Path"
+    return $true
+}
+
 # Both folders of a session must exist before it is activated: the host one (otherwise the operation is
 # aborted) and the one of the container (created after asking when missing).
 function Test-DevboxSessionFolders {
     param([Parameter(Mandatory)][string]$Container, [Parameter(Mandatory)][string]$User, [Parameter(Mandatory)]$Session)
-    if (-not (Test-Path -LiteralPath $Session.Alpha -PathType Container)) {
-        Write-DevboxWarning "Error: the host folder of '$($Session.Label)' does not exist: $($Session.Alpha). Operation aborted."
-        return $false
-    }
+    if (-not (Confirm-DevboxHostFolder -Path $Session.Alpha)) { return $false }
     return (Confirm-DevboxContainerFolder -Container $Container -User $User -Path $Session.Beta -Quiet)
 }
 
@@ -1475,10 +1491,7 @@ function Register-DevboxSyncFolder {
         [Parameter(Mandatory)][string]$NameKey
     )
     $result = [pscustomobject]@{ Status = 'failed'; Target = $null }
-    if (-not (Test-Path -LiteralPath $Alpha -PathType Container)) {
-        Write-DevboxWarning "Error: the host folder does not exist: $Alpha. Nothing was done."
-        return $result
-    }
+    if (-not (Confirm-DevboxHostFolder -Path $Alpha)) { return $result }
     $alphaKey = ConvertTo-DevboxHostKey -Path $Alpha
     $sameBeta = @($Sessions | Where-Object { $_.Beta -ieq $Beta })
     foreach ($item in $sameBeta) {
