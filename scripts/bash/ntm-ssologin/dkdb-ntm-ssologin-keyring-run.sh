@@ -1,9 +1,9 @@
 #!/bin/bash
-# Version: 0.1.0
+# Version: 0.1.1
 # Run a command inside a private D-Bus session with the GNOME keyring unlocked (default command: claude).
 # ia4d keeps its session (jwt_token, refresh_token...) in the keyring (Secret Service over D-Bus), so the
 # ia4d installer and Claude Code (its plugins and hooks) must run inside such a session to find it.
-# Installed as ~/.local/bin/dkdb-keyring-run by dkdb-ia4d.sh setup. ASCII only, English only, LF line endings.
+# Installed as ~/.local/bin/dkdb-keyring-run by dkdb-ntm-ssologin-ia4d.sh setup. ASCII only, English only, LF line endings.
 set -uo pipefail
 
 case "${1:-}" in
@@ -22,7 +22,7 @@ fi
 
 for tool in dbus-daemon gnome-keyring-daemon; do
     if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "dkdb-keyring-run: $tool is missing; run: bash dkdb-ia4d.sh setup" >&2
+        echo "dkdb-keyring-run: $tool is missing; run: bash dkdb-ntm-ssologin-ia4d.sh setup" >&2
         exit 127
     fi
 done

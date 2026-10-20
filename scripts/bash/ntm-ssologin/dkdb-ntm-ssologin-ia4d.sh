@@ -1,8 +1,8 @@
 #!/bin/bash
-# Version: 0.4.1
+# Version: 0.4.3
 # ia4d (ntm GenAI Suite) for Claude Code in this container: keyring, login (credential renewal) and installer.
-# Exclusive to the ntm Claude Code containers. Repo: scripts/bash/ntmsso-iagentic/, seen in the container (read-only)
-# as ~/devbox/bash/ntmsso-iagentic/. Run with: bash ~/devbox/bash/ntmsso-iagentic/dkdb-ia4d.sh [all | status | setup | login | renew | install]
+# Exclusive to the ntm Claude Code containers. Repo: scripts/bash/ntm-ssologin/, seen in the container (read-only)
+# as ~/devbox/bash/ntm-ssologin/. Run with: bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh [all | status | setup | login | renew | install]
 # ASCII only, English only, LF line endings (see specs/01-conventions.md). The manual is in README.md.
 set -uo pipefail
 
@@ -58,7 +58,7 @@ manual() {
     printf '%s\n' 'The ia4d installer keeps its session in the keyring (Secret Service over D-Bus), which a container does not have; the ia4d plugins use ~/.ia4d/.infra-token and .infra-refresh-token (5 days, renewed by the plugins). This script provides the keyring, logs in through the ia4d SSO bridge (it writes both) and runs the installer. README.md (same folder) explains why and how.' | fold -s -w 92 | sed 's/ *$//; s/^/    /'
     printf '\n%sWHAT IT DOES%s\n' "$c_cyan" "$c_off"
     item 'setup 1.' 'Checks dbus-daemon, gnome-keyring-daemon, secret-tool, script and curl; installs the missing ones with dkdb-install-tools.sh (sudo apt-get). login, renew and install do this check first.'
-    item 'setup 2.' 'Copies dkdb-keyring-run.sh to ~/.local/bin/dkdb-keyring-run when it differs.'
+    item 'setup 2.' 'Copies dkdb-ntm-ssologin-keyring-run.sh to ~/.local/bin/dkdb-keyring-run when it differs.'
     item 'setup 3.' 'Tests the keyring: stores, reads and deletes a test secret.'
     item 'login 1.' 'Starts "ia4d-installer-linux login" in the background inside the keyring session and shows its SSO URL; when the installer says it is already authenticated, it stops there.'
     item 'login 2.' 'Asks for the http://localhost:PORT/callback?... address the browser could not open, without showing it, and sends it to the waiting installer with curl.'
@@ -151,8 +151,8 @@ step_setup() {
     ok "Tools: ok"
 
     mkdir -p "$(dirname "$runner")"
-    if ! cmp -s "$here/dkdb-keyring-run.sh" "$runner"; then
-        install -m 0755 "$here/dkdb-keyring-run.sh" "$runner" || { warn "Could not install $runner"; return 1; }
+    if ! cmp -s "$here/dkdb-ntm-ssologin-keyring-run.sh" "$runner"; then
+        install -m 0755 "$here/dkdb-ntm-ssologin-keyring-run.sh" "$runner" || { warn "Could not install $runner"; return 1; }
         ok "Installed $runner"
     else
         ok "Runner: $runner up to date"
@@ -287,7 +287,7 @@ step_status() {
     title 'status'
     missing="$(missing_packages | tr '\n' ' ' | sed 's/ *$//')"
     if [ -z "$missing" ]; then ok "  Tools          ok"; else warn "  Tools          missing: $missing ($self_cmd setup)"; failed=1; fi
-    if [ -x "$runner" ] && cmp -s "$here/dkdb-keyring-run.sh" "$runner"; then ok "  Runner         $runner"
+    if [ -x "$runner" ] && cmp -s "$here/dkdb-ntm-ssologin-keyring-run.sh" "$runner"; then ok "  Runner         $runner"
     else warn "  Runner         missing or outdated ($self_cmd setup)"; failed=1; fi
 
     # Decisive: what the ia4d plugins use. The access token lasts 1 hour and the plugins renew it with the
