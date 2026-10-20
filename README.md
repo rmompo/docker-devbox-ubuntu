@@ -87,11 +87,12 @@ From any folder, in a new terminal:
 | 9 | `dkdb-mutagen-stop` | Stops the Mutagen daemon if it is running (stops all Mutagen sessions). |
 | 10 | `dkdb-mutagen-status` | Shows the sync state, conflicts and progress (`So far X of Y files`, and whether it moved since the previous query) of a Mutagen container (menu, or `-Container <name>` to skip it). |
 | 11 | `dkdb-mutagen-clean` | Terminates leftover Mutagen sessions (container deleted outside the scripts, or daemon stopped at that time; menu, asks first). |
-| 12 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
-| 13 | `dkdb-mutagen-sync` | Chooses a running Mutagen container and shows the synchronization menu (the same one as start and connect). |
-| 14 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers. |
-| 15 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes and Mutagen. |
-| 16 | `dkdb-update` | Updates the installed scripts from the repository (`-Branch <name>` to use another branch or tag; default `main`). Only files whose version changed are replaced, after a `[y/N]`. |
+| 12 | `dkdb-mutagen-remove` | Removes one registered Mutagen session of a container: menu of the sessions with their state, then stops and terminates the chosen one after a `[y/N]` (`-Container <name>` skips the container menu). The folders are not touched. |
+| 13 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
+| 14 | `dkdb-mutagen-sync` | Chooses a running Mutagen container and shows the synchronization menu (the same one as start and connect). |
+| 15 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers. |
+| 16 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes and Mutagen. |
+| 17 | `dkdb-update` | Updates the installed scripts from the repository (`-Branch <name>` to use another branch or tag; default `main`). Only files whose version changed are replaced, after a `[y/N]`. |
 
 ### Synchronization with Mutagen
 
