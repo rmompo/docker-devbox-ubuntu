@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.1
+# Version: 0.5.4
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -347,6 +347,43 @@ function Write-DevboxWarning {
 function Write-DevboxNext {
     param([string]$Text)
     Write-Host $Text -ForegroundColor Yellow
+}
+
+# One line of the list of registered syncs: [active] in green, [paused] in yellow, then the label.
+function Write-DevboxSyncLine {
+    param([Parameter(Mandatory)]$Session)
+    $state = if ($Session.Paused) { 'paused' } else { 'active' }
+    $color = if ($Session.Paused) { 'Yellow' } else { 'Green' }
+    Write-Host '  ' -NoNewline
+    Write-Host "[$state]" -ForegroundColor $color -NoNewline
+    Write-Host " $($Session.Label)"
+}
+
+# Like Read-Host, but Esc cancels: returns $null on Esc, the typed text (maybe empty) on Enter.
+function Read-DevboxLine {
+    param([Parameter(Mandatory)][string]$Prompt)
+    if ([Console]::IsInputRedirected) { return (Read-Host $Prompt) }
+    Write-Host "${Prompt}: " -NoNewline
+    $buffer = New-Object System.Text.StringBuilder
+    while ($true) {
+        $key = [Console]::ReadKey($true)
+        switch ($key.Key) {
+            'Enter' { Write-Host ''; return $buffer.ToString() }
+            'Escape' { Write-Host ''; return $null }
+            'Backspace' {
+                if ($buffer.Length -gt 0) {
+                    $null = $buffer.Remove($buffer.Length - 1, 1)
+                    Write-Host "`b `b" -NoNewline
+                }
+            }
+            default {
+                if ($key.KeyChar -and -not [char]::IsControl($key.KeyChar)) {
+                    $null = $buffer.Append($key.KeyChar)
+                    Write-Host $key.KeyChar -NoNewline
+                }
+            }
+        }
+    }
 }
 
 function Assert-DevboxDocker {
@@ -1289,7 +1326,11 @@ function Confirm-DevboxContainerFolder {
         if (-not $Quiet) { Write-DevboxWarning "Warning: the folder already exists in the container and will be used: $Path" }
         return $true
     }
-    $answer = Read-Host "The folder does not exist in the container: $Path. Create it? [y/N]"
+    $answer = Read-DevboxLine "The folder does not exist in the container: $Path. Create it? [y/N] (Esc cancels)"
+    if ($null -eq $answer) {
+        Write-Host 'Cancelled: the folder was not created.'
+        return $false
+    }
     if ($answer -notmatch '^\s*(y|yes)\s*$') {
         Write-DevboxWarning "Error: the folder does not exist in the container and was not created: $Path. Operation aborted."
         return $false
@@ -1417,7 +1458,7 @@ function Register-DevboxSyncFolder {
 # Returns Ok ($false on failure; the reason is printed) and Active ($true when something is synchronized).
 function Invoke-DevboxSyncPickCore {
     param([Parameter(Mandatory)][string]$Container, [switch]$Flush)
-    $result = [pscustomobject]@{ Ok = $true; Active = $false }
+    $result = [pscustomobject]@{ Ok = $true; Active = $false; Cancelled = $false }
     $fail = { $result.Ok = $false; return $result }
     $user = Get-DevboxContainerUser -Container $Container
     $hostPath = Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_SYNC_PATH'
@@ -1461,7 +1502,7 @@ function Invoke-DevboxSyncPickCore {
     if ($sessions.Count -gt 0) {
         Write-Host "Registered syncs in '$Container':"
         foreach ($item in @($sessions | Sort-Object { $_.Label })) {
-            Write-Host "  [$(if ($item.Paused) { 'paused' } else { 'active' })] $($item.Label)"
+            Write-DevboxSyncLine -Session $item
         }
     }
     else {
@@ -1470,6 +1511,7 @@ function Invoke-DevboxSyncPickCore {
     $choice = Select-DevboxItem -Title "Select what to synchronize in '$Container':" -Items $labels
     if (-not $choice) {
         Write-Host 'Cancelled: nothing was changed.'
+        $result.Cancelled = $true
         return $result
     }
     if ($choice -eq $noneItem) {
@@ -1497,6 +1539,7 @@ function Invoke-DevboxSyncPickCore {
         $picked = Select-DevboxItems -Title "Check the folders to keep synchronized in '$Container' (the others are paused):" -Items $itemLabels -Checked $initial
         if ($picked.Cancelled) {
             Write-Host 'Cancelled: nothing was changed.'
+            $result.Cancelled = $true
             return $result
         }
         $chosen = @($picked.Indexes | ForEach-Object { $ordered[$_] })
@@ -1531,9 +1574,10 @@ function Invoke-DevboxSyncPickCore {
     }
 
     if ($choice -eq $relativeItem) {
-        $typed = Read-Host 'Folder to add (relative to the host projects folder, or absolute inside it; empty cancels)'
+        $typed = Read-DevboxLine 'Folder to add (relative to the host projects folder, or absolute inside it; Esc or empty cancels)'
         if (-not $typed -or -not $typed.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'
+            $result.Cancelled = $true
             return $result
         }
         $resolved = Resolve-DevboxSyncFolder -HostPath $hostPath -Folder $typed
@@ -1546,9 +1590,10 @@ function Invoke-DevboxSyncPickCore {
         $label = $resolved.Relative
         $nameKey = $resolved.Relative
     } else {
-        $typedHost = Read-Host 'Host folder to add (absolute path; empty cancels)'
+        $typedHost = Read-DevboxLine 'Host folder to add (absolute path; Esc or empty cancels)'
         if (-not $typedHost -or -not $typedHost.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'
+            $result.Cancelled = $true
             return $result
         }
         $alpha = $typedHost.Trim().Trim('"')
@@ -1557,9 +1602,10 @@ function Invoke-DevboxSyncPickCore {
             return (& $fail)
         }
         $alpha = [System.IO.Path]::GetFullPath($alpha).TrimEnd('\', '/')
-        $typedBeta = Read-Host 'Folder in the container (absolute Linux path, or starting with ~/; empty cancels)'
+        $typedBeta = Read-DevboxLine 'Folder in the container (absolute Linux path, or starting with ~/; Esc or empty cancels)'
         if (-not $typedBeta -or -not $typedBeta.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'
+            $result.Cancelled = $true
             return $result
         }
         $beta = $typedBeta.Trim().Trim('"')

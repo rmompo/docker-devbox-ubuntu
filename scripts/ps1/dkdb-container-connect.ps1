@@ -1,5 +1,5 @@
 # Open a bash shell, as the container's user, in a running devbox container.
-# Version: 0.5.0
+# Version: 0.5.1
 # For a Mutagen container a menu chooses what to synchronize (None is the first option and the default).
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -75,6 +75,7 @@ $null = Test-DevboxContainerVersion -Container $selected
 # The shell opens even if this fails.
 if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
     $pick = Invoke-DevboxSyncPick -Container $selected
+    if ($pick.Cancelled) { exit 0 }
     if (-not $pick.Ok) {
         Write-DevboxWarning 'Opening the shell anyway, but the projects are NOT synchronized.'
     }

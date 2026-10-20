@@ -1,5 +1,5 @@
 # Synchronize the projects of a running Mutagen container chosen from a menu.
-# Version: 0.5.0
+# Version: 0.5.1
 # A menu chooses what to synchronize: None, Add (relative), Add (absolute), All or Custom.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -64,6 +64,7 @@ if (-not $selected) {
 $null = Test-DevboxContainerVersion -Container $selected
 
 $pick = Invoke-DevboxSyncPick -Container $selected -Flush
+if ($pick.Cancelled) { exit 0 }
 if (-not $pick.Ok) {
     Write-DevboxWarning 'The projects are NOT synchronized.'
     exit 1
