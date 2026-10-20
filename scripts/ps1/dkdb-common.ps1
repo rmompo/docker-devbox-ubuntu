@@ -1,12 +1,5 @@
-# Write text without a line break, in a console color, or in the default color when Color is empty.
-function Write-DevboxColored {
-    param([string]$Text, [string]$Color)
-    if ($Color) { Write-Host $Text -NoNewline -ForegroundColor $Color }
-    else { Write-Host $Text -NoNewline }
-}
-
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.7
+# Version: 0.5.9
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -99,7 +92,7 @@ function Show-DevboxHelp {
 $DevboxSyncMenuMan = @(
     'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: None (the first option and the default), Add (relative), Add (absolute), All registered or Custom.',
     'None pauses every session of the container: nothing is synchronized.',
-    'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; $USERPROFILE, %USERPROFILE%, $HOME and ~ are accepted in both (your user folder on the host, /home/<user> in the container) and are stored resolved, not recalculated later.',
+    'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; %VAR% (for example %USERPROFILE%) and ~ are accepted for the host folder (your Windows user folder) and $HOME and ~ for the folder of the container (/home/<user>); they are stored resolved, not recalculated later.',
     'Every Add and every activation checks both folders: if the host folder does not exist the operation is aborted; if the folder of the container exists it is used (a warning on Add), and if it does not exist you are asked whether to create it.',
     'A new folder is activated and added to what is already active, so several folders can be synchronized at once. Activating one that covers active sessions pauses them; choosing one that is inside an active session changes nothing (somebody may be using it).',
     'All registered activates the registered sessions that are not inside another one. A session of the whole projects folder is never created by the menu.',
@@ -368,8 +361,9 @@ function Write-DevboxSyncLine {
 
 # Like Read-Host, but Esc cancels: returns $null on Esc, the typed text (maybe empty) on Enter.
 function Read-DevboxLine {
-    param([Parameter(Mandatory)][string]$Prompt)
+    param([Parameter(Mandatory)][string]$Prompt, [string]$Badge, [string]$BadgeColor)
     if ([Console]::IsInputRedirected) { return (Read-Host $Prompt) }
+    if ($Badge) { Write-DevboxSideBadge -Text $Badge -Color $BadgeColor; Write-Host ' ' -NoNewline }
     Write-Host "${Prompt}: " -NoNewline
     $buffer = New-Object System.Text.StringBuilder
     while ($true) {
@@ -393,28 +387,48 @@ function Read-DevboxLine {
     }
 }
 
-# Expand what a user types as a host folder: %USERPROFILE%, $USERPROFILE and $HOME (all the user profile
-# folder), any other %VAR% or $env:VAR, and a leading ~. The result is what gets stored (it is not
-# calculated again later).
+# Colors that tie a prompt to its side: the HOST badge and the symbols % and ~ of the host, the CONTAINER
+# badge and the symbols $ and ~ of the container.
+$DevboxHostColor = 'Cyan'
+$DevboxContainerColor = 'Magenta'
+
+# Expand what a user types as a host (Windows) folder: %VAR% (for example %USERPROFILE%) and a leading ~
+# (the user profile folder). $ is a Linux symbol and is not expanded. The result is what gets stored (it
+# is not calculated again later).
 function Expand-DevboxHostPath {
     param([Parameter(Mandatory)][string]$Path)
-    $profileDir = [Environment]::GetFolderPath('UserProfile')
-    $expanded = [regex]::Replace($Path, '(?i)%(USERPROFILE|HOME)%|\$\{(USERPROFILE|HOME)\}|\$(USERPROFILE|HOME)\b|\$env:(USERPROFILE|HOME)\b', { param($m) $profileDir })
-    $expanded = [Environment]::ExpandEnvironmentVariables($expanded)
-    $expanded = [regex]::Replace($expanded, '\$env:(\w+)', { param($m) $v = [Environment]::GetEnvironmentVariable($m.Groups[1].Value); if ($null -ne $v) { $v } else { $m.Value } })
-    if ($expanded -eq '~' -or $expanded -match '^~[\\/]') { $expanded = $profileDir + $expanded.Substring(1) }
+    $expanded = [Environment]::ExpandEnvironmentVariables($Path)
+    if ($expanded -eq '~' -or $expanded -match '^~[\\/]') {
+        $expanded = [Environment]::GetFolderPath('UserProfile') + $expanded.Substring(1)
+    }
     return $expanded
 }
 
-# Expand what a user types as a folder of the container: $HOME, ${HOME}, %USERPROFILE%, $USERPROFILE (all
-# /home/<user>) and a leading ~. The result is what gets stored.
+# Expand what a user types as a folder of the container (Linux): $HOME, ${HOME} and a leading ~ (all
+# /home/<user>). % is a Windows symbol and is not expanded. The result is what gets stored.
 function Expand-DevboxContainerPath {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$User)
     $homeDir = "/home/$User"
-    $expanded = [regex]::Replace($Path, '(?i)%(USERPROFILE|HOME)%|\$\{(USERPROFILE|HOME)\}|\$(USERPROFILE|HOME)\b', { param($m) $homeDir })
+    $expanded = [regex]::Replace($Path, '\$\{HOME\}|\$HOME\b', { param($m) $homeDir })
     if ($expanded -eq '~') { $expanded = $homeDir }
     elseif ($expanded.StartsWith('~/')) { $expanded = "$homeDir/" + $expanded.Substring(2) }
     return $expanded
+}
+
+# Text in gray where the symbols $, % and ~ are shown in the color of their side.
+function Write-DevboxSymbolText {
+    param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Color)
+    foreach ($part in [regex]::Split($Text, '([$%~])')) {
+        if ($part -match '^[$%~]$') { Write-Host $part -NoNewline -ForegroundColor $Color }
+        elseif ($part) { Write-Host $part -NoNewline -ForegroundColor DarkGray }
+    }
+    Write-Host ''
+}
+
+# Reverse-video badge (" HOST " / " CONTAINER ") in the color of its side.
+function Write-DevboxSideBadge {
+    param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Color)
+    Write-Host " $Text " -NoNewline -ForegroundColor Black -BackgroundColor $Color
 }
 
 function Assert-DevboxDocker {
@@ -501,6 +515,13 @@ function Select-DevboxItem {
     finally {
         [Console]::CursorVisible = $previousCursor
     }
+}
+
+# Write text without a line break, in a console color, or in the default color when Color is empty.
+function Write-DevboxColored {
+    param([string]$Text, [string]$Color)
+    if ($Color) { Write-Host $Text -NoNewline -ForegroundColor $Color }
+    else { Write-Host $Text -NoNewline }
 }
 
 # Checklist: like Select-DevboxItem, but several items can be checked (Space) and Enter confirms. Items
@@ -1643,7 +1664,12 @@ function Invoke-DevboxSyncPickCore {
         $label = $resolved.Relative
         $nameKey = $resolved.Relative
     } else {
-        $typedHost = Read-DevboxLine 'Host folder to add (absolute path; $USERPROFILE, %USERPROFILE%, $HOME and ~ mean your user folder and are stored RESOLVED, not recalculated; Esc or empty cancels)'
+        Write-DevboxSideBadge -Text 'HOST' -Color $DevboxHostColor
+        Write-DevboxSymbolText -Text ' %VAR% (for example %USERPROFILE%) and ~ mean your Windows user folder.' -Color $DevboxHostColor
+        Write-DevboxSideBadge -Text 'CONTAINER' -Color $DevboxContainerColor
+        Write-DevboxSymbolText -Text ' $HOME and ~ mean /home/<user> in the container.' -Color $DevboxContainerColor
+        Write-DevboxSymbolText -Text 'They are resolved now and stored resolved (not recalculated later).' -Color DarkGray
+        $typedHost = Read-DevboxLine 'Folder to add (absolute path; Esc or empty cancels)' -Badge 'HOST' -BadgeColor $DevboxHostColor
         if (-not $typedHost -or -not $typedHost.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'
             $result.Cancelled = $true
@@ -1656,7 +1682,7 @@ function Invoke-DevboxSyncPickCore {
             return (& $fail)
         }
         $alpha = [System.IO.Path]::GetFullPath($alpha).TrimEnd('\', '/')
-        $typedBeta = Read-DevboxLine 'Folder in the container (absolute Linux path; $HOME, $USERPROFILE, %USERPROFILE% and ~ mean /home/<user> and are stored RESOLVED, not recalculated; Esc or empty cancels)'
+        $typedBeta = Read-DevboxLine 'Folder to add (absolute Linux path; Esc or empty cancels)' -Badge 'CONTAINER' -BadgeColor $DevboxContainerColor
         if (-not $typedBeta -or -not $typedBeta.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'
             $result.Cancelled = $true
