@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.14
+# Version: 0.5.20
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -1023,7 +1023,7 @@ function Write-DevboxCardField {
         [switch]$Badge,
         [Parameter(Mandatory)][int]$Width
     )
-    $valueColumn = 19
+    $valueColumn = 21
     $room = [math]::Max(10, $Width - $valueColumn)
     if (-not $Value) { $Value = '-' }
     $colorArgs = @{}
@@ -1034,7 +1034,6 @@ function Write-DevboxCardField {
         $chunk = $Value.Substring($i, [math]::Min($room, $Value.Length - $i))
         if ($first) { $prefix = "$Label " + ('.' * [math]::Max(2, $valueColumn - 2 - $Label.Length)) + ' ' } else { $prefix = ' ' * $valueColumn }
         Write-Host $prefix -NoNewline
-        if ($Badge) { $chunk = " $chunk " }
         Write-Host $chunk @colorArgs
         $first = $false
     }
@@ -1059,30 +1058,34 @@ function Show-DevboxSyncCard {
     Write-Host ('=' * $width)
     Write-DevboxCardField -Label ' NAME' -Value ([string]$Session.name) -Width $width
     Write-DevboxCardField -Label ' IDENTIFIER' -Value ([string]$Session.identifier) -Width $width
-    Write-Host '  ALPHA'
+    Write-Host ('-' * $width)
+    Write-DevboxCardField -Label '  ALPHA CONNECTED' -Value (& $yesNo $Session.alpha.connected) -Color (& $yesNoColor $Session.alpha.connected) -Badge -Width $width
     Write-DevboxCardField -Label '   - URL' -Value (& $endpointUrl $Session.alpha) -Color $DevboxHostColor -Width $width
-    Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.alpha.connected) -Color (& $yesNoColor $Session.alpha.connected) -Badge -Width $width
-    Write-Host '  BETA'
+    Write-DevboxCardField -Label '  BETA CONNECTED' -Value (& $yesNo $Session.beta.connected) -Color (& $yesNoColor $Session.beta.connected) -Badge -Width $width
     Write-DevboxCardField -Label '   - URL' -Value (& $endpointUrl $Session.beta) -Color $DevboxContainerColor -Width $width
-    Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.beta.connected) -Color (& $yesNoColor $Session.beta.connected) -Badge -Width $width
+    Write-Host ''
     if ($Session.paused) {
         Write-DevboxCardField -Label '  STATUS' -Value 'PAUSED' -Color 'Red' -Badge -Width $width
     } else {
         Write-DevboxCardField -Label '  STATUS' -Value 'ACTIVE' -Color 'Green' -Badge -Width $width
     }
-    # Mutagen's own state: watching is green; scanning, waiting and connecting are yellow; reconciling,
-    # staging, transitioning and saving (files moving) are orange; disconnected is gray; an error or a
-    # halted session is red.
-    $state = ([string]$Session.status).ToUpperInvariant()
+}
+
+# Mutagen's own state of a session as a reverse-video badge: watching is green; scanning, waiting and
+# connecting are yellow; reconciling, staging, transitioning and saving (files moving) are orange;
+# disconnected is gray; a halted session or one with an error is red.
+function Write-DevboxStateBadge {
+    param([string]$Status, [string]$LastError)
+    $state = ([string]$Status).ToUpperInvariant()
     if (-not $state) { $state = 'UNKNOWN' }
-    $stateColor = 'Gray'
-    if ($state -eq 'WATCHING') { $stateColor = 'Green' }
-    elseif ($state -eq 'DISCONNECTED') { $stateColor = 'Gray' }
-    elseif ($state -like 'HALTED*') { $stateColor = 'Red' }
-    elseif ($state -eq 'SCANNING' -or $state -eq 'WAITING-FOR-RESCAN' -or $state -like 'CONNECTING*') { $stateColor = 'Yellow' }
-    elseif ($state -eq 'RECONCILING' -or $state -like 'STAGING*' -or $state -eq 'TRANSITIONING' -or $state -eq 'SAVING') { $stateColor = 'DarkYellow' }
-    if ($Session.lastError) { $state = 'ERROR'; $stateColor = 'Red' }
-    Write-DevboxCardField -Label '  STATE' -Value $state -Color $stateColor -Badge -Width $width
+    $color = 'Gray'
+    if ($state -eq 'WATCHING') { $color = 'Green' }
+    elseif ($state -eq 'DISCONNECTED') { $color = 'Gray' }
+    elseif ($state -like 'HALTED*') { $color = 'Red' }
+    elseif ($state -eq 'SCANNING' -or $state -eq 'WAITING-FOR-RESCAN' -or $state -like 'CONNECTING*') { $color = 'Yellow' }
+    elseif ($state -eq 'RECONCILING' -or $state -like 'STAGING*' -or $state -eq 'TRANSITIONING' -or $state -eq 'SAVING') { $color = 'DarkYellow' }
+    if ($LastError) { $state = 'ERROR'; $color = 'Red' }
+    Write-Host $state -ForegroundColor Black -BackgroundColor $color
 }
 
 # Show where the synchronization is and whether it moved since the previous query. The previous
@@ -1097,11 +1100,18 @@ function Show-DevboxSyncProgress {
     $complete = ($null -ne $Progress.Total -and $Progress.Total -gt 0 -and $Progress.Done -ge $Progress.Total -and $Progress.Status -eq 'watching' -and -not $Progress.Paused)
     if ($null -ne $Progress.Total -and $Progress.Total -gt 0 -and $null -ne $Progress.Done) {
         $percent = [math]::Min(100, [int][math]::Floor(100 * $Progress.Done / $Progress.Total))
-        Write-Host "    So far $($Progress.Done) of $($Progress.Total) files ($percent%) - status: $($Progress.Status)"
+        Write-Host "    So far $($Progress.Done) of $($Progress.Total) files ($percent%) - status: " -NoNewline
     } else {
-        Write-Host "    No file counts yet - status: $($Progress.Status)"
+        Write-Host '    No file counts yet - status: ' -NoNewline
     }
-    if ($Progress.Paused) { Write-DevboxWarning '    The session is paused: dkdb-container-start or dkdb-container-connect resume it.' }
+    Write-DevboxStateBadge -Status $Progress.Status -LastError $Progress.LastError
+    if ($Progress.Paused) {
+        Write-Host '    The session is paused: ' -ForegroundColor Red -NoNewline
+        Write-Host 'dkdb-container-start' -ForegroundColor Cyan -NoNewline
+        Write-Host ' or ' -ForegroundColor Red -NoNewline
+        Write-Host 'dkdb-container-connect' -ForegroundColor Cyan -NoNewline
+        Write-Host ' resume it.' -ForegroundColor Red
+    }
     if ($Progress.LastError) { Write-DevboxWarning "    Mutagen reports an error: $($Progress.LastError)" }
     if ($Progress.Conflicts -gt 0) { Write-DevboxWarning "    $($Progress.Conflicts) conflicts: see TROUBLESHOOTING.md." }
     $previous = $null
