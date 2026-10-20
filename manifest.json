@@ -1,6 +1,6 @@
 {
   "name": "docker-devbox-ubuntu",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "image": "0.2.0",
   "files": {
     "install/install.ps1": "0.2.0",
@@ -9,7 +9,11 @@
     "scripts/bash/dkdb-info.sh": "0.1.0",
     "scripts/bash/dkdb-install-claudecode.sh": "0.2.0",
     "scripts/bash/dkdb-install-ghcopilot-cli.sh": "0.2.0",
-    "scripts/bash/dkdb-version.sh": "0.1.0",
+    "scripts/bash/dkdb-install-tools.sh": "0.1.0",
+    "scripts/bash/dkdb-version.sh": "0.1.1",
+    "scripts/bash/ntmsso-iagentic/README.md": "0.1.0",
+    "scripts/bash/ntmsso-iagentic/dkdb-ia4d.sh": "0.4.1",
+    "scripts/bash/ntmsso-iagentic/dkdb-keyring-run.sh": "0.1.0",
     "scripts/docker/Dockerfile": "0.1.1",
     "scripts/docker/entrypoint.sh": "0.2.0",
     "scripts/ps1/dkdb-common.ps1": "0.5.10",

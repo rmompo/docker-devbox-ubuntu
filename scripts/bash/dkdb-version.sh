@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.1.0
+# Version: 0.1.1
 # Show every version seen from inside the container: the image, the bash scripts against the manifest and the tools.
 # Same layout as dkdb-version.ps1 on the host. It only reads; it works even when the host has not written the state.
 set -u
@@ -52,7 +52,7 @@ mismatches=0
 while IFS='|' read -r name wanted; do
     [ -n "$name" ] || continue
     listed=$((listed + 1))
-    actual="$(file_version "$dir/$(basename "$name")")"
+    actual="$(file_version "$dir/${name#scripts/bash/}")"
     line="$(printf '  %-46s %-9s %s' "$name" "$wanted" "${actual:-missing}")"
     if [ "$actual" = "$wanted" ]; then echo "$line"; else bad "$line"; mismatches=$((mismatches + 1)); fi
 done < <(state_each file)

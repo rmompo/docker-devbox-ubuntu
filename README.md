@@ -68,6 +68,10 @@ The scripts of `~/devbox/bash` run by name in a container created from image 0.2
 | `dkdb-info.sh` | Container, user, image version, folders and mounts, AI client and the Mutagen sessions. |
 | `dkdb-version.sh` | The package and image versions, each bash script against the manifest, the tools and whether the container image is compatible. |
 
+The installer and `dkdb-update` also copy the subfolders of `scripts/bash` listed in the manifest (for example `ntmsso-iagentic/`, with its own `README.md`), which the container sees under `~/devbox/bash/`.
+
+If an image lacks tools that the scripts need (for example one older than the scripts), `dkdb-install-tools.sh` checks them by group (`base`: curl, git, jq; `keyring`: dbus, gnome-keyring, libsecret-tools) and installs the missing ones with apt (as root or with sudo). `dkdb-install-tools.sh check` only reports what is missing; the `keyring` group installs about 90 packages, which is why it is not part of the image.
+
 The Mutagen sessions and the manifest versions come from `~/.devbox-state`, a file that the host scripts write (`dkdb-container-connect`, `dkdb-mutagen-sync`, `dkdb-mutagen-status` and `dkdb-mutagen-stop` refresh it); it carries the time it was written, so it can be out of date.
 
 ## Usage
