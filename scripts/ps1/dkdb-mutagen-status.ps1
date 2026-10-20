@@ -1,5 +1,5 @@
 # Show the Mutagen sync status (state and conflicts) of a devbox container, given by name or chosen from a menu.
-# Version: 0.3.0
+# Version: 0.4.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -10,7 +10,7 @@ param(
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Shows the synchronization state of a Mutagen container (given with -Container, or chosen from a menu): for every session (the whole projects folder or each synchronized folder) Mutagen''s own output, plus a summary of how many files are done and whether it moved since the previous query.' `
+        -Description 'Shows the synchronization state of a Mutagen container (given with -Container, or chosen from a menu): for every session (the whole projects folder or each synchronized folder) a card with its name, identifier, endpoints and state, plus a summary of how many files are done and whether it moved since the previous query.' `
         -Usage 'dkdb-mutagen-status [-Container <name>] [-Help] [-Man]' `
         -Parameters @(
             @{ Name = '-Container'; Description = 'Name of the container (with or without the dkdb- prefix); skips the menu. It must be a container that uses Mutagen.' }
@@ -32,7 +32,7 @@ if ($Man) {
         ) `
         -Steps @(
             'Uses the container given with -Container, or shows the menu of the dkdb- containers that use Mutagen (running or stopped).',
-            'For every session of the container prints its host and container folder, its state and conflicts, and a progress summary (so far X of Y files) compared with the previous query.',
+            'For every session of the container prints a card (name, identifier, URL and connection of both endpoints, active or paused; long values continue on the next line) and a progress summary (so far X of Y files) compared with the previous query.',
             'Checks that no two active sessions of the container overlap and shows them in red if they do.'
         ) `
         -Changes @(
@@ -90,14 +90,17 @@ if ($sessions.Count -eq 0) {
 $allComplete = $true
 foreach ($sessionInfo in $sessions) {
     $session = $sessionInfo.Name
-    $label = "host $($sessionInfo.AlphaPath) <-> container $($sessionInfo.BetaPath)"
-    Write-Host ''
-    Write-Host "=== $session ($label)"
-    $listing = Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list', $session)
-    if ($listing.Output) { Write-Host $listing.Output.TrimEnd() }
-    if ($listing.Error) { Write-DevboxWarning $listing.Error.TrimEnd() }
     Write-Host ''
     $json = (Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list', '--template', '{{json .}}', $session)).Output
+    $raw = @(ConvertFrom-DevboxJsonList -Json $json) | Select-Object -First 1
+    if ($raw) {
+        Show-DevboxSyncCard -Session $raw
+    } else {
+        $listing = Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list', $session)
+        if ($listing.Output) { Write-Host $listing.Output.TrimEnd() }
+        if ($listing.Error) { Write-DevboxWarning $listing.Error.TrimEnd() }
+    }
+    Write-Host ''
     $progress = Get-DevboxSyncProgress -Json $json
     $complete = $false
     if ($progress) { $complete = Show-DevboxSyncProgress -Session $session -Progress $progress }

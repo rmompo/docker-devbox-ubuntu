@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.10
+# Version: 0.5.11
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -1002,6 +1002,72 @@ function Get-DevboxMutagenSessions {
     $json = $run.Output
     $sessions = @(ConvertFrom-DevboxJsonList -Json $json)
     return @($sessions | Where-Object { $_ } | ForEach-Object { ConvertTo-DevboxSyncProgress -Session $_ })
+}
+
+# Width of the console for the cards of dkdb-mutagen-status (one less than the window, 80 when unknown).
+function Get-DevboxConsoleWidth {
+    $width = 0
+    try { $width = [int]$Host.UI.RawUI.WindowSize.Width } catch { $width = 0 }
+    if ($width -lt 40) { $width = 80 }
+    return ($width - 1)
+}
+
+# One line of a card: the label in a fixed column and the value after it. A value longer than the
+# line continues on the next lines, aligned with the first character of the value.
+function Write-DevboxCardField {
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [AllowEmptyString()][string]$Value,
+        [string]$Color,
+        [Parameter(Mandatory)][int]$Width
+    )
+    $labelWidth = 15
+    $room = [math]::Max(10, $Width - $labelWidth - 1)
+    if (-not $Value) { $Value = '-' }
+    $colorArgs = @{}
+    if ($Color) { $colorArgs.ForegroundColor = $Color }
+    $first = $true
+    for ($i = 0; $first -or $i -lt $Value.Length; $i += $room) {
+        $chunk = $Value.Substring($i, [math]::Min($room, $Value.Length - $i))
+        if ($first) { $prefix = $Label.PadRight($labelWidth) } else { $prefix = ' ' * $labelWidth }
+        Write-Host "$prefix " -NoNewline
+        Write-Host $chunk @colorArgs
+        $first = $false
+    }
+}
+
+# Card of a Mutagen session (an object of 'mutagen sync list --template {{json .}}'): name, identifier,
+# both endpoints and the state, between two lines of '=' as wide as the console.
+function Show-DevboxSyncCard {
+    param([Parameter(Mandatory)]$Session)
+    $width = Get-DevboxConsoleWidth
+    $endpointUrl = {
+        param($Endpoint)
+        $path = [string]$Endpoint.path
+        $protocol = [string]$Endpoint.protocol
+        if (-not $protocol -or $protocol -eq 'local') { return $path }
+        $user = ''
+        if ($Endpoint.user) { $user = "$($Endpoint.user)@" }
+        return "$protocol`://$user$($Endpoint.host)$path"
+    }
+    $yesNo = { param($Flag) if ($Flag) { 'Yes' } else { 'No' } }
+    $yesNoColor = { param($Flag) if ($Flag) { 'Green' } else { 'Red' } }
+    $bar = '=' * $width
+    Write-Host $bar
+    Write-DevboxCardField -Label 'NAME' -Value ([string]$Session.name) -Width $width
+    Write-DevboxCardField -Label 'IDENTIFIER' -Value ([string]$Session.identifier) -Width $width
+    Write-Host ' - ALPHA'
+    Write-DevboxCardField -Label '   - URL' -Value (& $endpointUrl $Session.alpha) -Color $DevboxHostColor -Width $width
+    Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.alpha.connected) -Color (& $yesNoColor $Session.alpha.connected) -Width $width
+    Write-Host ' - BETA'
+    Write-DevboxCardField -Label '   - URL' -Value (& $endpointUrl $Session.beta) -Color $DevboxContainerColor -Width $width
+    Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.beta.connected) -Color (& $yesNoColor $Session.beta.connected) -Width $width
+    if ($Session.paused) {
+        Write-DevboxCardField -Label 'STATUS' -Value 'paused' -Color 'Red' -Width $width
+    } else {
+        Write-DevboxCardField -Label 'STATUS' -Value 'active' -Color 'Green' -Width $width
+    }
+    Write-Host $bar
 }
 
 # Show where the synchronization is and whether it moved since the previous query. The previous
