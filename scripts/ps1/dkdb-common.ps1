@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.13
+# Version: 0.5.14
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -1070,10 +1070,18 @@ function Show-DevboxSyncCard {
     } else {
         Write-DevboxCardField -Label '  STATUS' -Value 'ACTIVE' -Color 'Green' -Badge -Width $width
     }
-    # Mutagen's own state: watching is the healthy one, disconnected the broken one.
+    # Mutagen's own state: watching is green; scanning, waiting and connecting are yellow; reconciling,
+    # staging, transitioning and saving (files moving) are orange; disconnected is gray; an error or a
+    # halted session is red.
     $state = ([string]$Session.status).ToUpperInvariant()
+    if (-not $state) { $state = 'UNKNOWN' }
     $stateColor = 'Gray'
-    if ($state -eq 'WATCHING') { $stateColor = 'Green' } elseif ($state -eq 'DISCONNECTED') { $stateColor = 'Red' }
+    if ($state -eq 'WATCHING') { $stateColor = 'Green' }
+    elseif ($state -eq 'DISCONNECTED') { $stateColor = 'Gray' }
+    elseif ($state -like 'HALTED*') { $stateColor = 'Red' }
+    elseif ($state -eq 'SCANNING' -or $state -eq 'WAITING-FOR-RESCAN' -or $state -like 'CONNECTING*') { $stateColor = 'Yellow' }
+    elseif ($state -eq 'RECONCILING' -or $state -like 'STAGING*' -or $state -eq 'TRANSITIONING' -or $state -eq 'SAVING') { $stateColor = 'DarkYellow' }
+    if ($Session.lastError) { $state = 'ERROR'; $stateColor = 'Red' }
     Write-DevboxCardField -Label '  STATE' -Value $state -Color $stateColor -Badge -Width $width
 }
 

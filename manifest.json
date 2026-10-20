@@ -16,7 +16,7 @@
     "scripts/bash/ntm-ssologin/dkdb-ntm-ssologin-keyring-run.sh": "0.1.1",
     "scripts/docker/Dockerfile": "0.1.1",
     "scripts/docker/entrypoint.sh": "0.2.0",
-    "scripts/ps1/dkdb-common.ps1": "0.5.13",
+    "scripts/ps1/dkdb-common.ps1": "0.5.14",
     "scripts/ps1/dkdb-container-connect.ps1": "0.5.1",
     "scripts/ps1/dkdb-container-create.ps1": "0.2.0",
     "scripts/ps1/dkdb-container-delete.ps1": "0.2.0",
