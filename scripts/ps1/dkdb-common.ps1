@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.0
+# Version: 0.5.1
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -1457,6 +1457,16 @@ function Invoke-DevboxSyncPickCore {
     $customItem = 'Custom (select several)'
     $labels = @($noneItem, $relativeItem, $absoluteItem)
     if ($sessions.Count -gt 0) { $labels += @($allItem, $customItem) }
+    # The registered syncs and their state, before the menu.
+    if ($sessions.Count -gt 0) {
+        Write-Host "Registered syncs in '$Container':"
+        foreach ($item in @($sessions | Sort-Object { $_.Label })) {
+            Write-Host "  [$(if ($item.Paused) { 'paused' } else { 'active' })] $($item.Label)"
+        }
+    }
+    else {
+        Write-Host "No syncs registered in '$Container' yet."
+    }
     $choice = Select-DevboxItem -Title "Select what to synchronize in '$Container':" -Items $labels
     if (-not $choice) {
         Write-Host 'Cancelled: nothing was changed.'
@@ -1482,7 +1492,7 @@ function Invoke-DevboxSyncPickCore {
 
     if ($choice -eq $customItem) {
         $ordered = @($sessions | Sort-Object { $_.Label })
-        $itemLabels = @($ordered | ForEach-Object { "$($_.Label)  [$(if ($_.Paused) { 'paused' } else { 'active' })]" })
+        $itemLabels = @($ordered | ForEach-Object { "[$(if ($_.Paused) { 'paused' } else { 'active' })] $($_.Label)" })
         $initial = @($ordered | ForEach-Object { -not $_.Paused })
         $picked = Select-DevboxItems -Title "Check the folders to keep synchronized in '$Container' (the others are paused):" -Items $itemLabels -Checked $initial
         if ($picked.Cancelled) {
