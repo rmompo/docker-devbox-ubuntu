@@ -1,5 +1,12 @@
+# Write text without a line break, in a console color, or in the default color when Color is empty.
+function Write-DevboxColored {
+    param([string]$Text, [string]$Color)
+    if ($Color) { Write-Host $Text -NoNewline -ForegroundColor $Color }
+    else { Write-Host $Text -NoNewline }
+}
+
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.4
+# Version: 0.5.5
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -349,11 +356,11 @@ function Write-DevboxNext {
     Write-Host $Text -ForegroundColor Yellow
 }
 
-# One line of the list of registered syncs: [active] in green, [paused] in yellow, then the label.
+# One line of the list of registered syncs: [active] in green, [paused] in red, then the label.
 function Write-DevboxSyncLine {
     param([Parameter(Mandatory)]$Session)
     $state = if ($Session.Paused) { 'paused' } else { 'active' }
-    $color = if ($Session.Paused) { 'Yellow' } else { 'Green' }
+    $color = if ($Session.Paused) { 'Red' } else { 'Green' }
     Write-Host '  ' -NoNewline
     Write-Host "[$state]" -ForegroundColor $color -NoNewline
     Write-Host " $($Session.Label)"
@@ -473,18 +480,26 @@ function Select-DevboxItem {
 }
 
 # Checklist: like Select-DevboxItem, but several items can be checked (Space) and Enter confirms. Items
-# starts as given in Checked. Returns Cancelled ($true on Esc) and Indexes (the checked ones).
+# starts as given in Checked. Optional Badges (one text per item, for example '[active]') are shown before
+# the item in BadgeColors (console color names). A mark that differs from its initial value is shown in
+# yellow (the mark and the item). Returns Cancelled ($true on Esc) and Indexes (the checked ones).
 function Select-DevboxItems {
     param(
         [Parameter(Mandatory)][string]$Title,
         [string[]]$Items,
-        [bool[]]$Checked = @()
+        [bool[]]$Checked = @(),
+        [string[]]$Badges = @(),
+        [string[]]$BadgeColors = @()
     )
     if ([Console]::IsInputRedirected) {
         throw 'Select-DevboxItems needs an interactive console.'
     }
     $marks = New-Object 'bool[]' $Items.Count
-    for ($i = 0; $i -lt $Items.Count; $i++) { if ($i -lt $Checked.Count) { $marks[$i] = $Checked[$i] } }
+    $initial = New-Object 'bool[]' $Items.Count
+    for ($i = 0; $i -lt $Items.Count; $i++) {
+        if ($i -lt $Checked.Count) { $marks[$i] = $Checked[$i] }
+        $initial[$i] = $marks[$i]
+    }
 
     Write-Host $Title
     Write-Host '(Up/Down: move, Space: check/uncheck, Enter: apply, Esc: cancel)' -ForegroundColor DarkGray
@@ -499,11 +514,23 @@ function Select-DevboxItems {
             for ($i = 0; $i -lt $Items.Count; $i++) {
                 [Console]::SetCursorPosition(0, $top + $i)
                 $box = if ($marks[$i]) { '[x]' } else { '[ ]' }
-                if ($i -eq $index) {
-                    Write-Host ("> $box " + $Items[$i]).PadRight($width) -NoNewline -ForegroundColor Cyan
-                } else {
-                    Write-Host ("  $box " + $Items[$i]).PadRight($width) -NoNewline
+                $pointer = if ($i -eq $index) { '> ' } else { '  ' }
+                $changed = ($marks[$i] -ne $initial[$i])
+                $mainColor = if ($changed) { 'Yellow' } elseif ($i -eq $index) { 'Cyan' } else { $null }
+                $badge = if ($i -lt $Badges.Count) { $Badges[$i] } else { '' }
+                $badgeColor = if ($i -lt $BadgeColors.Count -and $BadgeColors[$i]) { $BadgeColors[$i] } else { $mainColor }
+                $label = $Items[$i]
+                $used = $pointer.Length + $box.Length + 1 + $(if ($badge) { $badge.Length + 1 } else { 0 }) + $label.Length
+                $pad = ' ' * [Math]::Max(0, $width - $used)
+                $cyan = if ($i -eq $index) { 'Cyan' } else { $null }
+                $pointerColor = $cyan
+                Write-DevboxColored -Text $pointer -Color $pointerColor
+                Write-DevboxColored -Text "$box " -Color $mainColor
+                if ($badge) {
+                    Write-DevboxColored -Text $badge -Color $badgeColor
+                    Write-DevboxColored -Text ' ' -Color $mainColor
                 }
+                Write-DevboxColored -Text ($label + $pad) -Color $mainColor
             }
             $key = [Console]::ReadKey($true)
             switch ($key.Key) {
@@ -1534,9 +1561,11 @@ function Invoke-DevboxSyncPickCore {
 
     if ($choice -eq $customItem) {
         $ordered = @($sessions | Sort-Object { $_.Label })
-        $itemLabels = @($ordered | ForEach-Object { "[$(if ($_.Paused) { 'paused' } else { 'active' })] $($_.Label)" })
+        $itemLabels = @($ordered | ForEach-Object { $_.Label })
+        $badges = @($ordered | ForEach-Object { if ($_.Paused) { '[paused]' } else { '[active]' } })
+        $badgeColors = @($ordered | ForEach-Object { if ($_.Paused) { 'Red' } else { 'Green' } })
         $initial = @($ordered | ForEach-Object { -not $_.Paused })
-        $picked = Select-DevboxItems -Title "Check the folders to keep synchronized in '$Container' (the others are paused):" -Items $itemLabels -Checked $initial
+        $picked = Select-DevboxItems -Title "Check the folders to keep synchronized in '$Container' (the others are paused):" -Items $itemLabels -Checked $initial -Badges $badges -BadgeColors $badgeColors
         if ($picked.Cancelled) {
             Write-Host 'Cancelled: nothing was changed.'
             $result.Cancelled = $true
