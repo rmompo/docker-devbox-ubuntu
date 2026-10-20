@@ -111,7 +111,7 @@ All and Custom only appear when the container already has registered sessions. T
 
 1. **None:** the Mutagen daemon is started and every session of the container is **paused**. Nothing is synchronized.
 2. **Add (relative):** asks for a folder, relative to the host projects folder or absolute inside it. It is mirrored at the same path inside the container. Its session is created, activated and joins the list.
-3. **Add (absolute):** asks for a host folder (absolute) and a folder of the container (absolute, or starting with `~/`), which can be anywhere except the read-only `~/devbox/bash`.
+3. **Add (absolute):** asks for a host folder (absolute) and a folder of the container (absolute, or starting with `~/`), which can be anywhere except the read-only `~/devbox/bash`. Both accept `$USERPROFILE`, `%USERPROFILE%`, `$HOME` and `~` (your user folder on the host, `/home/<user>` in the container); they are resolved when typed and stored resolved, not recalculated in each session.
 4. **All registered:** activates every registered session that is not inside another registered one.
 5. **Custom:** a checklist (Up/Down, Space to check, Enter to apply, Esc to cancel). The checked sessions are active and the unchecked ones are paused. If two checked folders overlap it warns and changes nothing.
 6. **Both folders are always checked** by every Add and every activation: if the host folder does not exist, the operation is aborted; if the folder of the container exists it is used (Add warns about it), and if it does not exist you are asked whether to create it.

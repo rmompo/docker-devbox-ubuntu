@@ -6,7 +6,7 @@ function Write-DevboxColored {
 }
 
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.5
+# Version: 0.5.7
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -99,7 +99,7 @@ function Show-DevboxHelp {
 $DevboxSyncMenuMan = @(
     'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: None (the first option and the default), Add (relative), Add (absolute), All registered or Custom.',
     'None pauses every session of the container: nothing is synchronized.',
-    'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere.',
+    'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; $USERPROFILE, %USERPROFILE%, $HOME and ~ are accepted in both (your user folder on the host, /home/<user> in the container) and are stored resolved, not recalculated later.',
     'Every Add and every activation checks both folders: if the host folder does not exist the operation is aborted; if the folder of the container exists it is used (a warning on Add), and if it does not exist you are asked whether to create it.',
     'A new folder is activated and added to what is already active, so several folders can be synchronized at once. Activating one that covers active sessions pauses them; choosing one that is inside an active session changes nothing (somebody may be using it).',
     'All registered activates the registered sessions that are not inside another one. A session of the whole projects folder is never created by the menu.',
@@ -391,6 +391,30 @@ function Read-DevboxLine {
             }
         }
     }
+}
+
+# Expand what a user types as a host folder: %USERPROFILE%, $USERPROFILE and $HOME (all the user profile
+# folder), any other %VAR% or $env:VAR, and a leading ~. The result is what gets stored (it is not
+# calculated again later).
+function Expand-DevboxHostPath {
+    param([Parameter(Mandatory)][string]$Path)
+    $profileDir = [Environment]::GetFolderPath('UserProfile')
+    $expanded = [regex]::Replace($Path, '(?i)%(USERPROFILE|HOME)%|\$\{(USERPROFILE|HOME)\}|\$(USERPROFILE|HOME)\b|\$env:(USERPROFILE|HOME)\b', { param($m) $profileDir })
+    $expanded = [Environment]::ExpandEnvironmentVariables($expanded)
+    $expanded = [regex]::Replace($expanded, '\$env:(\w+)', { param($m) $v = [Environment]::GetEnvironmentVariable($m.Groups[1].Value); if ($null -ne $v) { $v } else { $m.Value } })
+    if ($expanded -eq '~' -or $expanded -match '^~[\\/]') { $expanded = $profileDir + $expanded.Substring(1) }
+    return $expanded
+}
+
+# Expand what a user types as a folder of the container: $HOME, ${HOME}, %USERPROFILE%, $USERPROFILE (all
+# /home/<user>) and a leading ~. The result is what gets stored.
+function Expand-DevboxContainerPath {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$User)
+    $homeDir = "/home/$User"
+    $expanded = [regex]::Replace($Path, '(?i)%(USERPROFILE|HOME)%|\$\{(USERPROFILE|HOME)\}|\$(USERPROFILE|HOME)\b', { param($m) $homeDir })
+    if ($expanded -eq '~') { $expanded = $homeDir }
+    elseif ($expanded.StartsWith('~/')) { $expanded = "$homeDir/" + $expanded.Substring(2) }
+    return $expanded
 }
 
 function Assert-DevboxDocker {
@@ -1619,27 +1643,26 @@ function Invoke-DevboxSyncPickCore {
         $label = $resolved.Relative
         $nameKey = $resolved.Relative
     } else {
-        $typedHost = Read-DevboxLine 'Host folder to add (absolute path; Esc or empty cancels)'
+        $typedHost = Read-DevboxLine 'Host folder to add (absolute path; $USERPROFILE, %USERPROFILE%, $HOME and ~ mean your user folder and are stored RESOLVED, not recalculated; Esc or empty cancels)'
         if (-not $typedHost -or -not $typedHost.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'
             $result.Cancelled = $true
             return $result
         }
         $alpha = $typedHost.Trim().Trim('"')
+        $alpha = Expand-DevboxHostPath -Path $alpha
         if (-not [System.IO.Path]::IsPathRooted($alpha)) {
             Write-DevboxWarning "Error: '$alpha' is not an absolute host path. Nothing was done."
             return (& $fail)
         }
         $alpha = [System.IO.Path]::GetFullPath($alpha).TrimEnd('\', '/')
-        $typedBeta = Read-DevboxLine 'Folder in the container (absolute Linux path, or starting with ~/; Esc or empty cancels)'
+        $typedBeta = Read-DevboxLine 'Folder in the container (absolute Linux path; $HOME, $USERPROFILE, %USERPROFILE% and ~ mean /home/<user> and are stored RESOLVED, not recalculated; Esc or empty cancels)'
         if (-not $typedBeta -or -not $typedBeta.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'
             $result.Cancelled = $true
             return $result
         }
-        $beta = $typedBeta.Trim().Trim('"')
-        if ($beta -eq '~') { $beta = "/home/$user" }
-        elseif ($beta.StartsWith('~/')) { $beta = "/home/$user/" + $beta.Substring(2) }
+        $beta = Expand-DevboxContainerPath -Path $typedBeta.Trim().Trim('"') -User $user
         $beta = ConvertTo-DevboxBetaPath -Path $beta
         if (-not $beta.StartsWith('/') -or $beta -eq '/' -or $beta -match '(^|/)\.\.(/|$)') {
             Write-DevboxWarning "Error: '$typedBeta' is not a valid folder of the container (an absolute path other than /, without '..'). Nothing was done."
