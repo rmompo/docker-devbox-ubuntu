@@ -29,4 +29,4 @@ The scripts must be easy to get and to call from any folder, without cloning the
 - The installer does not install Mutagen: `dkdb-container-create` does it on demand (spec 08).
 - The manifest must be updated whenever a file is added, renamed, removed or changed under `scripts/` or `install/` (rules in `CLAUDE.md`); otherwise the file is not installed or the integrity check fails.
 - Open terminals need to be reopened to see the new PATH.
-- Updating = running `install.ps1` again. Changing the root = running it with the new root; containers created before keep their old host paths and must be recreated.
+- Updating = running `dkdb-update` (spec 03) or `install.ps1` again. Changing the root = running it with the new root; containers created before keep their old host paths and must be recreated.

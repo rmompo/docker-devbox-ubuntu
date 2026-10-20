@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.4.0
+# Version: 0.5.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -90,11 +90,13 @@ function Show-DevboxHelp {
 # --- Manual (-Man): what a script does, in colors (spec 01) ---
 # The synchronization menu, shared by the manuals of the scripts that show it.
 $DevboxSyncMenuMan = @(
-    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: No sync (the first option and the default), the folders already registered as sessions of the container, All registered, or Add... (a new folder).',
-    'No sync pauses every session of the container: nothing is synchronized.',
-    'A folder is activated and added to what is already active, so several folders can be synchronized at once. Activating one that covers active sessions pauses them; choosing one that is inside an active session changes nothing (somebody may be using it).',
+    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: None (the first option and the default), Add (relative), Add (absolute), All registered or Custom.',
+    'None pauses every session of the container: nothing is synchronized.',
+    'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere.',
+    'Every Add and every activation checks both folders: if the host folder does not exist the operation is aborted; if the folder of the container exists it is used (a warning on Add), and if it does not exist you are asked whether to create it.',
+    'A new folder is activated and added to what is already active, so several folders can be synchronized at once. Activating one that covers active sessions pauses them; choosing one that is inside an active session changes nothing (somebody may be using it).',
     'All registered activates the registered sessions that are not inside another one. A session of the whole projects folder is never created by the menu.',
-    'Add... asks for a folder (relative to the host projects folder, or absolute inside it) that must exist, creates its session and activates it.',
+    'Custom (shown when sessions are registered) is a checklist: Space checks or unchecks, Enter applies. The checked sessions are active and the unchecked ones paused. If two checked folders overlap, it warns and changes nothing.',
     'Sessions are only paused, never terminated, and no file is touched.'
 )
 
@@ -425,6 +427,61 @@ function Select-DevboxItem {
                 'DownArrow' { if ($index -lt $Items.Count - 1) { $index++ } }
                 'Enter'     { [Console]::SetCursorPosition(0, $top + $Items.Count); return $Items[$index] }
                 'Escape'    { [Console]::SetCursorPosition(0, $top + $Items.Count); return $null }
+            }
+        }
+    }
+    finally {
+        [Console]::CursorVisible = $previousCursor
+    }
+}
+
+# Checklist: like Select-DevboxItem, but several items can be checked (Space) and Enter confirms. Items
+# starts as given in Checked. Returns Cancelled ($true on Esc) and Indexes (the checked ones).
+function Select-DevboxItems {
+    param(
+        [Parameter(Mandatory)][string]$Title,
+        [string[]]$Items,
+        [bool[]]$Checked = @()
+    )
+    if ([Console]::IsInputRedirected) {
+        throw 'Select-DevboxItems needs an interactive console.'
+    }
+    $marks = New-Object 'bool[]' $Items.Count
+    for ($i = 0; $i -lt $Items.Count; $i++) { if ($i -lt $Checked.Count) { $marks[$i] = $Checked[$i] } }
+
+    Write-Host $Title
+    Write-Host '(Up/Down: move, Space: check/uncheck, Enter: apply, Esc: cancel)' -ForegroundColor DarkGray
+    foreach ($item in $Items) { Write-Host '' }
+    $top = [Console]::CursorTop - $Items.Count
+    $width = [Console]::WindowWidth - 1
+    $index = 0
+    $previousCursor = [Console]::CursorVisible
+    [Console]::CursorVisible = $false
+    try {
+        while ($true) {
+            for ($i = 0; $i -lt $Items.Count; $i++) {
+                [Console]::SetCursorPosition(0, $top + $i)
+                $box = if ($marks[$i]) { '[x]' } else { '[ ]' }
+                if ($i -eq $index) {
+                    Write-Host ("> $box " + $Items[$i]).PadRight($width) -NoNewline -ForegroundColor Cyan
+                } else {
+                    Write-Host ("  $box " + $Items[$i]).PadRight($width) -NoNewline
+                }
+            }
+            $key = [Console]::ReadKey($true)
+            switch ($key.Key) {
+                'UpArrow'   { if ($index -gt 0) { $index-- } }
+                'DownArrow' { if ($index -lt $Items.Count - 1) { $index++ } }
+                'Spacebar'  { $marks[$index] = -not $marks[$index] }
+                'Enter' {
+                    [Console]::SetCursorPosition(0, $top + $Items.Count)
+                    $selected = @(for ($i = 0; $i -lt $Items.Count; $i++) { if ($marks[$i]) { $i } })
+                    return [pscustomobject]@{ Cancelled = $false; Indexes = $selected }
+                }
+                'Escape' {
+                    [Console]::SetCursorPosition(0, $top + $Items.Count)
+                    return [pscustomobject]@{ Cancelled = $true; Indexes = @() }
+                }
             }
         }
     }
@@ -916,7 +973,7 @@ function Resolve-DevboxSyncFolder {
     $result = [pscustomobject]@{ Relative = $null; Full = $full; Error = $null }
     # Windows paths are case-insensitive.
     if ($full.Length -le $base.Length -or -not $full.StartsWith($base + $separator, [System.StringComparison]::OrdinalIgnoreCase)) {
-        $result.Error = "it must be a folder inside the projects folder ($base); choose All in the menu to synchronize everything"
+        $result.Error = "it must be a folder inside the projects folder ($base); use Add (absolute) for a folder elsewhere"
         return $result
     }
     if (-not (Test-Path -LiteralPath $full -PathType Container)) {
@@ -1144,17 +1201,27 @@ function Suspend-DevboxSyncSessions {
     return $true
 }
 
-# The sessions of a container that synchronize the projects folder or a folder inside it, as
-# Name, Relative ('' = the whole projects folder, 'a/b' = a folder) and Paused. Sessions outside
-# the projects folder are not ours to judge and are left out.
-function Get-DevboxProjectSessions {
-    param([Parameter(Mandatory)][string]$Container, [Parameter(Mandatory)][string]$User)
+# What the menu shows for a folder: its path relative to the projects folder of the container, or both
+# folders when it lies elsewhere.
+function Get-DevboxFolderLabel {
+    param([Parameter(Mandatory)][string]$User, [string]$Alpha, [Parameter(Mandatory)][string]$Beta)
     $rootBeta = "/home/$User/devbox/projects"
+    if ($Beta.Equals($rootBeta, [System.StringComparison]::OrdinalIgnoreCase)) { return '(the whole projects folder)' }
+    if ($Beta.StartsWith($rootBeta + '/', [System.StringComparison]::OrdinalIgnoreCase)) { return $Beta.Substring($rootBeta.Length + 1) }
+    return "$Alpha <-> $Beta"
+}
+
+# Every session of a container, for the menu: Name, Alpha (host folder), Beta (folder of the container,
+# normalized; BetaPath is the same, for Get-DevboxSessionOverlaps), Paused and Label.
+function Get-DevboxPickSessions {
+    param([Parameter(Mandatory)][string]$Container, [Parameter(Mandatory)][string]$User)
     $known = @()
     foreach ($item in @(Get-DevboxContainerSyncSessions -Container $Container)) {
-        $path = ConvertTo-DevboxBetaPath -Path $item.BetaPath
-        if ($path.Equals($rootBeta, [System.StringComparison]::OrdinalIgnoreCase)) { $known += [pscustomobject]@{ Name = $item.Name; Relative = ''; Paused = $item.Paused } }
-        elseif ($path.StartsWith($rootBeta + '/', [System.StringComparison]::OrdinalIgnoreCase)) { $known += [pscustomobject]@{ Name = $item.Name; Relative = $path.Substring($rootBeta.Length + 1); Paused = $item.Paused } }
+        $beta = ConvertTo-DevboxBetaPath -Path $item.BetaPath
+        $known += [pscustomobject]@{
+            Name = $item.Name; Alpha = $item.AlphaPath; Beta = $beta; BetaPath = $beta; Paused = $item.Paused
+            Label = (Get-DevboxFolderLabel -User $User -Alpha $item.AlphaPath -Beta $beta)
+        }
     }
     return $known
 }
@@ -1175,59 +1242,178 @@ function Suspend-DevboxSessionList {
     $ok = $true
     foreach ($item in @($Sessions)) {
         & $mutagen sync pause $item.Name *> $null
-        if ($LASTEXITCODE -eq 0) { Write-Host "Session '$($item.Name)' ($(if ($item.Relative) { $item.Relative } else { 'whole projects folder' })) paused: $Reason." }
+        if ($LASTEXITCODE -eq 0) { Write-Host "Session '$($item.Name)' ($($item.Label)) paused: $Reason." }
         else { Write-DevboxWarning "Warning: could not pause the Mutagen session '$($item.Name)'."; $ok = $false }
     }
     return $ok
 }
 
-# Create the session of a folder of the projects path (docker exec mkdir -p, New-DevboxSyncSession,
-# flush). Returns the session object (Name, Relative, Paused) or $null on failure.
+# Create the session of a folder (New-DevboxSyncSession and flush). The folders must exist already
+# (Register-DevboxSyncFolder checks and creates them). Returns the session object or $null on failure.
 function New-DevboxFolderSession {
-    param([Parameter(Mandatory)][string]$Container, [Parameter(Mandatory)][string]$User, [Parameter(Mandatory)][string]$Relative, [Parameter(Mandatory)][string]$Full)
+    param(
+        [Parameter(Mandatory)][string]$Container,
+        [Parameter(Mandatory)][string]$User,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Alpha,
+        [Parameter(Mandatory)][string]$Beta,
+        [Parameter(Mandatory)][string]$Label
+    )
     $containerId = Get-DevboxContainerId -Container $Container
-    $main = Get-DevboxSyncSessionName -Container $Container
-    if (-not $containerId -or -not $main) {
+    if (-not $containerId) {
         Write-DevboxWarning "Error: could not read the ID of '$Container'."
         return $null
     }
-    $name = Get-DevboxFolderSessionName -MainSession $main -Relative $Relative
-    docker exec -u $User $Container mkdir -p "/home/$User/devbox/projects/$Relative" *> $null
-    if (-not (New-DevboxSyncSession -Name $name -Alpha $Full -Beta "docker://$User@$containerId/home/$User/devbox/projects/$Relative" -User $User)) {
-        Write-DevboxWarning "Error: could not create the Mutagen session for the folder '$Relative'."
+    if (-not (New-DevboxSyncSession -Name $Name -Alpha $Alpha -Beta "docker://$User@$containerId$Beta" -User $User)) {
+        Write-DevboxWarning "Error: could not create the Mutagen session for '$Label'."
         return $null
     }
-    Write-DevboxSuccess "Folder '$Relative' added to the synchronization."
-    Invoke-DevboxSyncFlush -Session $name
-    return [pscustomobject]@{ Name = $name; Relative = $Relative; Paused = $false }
+    Write-DevboxSuccess "Folder '$Label' added to the synchronization."
+    Invoke-DevboxSyncFlush -Session $Name
+    return [pscustomobject]@{ Name = $Name; Alpha = $Alpha; Beta = $Beta; BetaPath = $Beta; Paused = $false; Label = $Label }
 }
 
-# Activate one session: resume it (flushing when asked) and pause the ACTIVE sessions it covers (they
-# stay registered and can be activated again). When another active session already covers it, nothing
-# changes: somebody may be using that one. Returns $false on failure.
-function Enable-DevboxFolderSession {
-    param([Parameter(Mandatory)][object]$Target, [object[]]$Sessions, [switch]$Flush)
-    $others = @($Sessions | Where-Object { $_.Name -ne $Target.Name })
-    $coveringActive = @($others | Where-Object { -not $_.Paused -and (Test-DevboxFolderCovers -Outer $_.Relative -Inner $Target.Relative) })
-    if ($coveringActive.Count -gt 0) {
-        Write-Host "'$($Target.Relative)' is already synchronized by the active session '$($coveringActive[0].Name)': nothing changed."
+# Does a folder exist in the container?
+function Test-DevboxContainerFolder {
+    param([Parameter(Mandatory)][string]$Container, [Parameter(Mandatory)][string]$User, [Parameter(Mandatory)][string]$Path)
+    docker exec -u $User $Container test -d $Path *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
+# The folder of the container must exist: when it does the script warns and uses it (-Quiet: says nothing,
+# the usual case when an existing session is activated); when it does not, it asks whether to create it and
+# aborts (returns $false) if the answer is not yes.
+function Confirm-DevboxContainerFolder {
+    param([Parameter(Mandatory)][string]$Container, [Parameter(Mandatory)][string]$User, [Parameter(Mandatory)][string]$Path, [switch]$Quiet)
+    if (Test-DevboxContainerFolder -Container $Container -User $User -Path $Path) {
+        if (-not $Quiet) { Write-DevboxWarning "Warning: the folder already exists in the container and will be used: $Path" }
         return $true
     }
+    $answer = Read-Host "The folder does not exist in the container: $Path. Create it? [y/N]"
+    if ($answer -notmatch '^\s*(y|yes)\s*$') {
+        Write-DevboxWarning "Error: the folder does not exist in the container and was not created: $Path. Operation aborted."
+        return $false
+    }
+    docker exec -u $User $Container mkdir -p $Path *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-DevboxWarning "Error: could not create the folder in the container: $Path. Operation aborted."
+        return $false
+    }
+    Write-DevboxSuccess "Folder created in the container: $Path"
+    return $true
+}
+
+# Both folders of a session must exist before it is activated: the host one (otherwise the operation is
+# aborted) and the one of the container (created after asking when missing).
+function Test-DevboxSessionFolders {
+    param([Parameter(Mandatory)][string]$Container, [Parameter(Mandatory)][string]$User, [Parameter(Mandatory)]$Session)
+    if (-not (Test-Path -LiteralPath $Session.Alpha -PathType Container)) {
+        Write-DevboxWarning "Error: the host folder of '$($Session.Label)' does not exist: $($Session.Alpha). Operation aborted."
+        return $false
+    }
+    return (Confirm-DevboxContainerFolder -Container $Container -User $User -Path $Session.Beta -Quiet)
+}
+
+# Activate one session: check both folders, resume it (flushing when asked) and pause the ACTIVE sessions it
+# covers (they stay registered and can be activated again). When another active session already covers it,
+# nothing changes: somebody may be using that one. Returns $false on failure.
+function Enable-DevboxFolderSession {
+    param(
+        [Parameter(Mandatory)][string]$Container,
+        [Parameter(Mandatory)][string]$User,
+        [Parameter(Mandatory)][object]$Target,
+        [object[]]$Sessions,
+        [switch]$Flush
+    )
+    $others = @($Sessions | Where-Object { $_.Name -ne $Target.Name })
+    $coveringActive = @($others | Where-Object { -not $_.Paused -and (Test-DevboxFolderCovers -Outer $_.Beta -Inner $Target.Beta) })
+    if ($coveringActive.Count -gt 0) {
+        Write-Host "'$($Target.Label)' is already synchronized by the active session '$($coveringActive[0].Name)': nothing changed."
+        return $true
+    }
+    if (-not (Test-DevboxSessionFolders -Container $Container -User $User -Session $Target)) { return $false }
     if ($Target.Paused) {
         if (-not (Resume-DevboxSyncSessions -Names @($Target.Name) -Flush:$Flush)) { return $false }
     }
-    $covered = @($others | Where-Object { -not $_.Paused -and (Test-DevboxFolderCovers -Outer $Target.Relative -Inner $_.Relative) })
-    return (Suspend-DevboxSessionList -Sessions $covered -Reason "it is inside '$(if ($Target.Relative) { $Target.Relative } else { 'the whole projects folder' })'")
+    $covered = @($others | Where-Object { -not $_.Paused -and (Test-DevboxFolderCovers -Outer $Target.Beta -Inner $_.Beta) })
+    return (Suspend-DevboxSessionList -Sessions $covered -Reason "it is inside '$($Target.Label)'")
 }
 
-# The synchronization menu: No sync, the folders already registered as sessions of the container,
-# All registered and Add (a new folder). The rules, from the intersection of the folders:
+# A host folder, normalized to compare (case-insensitive on Windows, no trailing separator).
+function ConvertTo-DevboxHostKey {
+    param([AllowEmptyString()][string]$Path)
+    try { return [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/').ToLowerInvariant() }
+    catch { return ([string]$Path).TrimEnd('\', '/').ToLowerInvariant() }
+}
+
+# Add a folder to the synchronization (Add relative and Add absolute): the host folder must exist (otherwise
+# the operation is aborted), a session that already has this pair of folders is reused, an active session
+# that already covers the folder leaves nothing to do, and otherwise the folder of the container is
+# checked (created after asking) and the session is created. NameKey gives the name of the new session.
+# Returns Status ('failed', 'covered' or 'ready') and the session (Target) when ready.
+function Register-DevboxSyncFolder {
+    param(
+        [Parameter(Mandatory)][string]$Container,
+        [Parameter(Mandatory)][string]$User,
+        [object[]]$Sessions,
+        [Parameter(Mandatory)][string]$Alpha,
+        [Parameter(Mandatory)][string]$Beta,
+        [Parameter(Mandatory)][string]$Label,
+        [Parameter(Mandatory)][string]$NameKey
+    )
+    $result = [pscustomobject]@{ Status = 'failed'; Target = $null }
+    if (-not (Test-Path -LiteralPath $Alpha -PathType Container)) {
+        Write-DevboxWarning "Error: the host folder does not exist: $Alpha. Nothing was done."
+        return $result
+    }
+    $alphaKey = ConvertTo-DevboxHostKey -Path $Alpha
+    $sameBeta = @($Sessions | Where-Object { $_.Beta -ieq $Beta })
+    foreach ($item in $sameBeta) {
+        if ((ConvertTo-DevboxHostKey -Path $item.Alpha) -ne $alphaKey) {
+            Write-DevboxWarning "Error: the folder '$Beta' of the container is already synchronized by the session '$($item.Name)' with another host folder ($($item.Alpha)). Nothing was done."
+            return $result
+        }
+    }
+    if ($sameBeta.Count -gt 0) {
+        $result.Status = 'ready'
+        $result.Target = $sameBeta[0]
+        return $result
+    }
+    $activeCover = @($Sessions | Where-Object { -not $_.Paused -and (Test-DevboxFolderCovers -Outer $_.Beta -Inner $Beta) })
+    if ($activeCover.Count -gt 0) {
+        Write-Host "'$Label' is already synchronized by the active session '$($activeCover[0].Name)': nothing was created."
+        $result.Status = 'covered'
+        return $result
+    }
+    if (-not (Confirm-DevboxContainerFolder -Container $Container -User $User -Path $Beta)) { return $result }
+    $main = Get-DevboxSyncSessionName -Container $Container
+    if (-not $main) {
+        Write-DevboxWarning "Error: could not read the ID of '$Container'."
+        return $result
+    }
+    $name = Get-DevboxFolderSessionName -MainSession $main -Relative $NameKey
+    $created = New-DevboxFolderSession -Container $Container -User $User -Name $name -Alpha $Alpha -Beta $Beta -Label $Label
+    if (-not $created) { return $result }
+    $result.Status = 'ready'
+    $result.Target = $created
+    return $result
+}
+
+# The synchronization menu:
+#   None              nothing is synchronized (the daemon runs and the sessions of the container are paused).
+#   Add (relative)    a new folder, relative to the host projects folder (the same path inside the container).
+#   Add (absolute)    a new folder given as a host path and a container path.
+#   All registered    every registered session that is not inside another registered one.
+#   Custom            a checklist of the registered sessions: the checked ones are active, the others paused.
+# Rules, from the intersection of the folders (the folder of the container decides):
 #   - a session that covers active ones is activated and pauses them;
 #   - one that is not inside any other and covers none is just activated (nothing else is paused);
 #   - one that is inside an active session changes nothing (somebody may be using that one);
-#   - All registered activates the sessions that are not inside another registered one;
-#   - only No sync pauses everything. Nothing is ever terminated and no file is touched.
-# A session of the whole projects folder is never created here, it only appears when it exists.
+#   - Custom refuses a selection with overlapping folders and changes nothing;
+#   - every Add and every activation checks both folders: the host one must exist (otherwise the operation
+#     is aborted) and the one of the container is created after asking when it does not exist.
+# Nothing is ever terminated and no file is touched. A session of the whole projects folder is never
+# created here, it only appears when it exists.
 # Returns Ok ($false on failure; the reason is printed) and Active ($true when something is synchronized).
 function Invoke-DevboxSyncPickCore {
     param([Parameter(Mandatory)][string]$Container, [switch]$Flush)
@@ -1260,47 +1446,81 @@ function Invoke-DevboxSyncPickCore {
         Write-DevboxWarning 'Error: the Mutagen daemon could not be started.'
         return (& $fail)
     }
-    $sessions = @(Get-DevboxProjectSessions -Container $Container -User $user)
+    $sessions = @(Get-DevboxPickSessions -Container $Container -User $user)
     # Two ACTIVE sessions that overlap must not exist (a paused one does no harm).
     if ((Show-DevboxSessionOverlaps -Container $Container -Sessions @(Get-DevboxContainerSyncSessions -Container $Container)) -gt 0) { return (& $fail) }
-    $state = { param($item) if ($item.Paused) { 'paused' } else { 'active' } }
-    $noSync = 'No sync'
+    $rootBeta = "/home/$user/devbox/projects"
+    $noneItem = 'None'
+    $relativeItem = 'Add (relative)'
+    $absoluteItem = 'Add (absolute)'
     $allItem = 'All registered'
-    $addItem = 'Add...'
-    $labels = @($noSync)
-    $byLabel = @{}
-    foreach ($item in @($sessions | Sort-Object { $_.Relative })) {
-        $name = if ($item.Relative) { $item.Relative } else { '(the whole projects folder)' }
-        $label = "$name  [$(& $state $item)]"
-        $labels += $label
-        $byLabel[$label] = $item
-    }
-    if ($sessions.Count -gt 0) { $labels += $allItem }
-    $labels += $addItem
+    $customItem = 'Custom (select several)'
+    $labels = @($noneItem, $relativeItem, $absoluteItem)
+    if ($sessions.Count -gt 0) { $labels += @($allItem, $customItem) }
     $choice = Select-DevboxItem -Title "Select what to synchronize in '$Container':" -Items $labels
     if (-not $choice) {
         Write-Host 'Cancelled: nothing was changed.'
         return $result
     }
-    if ($choice -eq $noSync) {
+    if ($choice -eq $noneItem) {
         $result.Ok = [bool](Suspend-DevboxSyncSessions -Container $Container)
         return $result
     }
     $ok = $true
     if ($choice -eq $allItem) {
         # The sessions that are not inside another registered one.
-        $top = @($sessions | Where-Object { $item = $_; -not @($sessions | Where-Object { $_.Name -ne $item.Name -and (Test-DevboxFolderCovers -Outer $_.Relative -Inner $item.Relative) -and -not (Test-DevboxFolderCovers -Outer $item.Relative -Inner $_.Relative) }) })
+        $top = @($sessions | Where-Object { $item = $_; -not @($sessions | Where-Object { $_.Name -ne $item.Name -and (Test-DevboxFolderCovers -Outer $_.Beta -Inner $item.Beta) -and -not (Test-DevboxFolderCovers -Outer $item.Beta -Inner $_.Beta) }) })
         foreach ($item in $top) {
-            $current = @(Get-DevboxProjectSessions -Container $Container -User $user)
+            $current = @(Get-DevboxPickSessions -Container $Container -User $user)
             $fresh = @($current | Where-Object { $_.Name -eq $item.Name })[0]
-            if (-not (Enable-DevboxFolderSession -Target $fresh -Sessions $current -Flush:$Flush)) { $ok = $false }
+            if (-not (Enable-DevboxFolderSession -Container $Container -User $user -Target $fresh -Sessions $current -Flush:$Flush)) { $ok = $false }
         }
         $result.Ok = $ok
         $result.Active = $ok
         return $result
     }
 
-    if ($choice -eq $addItem) {
+    if ($choice -eq $customItem) {
+        $ordered = @($sessions | Sort-Object { $_.Label })
+        $itemLabels = @($ordered | ForEach-Object { "$($_.Label)  [$(if ($_.Paused) { 'paused' } else { 'active' })]" })
+        $initial = @($ordered | ForEach-Object { -not $_.Paused })
+        $picked = Select-DevboxItems -Title "Check the folders to keep synchronized in '$Container' (the others are paused):" -Items $itemLabels -Checked $initial
+        if ($picked.Cancelled) {
+            Write-Host 'Cancelled: nothing was changed.'
+            return $result
+        }
+        $chosen = @($picked.Indexes | ForEach-Object { $ordered[$_] })
+        $overlaps = @(Get-DevboxSessionOverlaps -Sessions $chosen)
+        if ($overlaps.Count -gt 0) {
+            Write-DevboxWarning 'Error: the selection has overlapping folders (two active sessions of one container must not overlap). Nothing was changed:'
+            foreach ($overlap in $overlaps) { Write-DevboxWarning "  - $($overlap.First) and $($overlap.Second): $($overlap.Reason)" }
+            Write-DevboxNext 'Next: run it again and check only one of the overlapping folders.'
+            return (& $fail)
+        }
+        # Both folders of every checked session, before anything changes.
+        foreach ($item in $chosen) {
+            if (-not (Test-Path -LiteralPath $item.Alpha -PathType Container)) {
+                Write-DevboxWarning "Error: the host folder of '$($item.Label)' does not exist: $($item.Alpha). Nothing was changed."
+                return (& $fail)
+            }
+        }
+        foreach ($item in $chosen) {
+            if (-not (Confirm-DevboxContainerFolder -Container $Container -User $user -Path $item.Beta -Quiet)) { return (& $fail) }
+        }
+        $chosenNames = @($chosen | ForEach-Object { $_.Name })
+        $toPause = @($ordered | Where-Object { -not $_.Paused -and $chosenNames -notcontains $_.Name })
+        $toResume = @($chosen | Where-Object { $_.Paused })
+        if (-not (Suspend-DevboxSessionList -Sessions $toPause -Reason 'it is not selected')) { $ok = $false }
+        if ($toResume.Count -gt 0) {
+            if (-not (Resume-DevboxSyncSessions -Names @($toResume | ForEach-Object { $_.Name }) -Flush:$Flush)) { $ok = $false }
+        }
+        if ($ok) { Write-DevboxSuccess "Selection applied: $($chosen.Count) folder(s) synchronized." }
+        $result.Ok = $ok
+        $result.Active = ($ok -and $chosen.Count -gt 0)
+        return $result
+    }
+
+    if ($choice -eq $relativeItem) {
         $typed = Read-Host 'Folder to add (relative to the host projects folder, or absolute inside it; empty cancels)'
         if (-not $typed -or -not $typed.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'
@@ -1311,25 +1531,54 @@ function Invoke-DevboxSyncPickCore {
             Write-DevboxWarning "Error: '$typed': $($resolved.Error)"
             return (& $fail)
         }
-        $existing = @($sessions | Where-Object { $_.Relative.ToLowerInvariant() -eq $resolved.Relative.ToLowerInvariant() })
-        if ($existing.Count -gt 0) { $target = $existing[0] }
-        else {
-            $activeCover = @($sessions | Where-Object { -not $_.Paused -and (Test-DevboxFolderCovers -Outer $_.Relative -Inner $resolved.Relative) })
-            if ($activeCover.Count -gt 0) {
-                Write-Host "'$($resolved.Relative)' is already synchronized by the active session '$($activeCover[0].Name)': nothing was created."
-                $result.Active = $true
-                return $result
-            }
-            $target = New-DevboxFolderSession -Container $Container -User $user -Relative $resolved.Relative -Full $resolved.Full
-            if (-not $target) { return (& $fail) }
-        }
+        $alpha = $resolved.Full
+        $beta = "$rootBeta/$($resolved.Relative)"
+        $label = $resolved.Relative
+        $nameKey = $resolved.Relative
     } else {
-        $target = $byLabel[$choice]
+        $typedHost = Read-Host 'Host folder to add (absolute path; empty cancels)'
+        if (-not $typedHost -or -not $typedHost.Trim()) {
+            Write-Host 'Cancelled: nothing was changed.'
+            return $result
+        }
+        $alpha = $typedHost.Trim().Trim('"')
+        if (-not [System.IO.Path]::IsPathRooted($alpha)) {
+            Write-DevboxWarning "Error: '$alpha' is not an absolute host path. Nothing was done."
+            return (& $fail)
+        }
+        $alpha = [System.IO.Path]::GetFullPath($alpha).TrimEnd('\', '/')
+        $typedBeta = Read-Host 'Folder in the container (absolute Linux path, or starting with ~/; empty cancels)'
+        if (-not $typedBeta -or -not $typedBeta.Trim()) {
+            Write-Host 'Cancelled: nothing was changed.'
+            return $result
+        }
+        $beta = $typedBeta.Trim().Trim('"')
+        if ($beta -eq '~') { $beta = "/home/$user" }
+        elseif ($beta.StartsWith('~/')) { $beta = "/home/$user/" + $beta.Substring(2) }
+        $beta = ConvertTo-DevboxBetaPath -Path $beta
+        if (-not $beta.StartsWith('/') -or $beta -eq '/' -or $beta -match '(^|/)\.\.(/|$)') {
+            Write-DevboxWarning "Error: '$typedBeta' is not a valid folder of the container (an absolute path other than /, without '..'). Nothing was done."
+            return (& $fail)
+        }
+        $readOnly = "/home/$user/devbox/bash"
+        if ($beta.Equals($readOnly, [System.StringComparison]::OrdinalIgnoreCase) -or $beta.StartsWith($readOnly + '/', [System.StringComparison]::OrdinalIgnoreCase)) {
+            Write-DevboxWarning "Error: $readOnly is mounted read-only in the container. Nothing was done."
+            return (& $fail)
+        }
+        $label = Get-DevboxFolderLabel -User $user -Alpha $alpha -Beta $beta
+        $nameKey = "$(ConvertTo-DevboxHostKey -Path $alpha)|$beta"
     }
-    $current = @(Get-DevboxProjectSessions -Container $Container -User $user)
+    $registered = Register-DevboxSyncFolder -Container $Container -User $user -Sessions $sessions -Alpha $alpha -Beta $beta -Label $label -NameKey $nameKey
+    if ($registered.Status -eq 'failed') { return (& $fail) }
+    if ($registered.Status -eq 'covered') {
+        $result.Active = $true
+        return $result
+    }
+    $current = @(Get-DevboxPickSessions -Container $Container -User $user)
+    $target = $registered.Target
     $fresh = @($current | Where-Object { $_.Name -eq $target.Name })
     if ($fresh.Count -gt 0) { $target = $fresh[0] }
-    if (-not (Enable-DevboxFolderSession -Target $target -Sessions $current -Flush:$Flush)) { return (& $fail) }
+    if (-not (Enable-DevboxFolderSession -Container $Container -User $user -Target $target -Sessions $current -Flush:$Flush)) { return (& $fail) }
     $result.Active = $true
     return $result
 }

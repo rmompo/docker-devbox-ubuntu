@@ -1,6 +1,6 @@
 # Synchronize the projects of a running Mutagen container chosen from a menu.
-# Version: 0.4.0
-# A menu chooses what to synchronize: No sync, a registered folder, All or Add.
+# Version: 0.5.0
+# A menu chooses what to synchronize: None, Add (relative), Add (absolute), All or Custom.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -13,10 +13,10 @@ if ($Help) {
         -Description 'Chooses, from menus, a running Mutagen container and what to synchronize in it.' `
         -Usage 'dkdb-mutagen-sync [-Help]' `
         -Examples @(
-            @{ Command = 'dkdb-mutagen-sync'; Description = 'Choose the container, then No sync, a registered folder, All registered or Add...' }
+            @{ Command = 'dkdb-mutagen-sync'; Description = 'Choose the container, then None, Add (relative), Add (absolute), All registered or Custom' }
         ) `
         -Notes @(
-            'For a container that uses Mutagen a menu asks what to synchronize: No sync (the first option, the default: the daemon is started and the existing sessions are paused), a folder already registered as a session, All registered, or Add... (a new folder). Registering projects separately is the recommended way. A folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). All registered activates the sessions that are not inside another one. Nothing is ever terminated.',
+            'For a container that uses Mutagen a menu asks what to synchronize: None (the first option, the default: the daemon is started and the existing sessions are paused), Add (relative) (a folder relative to the host projects folder), Add (absolute) (a host folder and a folder of the container), All registered, or Custom (a checklist of the registered sessions: checked ones are active, the others paused). Every Add and activation checks both folders: a missing host folder aborts the operation; a missing folder of the container is created after asking. A new folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). Custom refuses overlapping folders. Nothing is ever terminated.',
             'Sessions are paused, never terminated; the files are not touched.'
         )
     exit 0
@@ -72,5 +72,5 @@ if ($pick.Active) {
     Write-DevboxSuccess "Mutagen sync for '$selected' is active."
     Write-DevboxNext 'Next: dkdb-mutagen-status shows the progress; run dkdb-mutagen-sync again to change the folder.'
 } else {
-    Write-DevboxNext 'Next: run dkdb-mutagen-sync again and choose a folder (or Add...) to synchronize.'
+    Write-DevboxNext 'Next: run dkdb-mutagen-sync again and choose a folder (Add) to synchronize.'
 }

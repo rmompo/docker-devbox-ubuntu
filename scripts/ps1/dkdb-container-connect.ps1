@@ -1,6 +1,6 @@
 # Open a bash shell, as the container's user, in a running devbox container.
-# Version: 0.4.0
-# For a Mutagen container a menu chooses what to synchronize (No sync is the first option and the default).
+# Version: 0.5.0
+# For a Mutagen container a menu chooses what to synchronize (None is the first option and the default).
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -10,13 +10,13 @@ param(
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Opens a bash shell, as the container''s user, in one running devbox container chosen from a menu. For a container that uses Mutagen it starts the daemon too and then asks what to synchronize; by default (No sync) nothing is.' `
+        -Description 'Opens a bash shell, as the container''s user, in one running devbox container chosen from a menu. For a container that uses Mutagen it starts the daemon too and then asks what to synchronize; by default (None) nothing is.' `
         -Usage 'dkdb-container-connect [-Help]' `
         -Examples @(
             @{ Command = 'dkdb-container-connect'; Description = 'Connects; for a Mutagen container it first shows the synchronization menu.' }
         ) `
         -Notes @(
-            'For a container that uses Mutagen a menu asks what to synchronize: No sync (the first option, the default: the daemon is started and the existing sessions are paused), a folder already registered as a session, All registered, or Add... (a new folder). Registering projects separately is the recommended way. A folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). All registered activates the sessions that are not inside another one. Nothing is ever terminated.',
+            'For a container that uses Mutagen a menu asks what to synchronize: None (the first option, the default: the daemon is started and the existing sessions are paused), Add (relative) (a folder relative to the host projects folder), Add (absolute) (a host folder and a folder of the container), All registered, or Custom (a checklist of the registered sessions: checked ones are active, the others paused). Every Add and activation checks both folders: a missing host folder aborts the operation; a missing folder of the container is created after asking. A new folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). Custom refuses overlapping folders. Nothing is ever terminated.',
             'The shell opens even if the synchronization fails.',
             'If the container has no AI client yet, it suggests how to install one.'
         )
@@ -71,7 +71,7 @@ if (-not $userName) {
 # Stop when the image the container was created from is not compatible with the scripts.
 $null = Test-DevboxContainerVersion -Container $selected
 
-# Mutagen container: a menu decides what is synchronized (No sync, the first option, is the default).
+# Mutagen container: a menu decides what is synchronized (None, the first option, is the default).
 # The shell opens even if this fails.
 if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
     $pick = Invoke-DevboxSyncPick -Container $selected

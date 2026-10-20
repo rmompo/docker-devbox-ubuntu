@@ -1,18 +1,23 @@
-# Show the Mutagen sync status (state and conflicts) of a devbox container chosen from a menu.
-# Version: 0.2.0
+# Show the Mutagen sync status (state and conflicts) of a devbox container, given by name or chosen from a menu.
+# Version: 0.3.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [string]$Container,
     [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Shows the synchronization state of a Mutagen container chosen from a menu: for every session (the whole projects folder or each synchronized folder) Mutagen''s own output, plus a summary of how many files are done and whether it moved since the previous query.' `
-        -Usage 'dkdb-mutagen-status [-Help]' `
+        -Description 'Shows the synchronization state of a Mutagen container (given with -Container, or chosen from a menu): for every session (the whole projects folder or each synchronized folder) Mutagen''s own output, plus a summary of how many files are done and whether it moved since the previous query.' `
+        -Usage 'dkdb-mutagen-status [-Container <name>] [-Help] [-Man]' `
+        -Parameters @(
+            @{ Name = '-Container'; Description = 'Name of the container (with or without the dkdb- prefix); skips the menu. It must be a container that uses Mutagen.' }
+        ) `
         -Examples @(
-            @{ Command = 'dkdb-mutagen-status'; Description = 'Pick a container and read its sessions; run it again to see the progress.' }
+            @{ Command = 'dkdb-mutagen-status'; Description = 'Pick a container and read its sessions; run it again to see the progress.' },
+            @{ Command = 'dkdb-mutagen-status -Container dkdb-dev'; Description = 'Read the sessions of that container without the menu.' }
         ) `
         -Notes @(
             'It also shows paused sessions, the last error and conflicts.'
@@ -26,7 +31,7 @@ if ($Man) {
             'Docker Engine running, mutagen.exe and the Mutagen daemon running.'
         ) `
         -Steps @(
-            'Shows the menu of the dkdb- containers that use Mutagen (running or stopped).',
+            'Uses the container given with -Container, or shows the menu of the dkdb- containers that use Mutagen (running or stopped).',
             'For every session of the container prints its host and container folder, its state and conflicts, and a progress summary (so far X of Y files) compared with the previous query.',
             'Checks that no two active sessions of the container overlap and shows them in red if they do.'
         ) `
@@ -53,10 +58,18 @@ if ($containers.Count -eq 0) {
     exit 0
 }
 
-$selected = Select-DevboxItem -Title 'Select the container to check:' -Items $containers
-if (-not $selected) {
-    Write-Host 'Cancelled.'
-    exit 0
+if ($Container) {
+    $selected = @($containers | Where-Object { $_ -eq $Container -or $_ -eq "$DevboxPrefix-$Container" }) | Select-Object -First 1
+    if (-not $selected) {
+        Write-DevboxWarning "Error: '$Container' is not a '$DevboxPrefix-' container that uses Mutagen. Available: $($containers -join ', ')"
+        exit 1
+    }
+} else {
+    $selected = Select-DevboxItem -Title 'Select the container to check:' -Items $containers
+    if (-not $selected) {
+        Write-Host 'Cancelled.'
+        exit 0
+    }
 }
 
 if (-not (Test-DevboxMutagenDaemon)) {
