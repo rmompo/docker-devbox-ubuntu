@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.12
+# Version: 0.5.13
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -1020,18 +1020,21 @@ function Write-DevboxCardField {
         [Parameter(Mandatory)][string]$Label,
         [AllowEmptyString()][string]$Value,
         [string]$Color,
+        [switch]$Badge,
         [Parameter(Mandatory)][int]$Width
     )
     $valueColumn = 19
     $room = [math]::Max(10, $Width - $valueColumn)
     if (-not $Value) { $Value = '-' }
     $colorArgs = @{}
-    if ($Color) { $colorArgs.ForegroundColor = $Color }
+    if ($Color -and $Badge) { $colorArgs.ForegroundColor = 'Black'; $colorArgs.BackgroundColor = $Color }
+    elseif ($Color) { $colorArgs.ForegroundColor = $Color }
     $first = $true
     for ($i = 0; $first -or $i -lt $Value.Length; $i += $room) {
         $chunk = $Value.Substring($i, [math]::Min($room, $Value.Length - $i))
         if ($first) { $prefix = "$Label " + ('.' * [math]::Max(2, $valueColumn - 2 - $Label.Length)) + ' ' } else { $prefix = ' ' * $valueColumn }
         Write-Host $prefix -NoNewline
+        if ($Badge) { $chunk = " $chunk " }
         Write-Host $chunk @colorArgs
         $first = $false
     }
@@ -1058,15 +1061,20 @@ function Show-DevboxSyncCard {
     Write-DevboxCardField -Label ' IDENTIFIER' -Value ([string]$Session.identifier) -Width $width
     Write-Host '  ALPHA'
     Write-DevboxCardField -Label '   - URL' -Value (& $endpointUrl $Session.alpha) -Color $DevboxHostColor -Width $width
-    Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.alpha.connected) -Color (& $yesNoColor $Session.alpha.connected) -Width $width
+    Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.alpha.connected) -Color (& $yesNoColor $Session.alpha.connected) -Badge -Width $width
     Write-Host '  BETA'
     Write-DevboxCardField -Label '   - URL' -Value (& $endpointUrl $Session.beta) -Color $DevboxContainerColor -Width $width
-    Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.beta.connected) -Color (& $yesNoColor $Session.beta.connected) -Width $width
+    Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.beta.connected) -Color (& $yesNoColor $Session.beta.connected) -Badge -Width $width
     if ($Session.paused) {
-        Write-DevboxCardField -Label '  STATUS' -Value 'PAUSED' -Color 'Red' -Width $width
+        Write-DevboxCardField -Label '  STATUS' -Value 'PAUSED' -Color 'Red' -Badge -Width $width
     } else {
-        Write-DevboxCardField -Label '  STATUS' -Value 'ACTIVE' -Color 'Green' -Width $width
+        Write-DevboxCardField -Label '  STATUS' -Value 'ACTIVE' -Color 'Green' -Badge -Width $width
     }
+    # Mutagen's own state: watching is the healthy one, disconnected the broken one.
+    $state = ([string]$Session.status).ToUpperInvariant()
+    $stateColor = 'Gray'
+    if ($state -eq 'WATCHING') { $stateColor = 'Green' } elseif ($state -eq 'DISCONNECTED') { $stateColor = 'Red' }
+    Write-DevboxCardField -Label '  STATE' -Value $state -Color $stateColor -Badge -Width $width
 }
 
 # Show where the synchronization is and whether it moved since the previous query. The previous
