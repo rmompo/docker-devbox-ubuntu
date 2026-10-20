@@ -1,5 +1,5 @@
 # Show the Mutagen sync status (state and conflicts) of a devbox container, given by name or chosen from a menu.
-# Version: 0.4.0
+# Version: 0.4.1
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(

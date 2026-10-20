@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.11
+# Version: 0.5.12
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -1012,8 +1012,9 @@ function Get-DevboxConsoleWidth {
     return ($width - 1)
 }
 
-# One line of a card: the label in a fixed column and the value after it. A value longer than the
-# line continues on the next lines, aligned with the first character of the value.
+# One line of a card: the label, a leader of dots and the value, which always starts in the same
+# column. A value longer than the line continues on the next lines, aligned with the first
+# character of the value.
 function Write-DevboxCardField {
     param(
         [Parameter(Mandatory)][string]$Label,
@@ -1021,23 +1022,23 @@ function Write-DevboxCardField {
         [string]$Color,
         [Parameter(Mandatory)][int]$Width
     )
-    $labelWidth = 15
-    $room = [math]::Max(10, $Width - $labelWidth - 1)
+    $valueColumn = 19
+    $room = [math]::Max(10, $Width - $valueColumn)
     if (-not $Value) { $Value = '-' }
     $colorArgs = @{}
     if ($Color) { $colorArgs.ForegroundColor = $Color }
     $first = $true
     for ($i = 0; $first -or $i -lt $Value.Length; $i += $room) {
         $chunk = $Value.Substring($i, [math]::Min($room, $Value.Length - $i))
-        if ($first) { $prefix = $Label.PadRight($labelWidth) } else { $prefix = ' ' * $labelWidth }
-        Write-Host "$prefix " -NoNewline
+        if ($first) { $prefix = "$Label " + ('.' * [math]::Max(2, $valueColumn - 2 - $Label.Length)) + ' ' } else { $prefix = ' ' * $valueColumn }
+        Write-Host $prefix -NoNewline
         Write-Host $chunk @colorArgs
         $first = $false
     }
 }
 
 # Card of a Mutagen session (an object of 'mutagen sync list --template {{json .}}'): name, identifier,
-# both endpoints and the state, between two lines of '=' as wide as the console.
+# both endpoints and the state, under a line of '=' as wide as the console.
 function Show-DevboxSyncCard {
     param([Parameter(Mandatory)]$Session)
     $width = Get-DevboxConsoleWidth
@@ -1050,24 +1051,22 @@ function Show-DevboxSyncCard {
         if ($Endpoint.user) { $user = "$($Endpoint.user)@" }
         return "$protocol`://$user$($Endpoint.host)$path"
     }
-    $yesNo = { param($Flag) if ($Flag) { 'Yes' } else { 'No' } }
+    $yesNo = { param($Flag) if ($Flag) { 'YES' } else { 'NO' } }
     $yesNoColor = { param($Flag) if ($Flag) { 'Green' } else { 'Red' } }
-    $bar = '=' * $width
-    Write-Host $bar
-    Write-DevboxCardField -Label 'NAME' -Value ([string]$Session.name) -Width $width
-    Write-DevboxCardField -Label 'IDENTIFIER' -Value ([string]$Session.identifier) -Width $width
-    Write-Host ' - ALPHA'
+    Write-Host ('=' * $width)
+    Write-DevboxCardField -Label ' NAME' -Value ([string]$Session.name) -Width $width
+    Write-DevboxCardField -Label ' IDENTIFIER' -Value ([string]$Session.identifier) -Width $width
+    Write-Host '  ALPHA'
     Write-DevboxCardField -Label '   - URL' -Value (& $endpointUrl $Session.alpha) -Color $DevboxHostColor -Width $width
     Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.alpha.connected) -Color (& $yesNoColor $Session.alpha.connected) -Width $width
-    Write-Host ' - BETA'
+    Write-Host '  BETA'
     Write-DevboxCardField -Label '   - URL' -Value (& $endpointUrl $Session.beta) -Color $DevboxContainerColor -Width $width
     Write-DevboxCardField -Label '   - CONNECTED' -Value (& $yesNo $Session.beta.connected) -Color (& $yesNoColor $Session.beta.connected) -Width $width
     if ($Session.paused) {
-        Write-DevboxCardField -Label 'STATUS' -Value 'paused' -Color 'Red' -Width $width
+        Write-DevboxCardField -Label '  STATUS' -Value 'PAUSED' -Color 'Red' -Width $width
     } else {
-        Write-DevboxCardField -Label 'STATUS' -Value 'active' -Color 'Green' -Width $width
+        Write-DevboxCardField -Label '  STATUS' -Value 'ACTIVE' -Color 'Green' -Width $width
     }
-    Write-Host $bar
 }
 
 # Show where the synchronization is and whether it moved since the previous query. The previous
@@ -1082,13 +1081,13 @@ function Show-DevboxSyncProgress {
     $complete = ($null -ne $Progress.Total -and $Progress.Total -gt 0 -and $Progress.Done -ge $Progress.Total -and $Progress.Status -eq 'watching' -and -not $Progress.Paused)
     if ($null -ne $Progress.Total -and $Progress.Total -gt 0 -and $null -ne $Progress.Done) {
         $percent = [math]::Min(100, [int][math]::Floor(100 * $Progress.Done / $Progress.Total))
-        Write-Host "So far $($Progress.Done) of $($Progress.Total) files ($percent%) - status: $($Progress.Status)"
+        Write-Host "    So far $($Progress.Done) of $($Progress.Total) files ($percent%) - status: $($Progress.Status)"
     } else {
-        Write-Host "No file counts yet - status: $($Progress.Status)"
+        Write-Host "    No file counts yet - status: $($Progress.Status)"
     }
-    if ($Progress.Paused) { Write-DevboxWarning 'The session is paused: dkdb-container-start or dkdb-container-connect resume it.' }
-    if ($Progress.LastError) { Write-DevboxWarning "Mutagen reports an error: $($Progress.LastError)" }
-    if ($Progress.Conflicts -gt 0) { Write-DevboxWarning "$($Progress.Conflicts) conflicts: see TROUBLESHOOTING.md." }
+    if ($Progress.Paused) { Write-DevboxWarning '    The session is paused: dkdb-container-start or dkdb-container-connect resume it.' }
+    if ($Progress.LastError) { Write-DevboxWarning "    Mutagen reports an error: $($Progress.LastError)" }
+    if ($Progress.Conflicts -gt 0) { Write-DevboxWarning "    $($Progress.Conflicts) conflicts: see TROUBLESHOOTING.md." }
     $previous = $null
     if (Test-Path -LiteralPath $statePath -PathType Leaf) {
         try { $previous = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json } catch { $previous = $null }
@@ -1098,20 +1097,20 @@ function Show-DevboxSyncProgress {
         $ago = "$seconds s ago"
         if ($seconds -ge 120) { $ago = "$([int]($seconds / 60)) min ago" }
         if ($complete) {
-            Write-DevboxSuccess "The synchronization is up to date (previous query: $ago)."
+            Write-DevboxSuccess "    The synchronization is up to date (previous query: $ago)."
         } elseif ($null -ne $Progress.Done -and $null -ne $previous.Done -and $Progress.Done -gt $previous.Done) {
-            Write-DevboxSuccess "Progress: +$($Progress.Done - $previous.Done) files since the previous query ($ago)."
+            Write-DevboxSuccess "    Progress: +$($Progress.Done - $previous.Done) files since the previous query ($ago)."
         } elseif ($null -ne $Progress.Done -and $null -ne $previous.Done -and $Progress.Done -lt $previous.Done) {
-            Write-Host "The counters restarted since the previous query ($ago): a new synchronization cycle began."
+            Write-Host "    The counters restarted since the previous query ($ago): a new synchronization cycle began."
         } elseif ($Progress.Status -ne $previous.Status) {
-            Write-Host "The status changed since the previous query ($ago): $($previous.Status) -> $($Progress.Status)"
+            Write-Host "    The status changed since the previous query ($ago): $($previous.Status) -> $($Progress.Status)"
         } else {
-            Write-DevboxWarning "No progress since the previous query ($ago)."
+            Write-DevboxWarning "    No progress since the previous query ($ago)."
         }
     } elseif ($complete) {
-        Write-DevboxSuccess 'The synchronization is up to date.'
+        Write-DevboxSuccess '    The synchronization is up to date.'
     } else {
-        Write-Host 'First query of this session: run it again to see the progress.'
+        Write-Host '    First query of this session: run it again to see the progress.'
     }
     $snapshot = [pscustomobject]@{ Time = $now.ToString('o'); Status = $Progress.Status; Done = $Progress.Done; Total = $Progress.Total }
     try { $snapshot | ConvertTo-Json | Set-Content -LiteralPath $statePath } catch { $statePath = $null }
