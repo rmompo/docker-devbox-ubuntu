@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.5.20
+# Version: 0.6.1
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -90,7 +90,7 @@ function Show-DevboxHelp {
 # --- Manual (-Man): what a script does, in colors (spec 01) ---
 # The synchronization menu, shared by the manuals of the scripts that show it.
 $DevboxSyncMenuMan = @(
-    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: None (the first option and the default), Add (relative), Add (absolute), All registered or Custom.',
+    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: Keep as is (the first option and the default), None, Add (relative), Add (absolute), All registered or Custom.',
     'None pauses every session of the container: nothing is synchronized.',
     'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; %VAR% (for example %USERPROFILE%) and ~ are accepted for the host folder (your Windows user folder) and $HOME and ~ for the folder of the container (/home/<user>); they are stored resolved, not recalculated later.',
     'Every Add and every activation checks both folders: if a folder does not exist on the host you are asked whether to create it (No aborts); if the folder of the container exists it is used (a warning on Add), and if it does not exist you are asked whether to create it.',
@@ -1631,6 +1631,7 @@ function Register-DevboxSyncFolder {
 #     is aborted) and the one of the container is created after asking when it does not exist.
 # Nothing is ever terminated and no file is touched. A session of the whole projects folder is never
 # created here, it only appears when it exists.
+# Keep as is leaves every session in its current state (active stay active, paused stay paused).
 # Returns Ok ($false on failure; the reason is printed) and Active ($true when something is synchronized).
 function Invoke-DevboxSyncPickCore {
     param([Parameter(Mandatory)][string]$Container, [switch]$Flush)
@@ -1668,11 +1669,12 @@ function Invoke-DevboxSyncPickCore {
     if ((Show-DevboxSessionOverlaps -Container $Container -Sessions @(Get-DevboxContainerSyncSessions -Container $Container)) -gt 0) { return (& $fail) }
     $rootBeta = "/home/$user/devbox/projects"
     $noneItem = 'None'
+    $keepItem = 'Keep as is'
     $relativeItem = 'Add (relative)'
     $absoluteItem = 'Add (absolute)'
     $allItem = 'All registered'
     $customItem = 'Custom (select several)'
-    $labels = @($noneItem, $relativeItem, $absoluteItem)
+    $labels = @($keepItem, $noneItem, $relativeItem, $absoluteItem)
     if ($sessions.Count -gt 0) { $labels += @($allItem, $customItem) }
     # The registered syncs and their state, before the menu.
     if ($sessions.Count -gt 0) {
@@ -1692,6 +1694,11 @@ function Invoke-DevboxSyncPickCore {
     }
     if ($choice -eq $noneItem) {
         $result.Ok = [bool](Suspend-DevboxSyncSessions -Container $Container)
+        return $result
+    }
+    if ($choice -eq $keepItem) {
+        # Continue with the sessions exactly as they are: nothing is created, resumed, paused or flushed.
+        $result.Active = [bool]@($sessions | Where-Object { -not $_.Paused }).Count
         return $result
     }
     $ok = $true

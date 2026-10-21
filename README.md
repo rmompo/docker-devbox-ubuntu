@@ -82,7 +82,7 @@ From any folder, in a new terminal:
 |---|---------|--------------|
 | 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
 | 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path and the projects volume type: Docker bind mount or Mutagen). |
-| 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container it then shows the synchronization menu; the first option, **None**, is the default. |
+| 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container it then shows the synchronization menu; the first option, **Keep as is**, is the default. |
 | 4 | `dkdb-container-connect` | Opens a shell in a running container; for a Mutagen container it shows the same synchronization menu first. |
 | 5 | `dkdb-container-stop` | Stops a running container. |
 | 6 | `dkdb-container-delete` | Deletes a stopped container (asks for confirmation). |
@@ -103,26 +103,28 @@ From any folder, in a new terminal:
 There are no sync parameters: `dkdb-container-start`, `dkdb-container-connect` and `dkdb-mutagen-sync` show a menu for a Mutagen container:
 
 ```
-1  None                         <- the first option and the default (Enter)
-2  Add (relative)               <- a folder relative to the host projects folder
-3  Add (absolute)               <- a host folder and a folder of the container
-4  All registered
-5  Custom (select several)      <- a checklist of the registered sessions
+1  Keep as is                   <- the first option and the default (Enter): sessions stay as they are
+2  None                         <- pauses every session
+3  Add (relative)               <- a folder relative to the host projects folder
+4  Add (absolute)               <- a host folder and a folder of the container
+5  All registered
+6  Custom (select several)      <- a checklist of the registered sessions
        [x] repo2  [active]
        [ ] repo3  [paused]
 ```
 
 All and Custom only appear when the container already has registered sessions. The recommended way is to register the projects **separately** (repo1, repo2, ...); one session each.
 
-1. **None:** the Mutagen daemon is started and every session of the container is **paused**. Nothing is synchronized.
-2. **Add (relative):** asks for a folder, relative to the host projects folder or absolute inside it. It is mirrored at the same path inside the container. Its session is created, activated and joins the list.
-3. **Add (absolute):** asks for a host folder (absolute) and a folder of the container (absolute, or starting with `~/`), which can be anywhere except the read-only `~/devbox/bash`. The host folder accepts `%VAR%` (for example `%USERPROFILE%`) and `~` (your Windows user folder); the folder of the container accepts `$HOME` and `~` (`/home/<user>`). They are resolved when typed and stored resolved, not recalculated in each session.
-4. **All registered:** activates every registered session that is not inside another registered one.
-5. **Custom:** a checklist (Up/Down, Space to check, Enter to apply, Esc to cancel). The checked sessions are active and the unchecked ones are paused. If two checked folders overlap it warns and changes nothing.
-6. **Both folders are always checked** by every Add and every activation: if the host folder does not exist you are asked whether to create it (No aborts); if the folder of the container exists it is used (Add warns about it), and if it does not exist you are asked whether to create it.
-7. **Folders that contain each other** (for example `madridDigital` and `madridDigital/folder1`): only one of them can be active. Activating the outer one pauses the active inner ones; choosing an inner one while the outer one is active changes nothing (somebody may be using it). Nothing is terminated and no file is touched.
-8. Each session covers one folder, not the whole container. The registry is Mutagen itself: the list comes from the sessions of the container (recognized by their beta endpoint, whatever their name). Stopping a container never touches Mutagen, and deleting it terminates its sessions. The menu never creates a session of the whole projects folder (it could take very long).
-9. Two **active** sessions of the same container never overlap; different containers can share a host folder (the host is the real copy, each container subscribes and publishes).
+1. **Keep as is:** changes nothing: active sessions stay active and paused ones stay paused. Nothing is created, resumed, paused or flushed.
+2. **None:** the Mutagen daemon is started and every session of the container is **paused**. Nothing is synchronized.
+3. **Add (relative):** asks for a folder, relative to the host projects folder or absolute inside it. It is mirrored at the same path inside the container. Its session is created, activated and joins the list.
+4. **Add (absolute):** asks for a host folder (absolute) and a folder of the container (absolute, or starting with `~/`), which can be anywhere except the read-only `~/devbox/bash`. The host folder accepts `%VAR%` (for example `%USERPROFILE%`) and `~` (your Windows user folder); the folder of the container accepts `$HOME` and `~` (`/home/<user>`). They are resolved when typed and stored resolved, not recalculated in each session.
+5. **All registered:** activates every registered session that is not inside another registered one.
+6. **Custom:** a checklist (Up/Down, Space to check, Enter to apply, Esc to cancel). The checked sessions are active and the unchecked ones are paused. If two checked folders overlap it warns and changes nothing.
+7. **Both folders are always checked** by every Add and every activation: if the host folder does not exist you are asked whether to create it (No aborts); if the folder of the container exists it is used (Add warns about it), and if it does not exist you are asked whether to create it.
+8. **Folders that contain each other** (for example `madridDigital` and `madridDigital/folder1`): only one of them can be active. Activating the outer one pauses the active inner ones; choosing an inner one while the outer one is active changes nothing (somebody may be using it). Nothing is terminated and no file is touched.
+9. Each session covers one folder, not the whole container. The registry is Mutagen itself: the list comes from the sessions of the container (recognized by their beta endpoint, whatever their name). Stopping a container never touches Mutagen, and deleting it terminates its sessions. The menu never creates a session of the whole projects folder (it could take very long).
+10. Two **active** sessions of the same container never overlap; different containers can share a host folder (the host is the real copy, each container subscribes and publishes).
 
 ### Help and manual
 
