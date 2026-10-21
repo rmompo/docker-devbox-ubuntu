@@ -1,5 +1,5 @@
 # Start one stopped devbox container chosen from a menu.
-# Version: 0.5.2
+# Version: 0.5.3
 # For a Mutagen container a menu chooses what to synchronize (Keep as is is the first option and the default).
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -16,7 +16,7 @@ if ($Help) {
             @{ Command = 'dkdb-container-start'; Description = 'Starts the container; for a Mutagen container it then shows the synchronization menu.' }
         ) `
         -Notes @(
-            'For a container that uses Mutagen a menu asks what to synchronize: Keep as is (the first option, the default: continue with the sessions exactly as they are; nothing is created, resumed or paused), None (the daemon is started and the existing sessions are paused), Add (relative) (a folder relative to the host projects folder), Add (absolute) (a host folder and a folder of the container), All registered, or Custom (a checklist of the registered sessions: checked ones are active, the others paused). Every Add and activation checks both folders: a missing host folder aborts the operation; a missing folder of the container is created after asking. A new folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). Custom refuses overlapping folders. Nothing is ever terminated.',
+            'For a container that uses Mutagen a menu asks what to synchronize: Keep as is (the first option, the default: continue with the sessions exactly as they are; nothing is created, resumed or paused), Custom (a checklist of the registered sessions: checked ones are active, the others paused), All registered, None (the daemon is started and the existing sessions are paused), Add (relative) (a folder relative to the host projects folder), or Add (absolute) (a host folder and a folder of the container). Every Add and activation checks both folders: a missing host folder aborts the operation; a missing folder of the container is created after asking. A new folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). Custom refuses overlapping folders. Nothing is ever terminated.',
             'An image older than the scripts only produces a warning: the container keeps working.'
         )
     exit 0

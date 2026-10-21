@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.6.1
+# Version: 0.6.2
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -90,7 +90,7 @@ function Show-DevboxHelp {
 # --- Manual (-Man): what a script does, in colors (spec 01) ---
 # The synchronization menu, shared by the manuals of the scripts that show it.
 $DevboxSyncMenuMan = @(
-    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: Keep as is (the first option and the default), None, Add (relative), Add (absolute), All registered or Custom.',
+    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: Keep as is (the first option and the default), Custom, All registered, None, Add (relative) or Add (absolute).',
     'None pauses every session of the container: nothing is synchronized.',
     'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; %VAR% (for example %USERPROFILE%) and ~ are accepted for the host folder (your Windows user folder) and $HOME and ~ for the folder of the container (/home/<user>); they are stored resolved, not recalculated later.',
     'Every Add and every activation checks both folders: if a folder does not exist on the host you are asked whether to create it (No aborts); if the folder of the container exists it is used (a warning on Add), and if it does not exist you are asked whether to create it.',
@@ -1674,8 +1674,9 @@ function Invoke-DevboxSyncPickCore {
     $absoluteItem = 'Add (absolute)'
     $allItem = 'All registered'
     $customItem = 'Custom (select several)'
-    $labels = @($keepItem, $noneItem, $relativeItem, $absoluteItem)
-    if ($sessions.Count -gt 0) { $labels += @($allItem, $customItem) }
+    $labels = @($keepItem)
+    if ($sessions.Count -gt 0) { $labels += @($customItem, $allItem) }
+    $labels += @($noneItem, $relativeItem, $absoluteItem)
     # The registered syncs and their state, before the menu.
     if ($sessions.Count -gt 0) {
         Write-Host "Registered syncs in '$Container':"
