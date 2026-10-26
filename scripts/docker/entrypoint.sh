@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.2.0
+# Version: 0.3.0
 # Container entrypoint (runs as root).
 # Creates the user given in DEVBOX_USER (password = user name, sudo with
 # password), then hands the main process over to that user.
@@ -67,15 +67,16 @@ if ! git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$safe
     git config --system --add safe.directory "$safe_dir"
 fi
 
-# The scripts of ~/devbox/bash (dkdb-info.sh, dkdb-version.sh, the AI client installers) run by name in the
-# interactive shells: the folder goes on the PATH and every script also gets a function that runs it with bash,
-# because a Windows mount may not keep the execute bit. Added to ~/.bashrc once (idempotent).
+# The scripts of ~/devbox/bash and of ~/devbox/bash/ntm-ssologin (dkdb-info.sh, dkdb-version.sh, the AI client
+# installers, the ntm-ssologin scripts) run by name in the interactive shells: both folders go on the PATH and
+# every script also gets a function that runs it with bash, because a Windows mount may not keep the execute
+# bit. Added to ~/.bashrc once (idempotent).
 bashrc="${user_home}/.bashrc"
 if ! grep -qxF '# devbox: the scripts of ~/devbox/bash run by name' "$bashrc" 2>/dev/null; then
     cat >> "$bashrc" <<'BASHRC'
 # devbox: the scripts of ~/devbox/bash run by name
-export PATH="$HOME/devbox/bash:$PATH"
-for devbox_script in "$HOME"/devbox/bash/dkdb-*.sh; do
+export PATH="$HOME/devbox/bash:$HOME/devbox/bash/ntm-ssologin:$PATH"
+for devbox_script in "$HOME"/devbox/bash/dkdb-*.sh "$HOME"/devbox/bash/ntm-ssologin/dkdb-*.sh; do
     [ -e "$devbox_script" ] || continue
     devbox_name="${devbox_script##*/}"
     [ "$devbox_name" = dkdb-common.sh ] && continue

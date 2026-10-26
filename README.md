@@ -61,7 +61,7 @@ dkdb-install-claudecode.sh       # Claude Code
 dkdb-install-ghcopilot-cli.sh    # GitHub Copilot CLI
 ```
 
-The scripts of `~/devbox/bash` run by name in a container created from image 0.2.0 or newer (`bash ~/devbox/bash/<script>` works in any). Besides the installers there are two that show information from inside the container, in the same layout as their PowerShell twins:
+The scripts of `~/devbox/bash` run by name in a container created from image 0.2.0 or newer, and the ones of `~/devbox/bash/ntm-ssologin` from image 0.3.0 (`bash ~/devbox/bash/<script>` works in any). Besides the installers there are two that show information from inside the container, in the same layout as their PowerShell twins:
 
 | Script | What it shows |
 |--------|---------------|
