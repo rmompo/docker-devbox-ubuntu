@@ -1,4 +1,4 @@
-# Version: 0.1.2
+# Version: 0.1.3
 # ntm-ssologin: ia4d en el contenedor
 
 Prepara un contenedor devbox con Claude Code para usar **ia4d (ntm GenAI Suite)**: llavero para el instalador,
@@ -86,8 +86,10 @@ Qué hace `all` (el comando por defecto), en orden:
    1. Muestra una URL `https://<sso-bridge>/cli-auth?port=NNNNN`.
    2. Ábrela en el navegador de Windows y entra con tu cuenta de ntm. Si sale un aviso de certificado, acéptalo: es una IP interna.
    3. Al final el navegador dará error al abrir `http://localhost:NNNNN/callback?...`. **Es lo esperado.**
-   4. Copia la dirección completa de la barra, pégala en la terminal (no se ve al pegar) y pulsa Enter. Hazlo sin
-      demorarte, porque el instalador no espera indefinidamente.
+   4. Copia la dirección completa de la barra, pégala en la terminal (no se ve al pegar) y pulsa Enter. Después
+      muestra solo el final, como `http://localhost:NNNNN/callback?...***1234 (N characters)`, para que veas qué pegaste.
+      El script espera tanto como el instalador, que no espera indefinidamente: si el instalador deja de esperar,
+      lo avisa al momento (`The installer stopped waiting`) y hay que repetir el login.
    5. Debe salir `Autenticado como ...`.
 3. **install**: ejecuta el instalador de ia4d dentro del llavero. Si hace preguntas, respóndelas.
 4. **status**: resumen en verde, amarillo o rojo.
@@ -196,7 +198,7 @@ volver a ejecutar `bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh` (u
 | ia4d dice `Vuelve a autenticarte: ia4d-installer login` | Refresh token caducado o revocado | `bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh renew` |
 | `Keyring: the self-test failed` | Llavero creado con otra contraseña | `DKDB_KEYRING_PASS=<la de entonces>`, o borra `~/.local/share/keyrings/*` y haz `renew` |
 | `AADSTS7000218` | Se usó `login --device-code` | Usar `bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh login` (SSO bridge) |
-| `The installer stopped waiting` | Pasó demasiado tiempo entre la URL y el callback | Repetir y pegar el callback enseguida |
+| `The installer stopped waiting` | Pasó demasiado tiempo entre la URL y el callback (el script lo avisa en cuanto el instalador muere) | Repetir y pegar el callback enseguida |
 | La URL del bridge no abre | Sin VPN o red de ntm | Conectar la VPN y repetir |
 | `Missing packages ... sudo` | Contenedor de una imagen sin los paquetes | Escribir la contraseña de sudo; `bash ~/devbox/bash/dkdb-install-tools.sh check` lista lo que falta |
 | Procesos `<defunct>` (`dbus-daemon`, `gnome-keyring-d`) | El contenedor no tiene init en el PID 1 | Inofensivos; para evitarlos, crear el contenedor con `docker run --init` |
@@ -207,7 +209,7 @@ volver a ejecutar `bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh` (u
 
 - **Llavero:** está cifrado con `DKDB_KEYRING_PASS` (por defecto `devbox`). Es una contraseña conocida: protege el
   fichero en reposo, no frente a alguien con acceso al contenedor. **No la cambies** una vez creado el llavero.
-- **Callback:** la URL lleva el `access_token`. `dkdb-ntm-ssologin-ia4d.sh` la lee sin mostrarla, no la guarda en el historial ni en
+- **Callback:** la URL lleva el `access_token`. `dkdb-ntm-ssologin-ia4d.sh` la lee sin mostrarla (solo muestra los últimos 4 caracteres y la longitud), no la guarda en el historial ni en
   ficheros y se la pasa a `curl` por la entrada estándar (no aparece en `ps`). Fuera del contenedor queda en el historial
   del navegador y, si lo tienes activo, en el historial del portapapeles de Windows (Win+V). Caduca en 1 h.
   Si alguna vez la pegas a mano en un `curl`, limpia el historial (`history -c`).
@@ -244,7 +246,7 @@ Nunca toca el host, Mutagen ni otros contenedores.
 
 - No escribas el nombre de la empresa (usa `ntm`) ni direcciones de servidores (IPs, hosts o rutas de la API) en ningún
   fichero de la carpeta: el instalador las muestra al arrancar.
-- No imprimas ni guardes tokens ni callbacks; no muestres nombre, email, rol ni grupos (`redact` en `dkdb-ntm-ssologin-ia4d.sh`).
+- No imprimas ni guardes tokens ni callbacks (solo se muestran sus últimos 4 caracteres); no muestres nombre, email, rol ni grupos (`redact` en `dkdb-ntm-ssologin-ia4d.sh`).
 - Los scripts siguen el spec 01 del devbox: ASCII, inglés, LF, `# Version:`, `-h` y `man`, y colores verde (éxito), rojo
   (avisos y errores) y amarillo (siguiente paso). Si cambias el comportamiento, sube `# Version:` y actualiza este manual.
 - `~/devbox/bash` es de solo lectura dentro del contenedor: los cambios se hacen en el repo del host.

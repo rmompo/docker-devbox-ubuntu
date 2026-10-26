@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.4.3
+# Version: 0.5.0
 # ia4d (ntm GenAI Suite) for Claude Code in this container: keyring, login (credential renewal) and installer.
 # Exclusive to the ntm Claude Code containers. Repo: scripts/bash/ntm-ssologin/, seen in the container (read-only)
 # as ~/devbox/bash/ntm-ssologin/. Run with: bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh [all | status | setup | login | renew | install]
@@ -61,7 +61,7 @@ manual() {
     item 'setup 2.' 'Copies dkdb-ntm-ssologin-keyring-run.sh to ~/.local/bin/dkdb-keyring-run when it differs.'
     item 'setup 3.' 'Tests the keyring: stores, reads and deletes a test secret.'
     item 'login 1.' 'Starts "ia4d-installer-linux login" in the background inside the keyring session and shows its SSO URL; when the installer says it is already authenticated, it stops there.'
-    item 'login 2.' 'Asks for the http://localhost:PORT/callback?... address the browser could not open, without showing it, and sends it to the waiting installer with curl.'
+    item 'login 2.' 'Asks for the http://localhost:PORT/callback?... address the browser could not open, without showing it (afterwards only its end is shown, as ...***1234), and sends it to the waiting installer with curl. It waits as long as the installer does and warns at once if the installer stops waiting.'
     item 'login 3.' 'Checks that the installer says "Autenticado como"; the session is now in the keyring and in ~/.ia4d/.infra-*.'
     item 'renew' 'Runs "ia4d-installer-linux logout" (it empties the ia4d session) and then the login steps.'
     item 'install' 'Runs ia4d-installer-linux (interactive, in the foreground) inside the keyring session.'
@@ -169,8 +169,10 @@ step_setup() {
 }
 
 # Stop the background login (the runner, script and the installer under it) and remove its temp folder.
-login_pid=''; login_tmp=''
+login_pid=''; login_tmp=''; tty_state=''
 stop_login() {
+    # Give the terminal its echo back if the callback prompt was interrupted.
+    if [ -n "$tty_state" ]; then stty "$tty_state" 2>/dev/null; tty_state=''; fi
     if [ -n "$login_pid" ]; then
         pkill -TERM -P "$(pgrep -d, -P "$login_pid")" 2>/dev/null
         pkill -TERM -P "$login_pid" 2>/dev/null
@@ -182,8 +184,28 @@ stop_login() {
     trap - EXIT INT TERM HUP PIPE
 }
 
+# Read the callback URL without echo into $callback, polling once a second so that it notices when the
+# installer (pid $1) stops waiting. Returns 0 when a line was read, 1 when the installer died, 2 on end of input.
+read_callback() {
+    local pid="$1" chunk rc
+    callback=''
+    if [ -t 0 ]; then tty_state="$(stty -g 2>/dev/null)" && stty -echo 2>/dev/null; fi
+    printf '   callback URL> '
+    while :; do
+        chunk=''
+        IFS= read -r -t 1 chunk; rc=$?
+        callback+="$chunk"
+        if [ "$rc" -eq 0 ]; then rc=0; break; fi
+        if [ "$rc" -le 128 ]; then rc=2; break; fi
+        if ! kill -0 "$pid" 2>/dev/null; then rc=1; break; fi
+    done
+    if [ -n "$tty_state" ]; then stty "$tty_state" 2>/dev/null; tty_state=''; fi
+    echo
+    return "$rc"
+}
+
 step_login() {
-    local installer tmpdir log pid url port callback code attempt i
+    local installer tmpdir log pid url port code attempt i read_status
     title 'login'
     installer="$(find_installer)" || return 1
     tmpdir="$(mktemp -d)" && chmod 700 "$tmpdir"
@@ -221,10 +243,15 @@ step_login() {
     next "2. At the end the browser fails to open http://localhost:$port/callback?... That is expected."
     next "3. Copy that whole address from the address bar, paste it here and press Enter (it is not shown)."
     for attempt in 1 2 3; do
-        callback=''
-        IFS= read -rs -p "   callback URL> " callback; echo
+        read_callback "$pid"; read_status=$?
+        if [ "$read_status" -eq 1 ]; then
+            warn "The installer stopped waiting (timeout?). Run the login again."
+            callback=''
+            break
+        fi
         callback="$(printf '%s' "$callback" | tr -d '[:space:]')"
         if [[ $callback =~ ^http://(localhost|127\.0\.0\.1):$port/ ]]; then break; fi
+        [ "$read_status" -eq 2 ] && { callback=''; break; }
         warn "   That is not http://localhost:$port/callback?... (attempt $attempt of 3)."
         callback=''
     done
@@ -233,6 +260,8 @@ step_login() {
         stop_login
         return 1
     fi
+    # Only the end of the address is shown, so that you can tell what was pasted.
+    printf '   Received: http://localhost:%s/callback?...***%s (%s characters)\n' "$port" "${callback: -4}" "${#callback}"
     # The URL goes through stdin (curl -K -), never as an argument, so it never shows up in ps.
     code="$(printf 'url = "%s"\n' "$callback" | curl -s -o /dev/null -w '%{http_code}' --max-time 30 -K -)"
     callback=''
