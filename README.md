@@ -97,6 +97,7 @@ From any folder, in a new terminal:
 | 15 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers. |
 | 16 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes and Mutagen. |
 | 17 | `dkdb-update` | Updates the installed scripts from the repository (`-Branch <name>` to use another branch or tag; default `main`). Only files whose version changed are replaced, after a `[y/N]`. |
+| 18 | `dkdb-mutagen-add` | Adds a folder (a new Mutagen session) to a running Mutagen container: Add (relative) or Add (absolute), with both folders checked (`-Container <name>` skips the container menu). The same Add flow as the synchronization menu, without the other options. |
 
 ### Synchronization with Mutagen
 

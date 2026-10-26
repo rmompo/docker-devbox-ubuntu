@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.6.2
+# Version: 0.7.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -1632,9 +1632,10 @@ function Register-DevboxSyncFolder {
 # Nothing is ever terminated and no file is touched. A session of the whole projects folder is never
 # created here, it only appears when it exists.
 # Keep as is leaves every session in its current state (active stay active, paused stay paused).
+# AddOnly (dkdb-mutagen-add) shows only Add (relative) and Add (absolute).
 # Returns Ok ($false on failure; the reason is printed) and Active ($true when something is synchronized).
 function Invoke-DevboxSyncPickCore {
-    param([Parameter(Mandatory)][string]$Container, [switch]$Flush)
+    param([Parameter(Mandatory)][string]$Container, [switch]$Flush, [switch]$AddOnly)
     $result = [pscustomobject]@{ Ok = $true; Active = $false; Cancelled = $false }
     $fail = { $result.Ok = $false; return $result }
     $user = Get-DevboxContainerUser -Container $Container
@@ -1674,9 +1675,13 @@ function Invoke-DevboxSyncPickCore {
     $absoluteItem = 'Add (absolute)'
     $allItem = 'All registered'
     $customItem = 'Custom (select several)'
-    $labels = @($keepItem)
-    if ($sessions.Count -gt 0) { $labels += @($customItem, $allItem) }
-    $labels += @($noneItem, $relativeItem, $absoluteItem)
+    if ($AddOnly) {
+        $labels = @($relativeItem, $absoluteItem)
+    } else {
+        $labels = @($keepItem)
+        if ($sessions.Count -gt 0) { $labels += @($customItem, $allItem) }
+        $labels += @($noneItem, $relativeItem, $absoluteItem)
+    }
     # The registered syncs and their state, before the menu.
     if ($sessions.Count -gt 0) {
         Write-Host "Registered syncs in '$Container':"
@@ -1687,7 +1692,8 @@ function Invoke-DevboxSyncPickCore {
     else {
         Write-Host "No syncs registered in '$Container' yet."
     }
-    $choice = Select-DevboxItem -Title "Select what to synchronize in '$Container':" -Items $labels
+    $title = if ($AddOnly) { "Select how to add a folder to '$Container':" } else { "Select what to synchronize in '$Container':" }
+    $choice = Select-DevboxItem -Title $title -Items $labels
     if (-not $choice) {
         Write-Host 'Cancelled: nothing was changed.'
         $result.Cancelled = $true
@@ -1882,8 +1888,8 @@ function Update-DevboxContainerState {
 # The menu (Invoke-DevboxSyncPickCore) and, afterwards, the refresh of the state file of the container,
 # so that dkdb-info.sh and dkdb-version.sh inside it show the new situation.
 function Invoke-DevboxSyncPick {
-    param([Parameter(Mandatory)][string]$Container, [switch]$Flush)
-    $result = Invoke-DevboxSyncPickCore -Container $Container -Flush:$Flush
+    param([Parameter(Mandatory)][string]$Container, [switch]$Flush, [switch]$AddOnly)
+    $result = Invoke-DevboxSyncPickCore -Container $Container -Flush:$Flush -AddOnly:$AddOnly
     $null = Update-DevboxContainerState -Container $Container
     return $result
 }
