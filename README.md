@@ -82,7 +82,7 @@ From any folder, in a new terminal:
 |---|---------|--------------|
 | 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
 | 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path, the projects volume type: Docker bind mount or Mutagen, and the ports to publish; `-Ports <list>` skips that last question). |
-| 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container it then shows the synchronization menu; the first option, **Keep as is**, is the default. |
+| 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container it then shows the synchronization menu; the first option, **Keep (no changes)**, is the default. |
 | 4 | `dkdb-container-connect` | Opens a shell in a running container; for a Mutagen container it shows the same synchronization menu first. |
 | 5 | `dkdb-container-stop` | Stops a running container. |
 | 6 | `dkdb-container-delete` | Deletes a stopped container (asks for confirmation). |
@@ -104,22 +104,22 @@ From any folder, in a new terminal:
 There are no sync parameters: `dkdb-container-start`, `dkdb-container-connect` and `dkdb-mutagen-sync` show a menu for a Mutagen container:
 
 ```
-1  Keep as is                   <- the first option and the default (Enter): sessions stay as they are
+1  Keep (no changes)             <- the first option and the default (Enter): sessions stay as they are
 2  Custom (select several)      <- a checklist of the registered sessions
        [x] repo2  [active]
        [ ] repo3  [paused]
-3  All registered
-4  None                         <- pauses every session
-5  Add (relative)               <- a folder relative to the host projects folder
+3  All (registered)
+4  None (pause all)             <- pauses every session
+5  Add (relative)               <- a folder relative to the host base folder, mirrored in the container one (both base folders are shown above the registered syncs)
 6  Add (absolute)               <- a host folder and a folder of the container
 ```
 
 All and Custom only appear when the container already has registered sessions. The recommended way is to register the projects **separately** (repo1, repo2, ...); one session each.
 
-1. **Keep as is:** changes nothing: active sessions stay active and paused ones stay paused. Nothing is created, resumed, paused or flushed.
+1. **Keep (no changes):** changes nothing: active sessions stay active and paused ones stay paused. Nothing is created, resumed, paused or flushed.
 2. **Custom:** a checklist (Up/Down, Space to check, Enter to apply, Esc to cancel). The checked sessions are active and the unchecked ones are paused. If two checked folders overlap it warns and changes nothing.
-3. **All registered:** activates every registered session that is not inside another registered one.
-4. **None:** the Mutagen daemon is started and every session of the container is **paused**. Nothing is synchronized.
+3. **All (registered):** activates every registered session that is not inside another registered one.
+4. **None (pause all):** the Mutagen daemon is started and every session of the container is **paused**. Nothing is synchronized.
 5. **Add (relative):** asks for a folder, relative to the host projects folder or absolute inside it. It is mirrored at the same path inside the container. Its session is created, activated and joins the list.
 6. **Add (absolute):** asks for a host folder (absolute) and a folder of the container (absolute, or starting with `~/`), which can be anywhere except the read-only `~/devbox/bash`. The host folder accepts `%VAR%` (for example `%USERPROFILE%`) and `~` (your Windows user folder); the folder of the container accepts `$HOME` and `~` (`/home/<user>`). They are resolved when typed and stored resolved, not recalculated in each session.
 7. **Both folders are always checked** by every Add and every activation: if the host folder does not exist you are asked whether to create it (No aborts); if the folder of the container exists it is used (Add warns about it), and if it does not exist you are asked whether to create it.

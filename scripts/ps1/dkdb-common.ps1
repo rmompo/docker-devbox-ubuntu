@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.8.0
+# Version: 0.9.1
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -90,12 +90,12 @@ function Show-DevboxHelp {
 # --- Manual (-Man): what a script does, in colors (spec 01) ---
 # The synchronization menu, shared by the manuals of the scripts that show it.
 $DevboxSyncMenuMan = @(
-    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: Keep as is (the first option and the default), Custom, All registered, None, Add (relative) or Add (absolute).',
-    'None pauses every session of the container: nothing is synchronized.',
+    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: Keep (no changes) (the first option and the default), Custom, All (registered), None (pause all), Add (relative) or Add (absolute).',
+    'None (pause all) pauses every session of the container: nothing is synchronized.',
     'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; %VAR% (for example %USERPROFILE%) and ~ are accepted for the host folder (your Windows user folder) and $HOME and ~ for the folder of the container (/home/<user>); they are stored resolved, not recalculated later.',
     'Every Add and every activation checks both folders: if a folder does not exist on the host you are asked whether to create it (No aborts); if the folder of the container exists it is used (a warning on Add), and if it does not exist you are asked whether to create it.',
     'A new folder is activated and added to what is already active, so several folders can be synchronized at once. Activating one that covers active sessions pauses them; choosing one that is inside an active session changes nothing (somebody may be using it).',
-    'All registered activates the registered sessions that are not inside another one. A session of the whole projects folder is never created by the menu.',
+    'All (registered) activates the registered sessions that are not inside another one. A session of the whole projects folder is never created by the menu.',
     'Custom (shown when sessions are registered) is a checklist: Space checks or unchecks, Enter applies. The checked sessions are active and the unchecked ones paused. If two checked folders overlap, it warns and changes nothing.',
     'Sessions are only paused, never terminated, and no file is touched.'
 )
@@ -1187,6 +1187,107 @@ function Write-DevboxCardField {
     }
 }
 
+# A field with a reverse-video badge, dots up to the value column and the value in the color of its side
+# (host cyan, container magenta). A value wider than the console is split in lines, each one under the value:
+#  HOST ....... C:\LocalFiles\...
+#               ...rest of the path
+function Write-DevboxBadgeField {
+    param(
+        [Parameter(Mandatory)][string]$Badge,
+        [AllowEmptyString()][string]$Value,
+        [Parameter(Mandatory)][string]$Color,
+        [int]$Width = (Get-DevboxConsoleWidth),
+        [int]$ValueColumn = 14
+    )
+    $room = [math]::Max(10, $Width - $ValueColumn)
+    if (-not $Value) { $Value = '-' }
+    $first = $true
+    for ($i = 0; $first -or $i -lt $Value.Length; $i += $room) {
+        $chunk = $Value.Substring($i, [math]::Min($room, $Value.Length - $i))
+        if ($first) {
+            Write-DevboxSideBadge -Text $Badge -Color $Color
+            Write-Host (('.' * [math]::Max(2, $ValueColumn - $Badge.Length - 3)) + ' ') -NoNewline
+        } else {
+            Write-Host (' ' * $ValueColumn) -NoNewline
+        }
+        Write-Host $chunk -ForegroundColor $Color
+        $first = $false
+    }
+}
+
+# --- The layout of dkdb-info (host and container, same look) ---
+# SECTIONS in capitals and one color, PROPERTIES in capitals and another color followed by dots (at least two)
+# up to the column of the values, VALUES in the color of what they are: host paths always cyan, container
+# paths always magenta, the rest in the default color. A value wider than the console continues right under
+# itself. Special words are shown in reverse video (badges): MUTAGEN, MUTAGEN-SYNC, VOLUME-P9, READ-ONLY, READ-WRITE.
+$DevboxInfoSectionColor = 'White'
+$DevboxInfoPropertyColor = 'DarkYellow'
+
+# A piece of a value: text in a color (no color = the default one), or a badge (reverse video, one piece).
+function New-DevboxInfoText {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text, [string]$Color)
+    return [pscustomobject]@{ Text = $Text; Color = $Color; Badge = $false }
+}
+function New-DevboxInfoBadge {
+    param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Color)
+    return [pscustomobject]@{ Text = $Text; Color = $Color; Badge = $true }
+}
+
+function Write-DevboxInfoSection {
+    param([Parameter(Mandatory)][string]$Title, [string]$Note)
+    Write-Host ''
+    Write-Host $Title.ToUpperInvariant() -NoNewline -ForegroundColor $DevboxInfoSectionColor
+    if ($Note) { Write-Host " $Note" -NoNewline -ForegroundColor DarkGray }
+    Write-Host ''
+}
+
+# One property: INDENT LABEL ...... values. LabelWidth is the length of the longest label of the block, so that
+# every value starts in the same column.
+function Write-DevboxInfoField {
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [Parameter(Mandatory)][object[]]$Value,
+        [Parameter(Mandatory)][int]$LabelWidth,
+        [int]$Indent = 2,
+        [int]$Width = (Get-DevboxConsoleWidth)
+    )
+    $label = $Label.ToUpperInvariant()
+    $valueColumn = $Indent + $LabelWidth + 4
+    $room = [math]::Max(10, $Width - $valueColumn)
+    Write-Host (' ' * $Indent) -NoNewline
+    Write-Host $label -NoNewline -ForegroundColor $DevboxInfoPropertyColor
+    # Always two dots at least; more when the label is shorter than the longest one of the block.
+    Write-Host (' ' + ('.' * [math]::Max(2, $LabelWidth - $label.Length + 2)) + ' ') -NoNewline
+    $column = 0
+    foreach ($piece in $Value) {
+        if ($piece.Badge) {
+            $token = " $($piece.Text) "
+            if ($column -gt 0 -and ($column + 1 + $token.Length) -gt $room) {
+                Write-Host ''
+                Write-Host (' ' * $valueColumn) -NoNewline
+                $column = 0
+            }
+            if ($column -gt 0) { Write-Host ' ' -NoNewline; $column++ }
+            Write-Host $token -NoNewline -ForegroundColor Black -BackgroundColor $piece.Color
+            $column += $token.Length
+            continue
+        }
+        $text = [string]$piece.Text
+        while ($text.Length -gt 0) {
+            if ($column -ge $room) {
+                Write-Host ''
+                Write-Host (' ' * $valueColumn) -NoNewline
+                $column = 0
+            }
+            $count = [math]::Min($room - $column, $text.Length)
+            Write-DevboxColored -Text $text.Substring(0, $count) -Color $piece.Color
+            $column += $count
+            $text = $text.Substring($count)
+        }
+    }
+    Write-Host ''
+}
+
 # Card of a Mutagen session (an object of 'mutagen sync list --template {{json .}}'): name, identifier,
 # both endpoints and the state, under a line of '=' as wide as the console.
 function Show-DevboxSyncCard {
@@ -1765,10 +1866,10 @@ function Register-DevboxSyncFolder {
 }
 
 # The synchronization menu:
-#   None              nothing is synchronized (the daemon runs and the sessions of the container are paused).
+#   None (pause all)  nothing is synchronized (the daemon runs and the sessions of the container are paused).
 #   Add (relative)    a new folder, relative to the host projects folder (the same path inside the container).
 #   Add (absolute)    a new folder given as a host path and a container path.
-#   All registered    every registered session that is not inside another registered one.
+#   All (registered)    every registered session that is not inside another registered one.
 #   Custom            a checklist of the registered sessions: the checked ones are active, the others paused.
 # Rules, from the intersection of the folders (the folder of the container decides):
 #   - a session that covers active ones is activated and pauses them;
@@ -1779,7 +1880,7 @@ function Register-DevboxSyncFolder {
 #     is aborted) and the one of the container is created after asking when it does not exist.
 # Nothing is ever terminated and no file is touched. A session of the whole projects folder is never
 # created here, it only appears when it exists.
-# Keep as is leaves every session in its current state (active stay active, paused stay paused).
+# Keep (no changes) leaves every session in its current state (active stay active, paused stay paused).
 # AddOnly (dkdb-mutagen-add) shows only Add (relative) and Add (absolute).
 # Returns Ok ($false on failure; the reason is printed) and Active ($true when something is synchronized).
 function Invoke-DevboxSyncPickCore {
@@ -1817,11 +1918,13 @@ function Invoke-DevboxSyncPickCore {
     # Two ACTIVE sessions that overlap must not exist (a paused one does no harm).
     if ((Show-DevboxSessionOverlaps -Container $Container -Sessions @(Get-DevboxContainerSyncSessions -Container $Container)) -gt 0) { return (& $fail) }
     $rootBeta = "/home/$user/devbox/projects"
-    $noneItem = 'None'
-    $keepItem = 'Keep as is'
+    # The base folders of Add (relative) are shown above the registered syncs.
+    $hostBase = $hostPath.TrimEnd('\', '/')
+    $noneItem = 'None (pause all)'
+    $keepItem = 'Keep (no changes)'
     $relativeItem = 'Add (relative)'
     $absoluteItem = 'Add (absolute)'
-    $allItem = 'All registered'
+    $allItem = 'All (registered)'
     $customItem = 'Custom (select several)'
     if ($AddOnly) {
         $labels = @($relativeItem, $absoluteItem)
@@ -1830,7 +1933,10 @@ function Invoke-DevboxSyncPickCore {
         if ($sessions.Count -gt 0) { $labels += @($customItem, $allItem) }
         $labels += @($noneItem, $relativeItem, $absoluteItem)
     }
-    # The registered syncs and their state, before the menu.
+    # The base folders of Add (relative), then the registered syncs and their state, before the menu.
+    Write-Host 'Base folders (Add relative):'
+    Write-DevboxBadgeField -Badge 'HOST' -Value "$hostBase\" -Color $DevboxHostColor
+    Write-DevboxBadgeField -Badge 'CONTAINER' -Value "$rootBeta/" -Color $DevboxContainerColor
     if ($sessions.Count -gt 0) {
         Write-Host "Registered syncs in '$Container':"
         foreach ($item in @($sessions | Sort-Object { $_.Label })) {
@@ -1914,7 +2020,7 @@ function Invoke-DevboxSyncPickCore {
     }
 
     if ($choice -eq $relativeItem) {
-        $typed = Read-DevboxLine 'Folder to add (relative to the host projects folder, or absolute inside it; Esc or empty cancels)'
+        $typed = Read-DevboxLine 'Folder to add (relative to the base folders above, or absolute inside the host one; Esc or empty cancels)'
         if (-not $typed -or -not $typed.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'
             $result.Cancelled = $true

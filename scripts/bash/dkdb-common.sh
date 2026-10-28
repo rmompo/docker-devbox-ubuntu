@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.1.0
+# Version: 0.2.1
 # Common definitions of the devbox bash scripts that show information (dkdb-info.sh, dkdb-version.sh).
 # Source it, do not run it:  . "$(dirname "${BASH_SOURCE[0]}")/dkdb-common.sh"; the script defines usage() and, for the manual, MAN_*.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -18,6 +18,84 @@ fi
 ok() { printf '%s%s%s\n' "$c_green" "$*" "$c_off"; }
 bad() { printf '%s%s%s\n' "$c_red" "$*" "$c_off"; }
 next() { printf '%s%s%s\n' "$c_yellow" "$*" "$c_off"; }
+
+# The layout of dkdb-info (same look as the host): SECTIONS in capitals and one color, PROPERTIES in capitals and
+# another color followed by dots (at least two) up to the column of the values, VALUES in the color of what they
+# are: host paths cyan, container paths magenta, the rest in the default color. A value wider than the terminal
+# continues right under itself. Special words are badges (reverse video): MUTAGEN, MUTAGEN-SYNC, VOLUME-P9,
+# READ-ONLY, READ-WRITE.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    c_section=$'\033[97m'; c_prop=$'\033[33m'; c_host=$'\033[36m'; c_container=$'\033[35m'
+else
+    c_section=''; c_prop=''; c_host=''; c_container=''
+fi
+
+info_width() {
+    local columns="${COLUMNS:-}"
+    [ -n "$columns" ] || columns="$(tput cols 2>/dev/null)"
+    [ "${columns:-0}" -ge 40 ] 2>/dev/null || columns=80
+    echo $((columns - 1))
+}
+
+info_section() {
+    printf '\n%s%s%s' "$c_section" "${1^^}" "$c_off"
+    [ -z "${2:-}" ] || printf ' %s%s%s' "$c_gray" "$2" "$c_off"
+    echo
+}
+
+# The pieces of a value are arguments 'kind:color:text': kind t (text) or b (badge); color host, container, red,
+# green, yellow or none.
+info_color() {
+    case "$1" in
+        host) printf '%s' "$c_host" ;;
+        container) printf '%s' "$c_container" ;;
+        red) printf '%s' "$c_red" ;;
+        green) printf '%s' "$c_green" ;;
+        yellow) printf '%s' "$c_yellow" ;;
+        *) printf '' ;;
+    esac
+}
+
+# info_field LABEL LABEL_WIDTH INDENT PIECE...
+info_field() {
+    local label="${1^^}" label_width="$2" indent="$3" dots column=0 value_column room piece rest color text count token
+    shift 3
+    value_column=$((indent + label_width + 4))
+    room=$(($(info_width) - value_column))
+    [ "$room" -ge 10 ] || room=10
+    # Always two dots at least; more when the label is shorter than the longest one of the block.
+    dots=$((label_width - ${#label} + 2)); [ "$dots" -ge 2 ] || dots=2
+    printf '%*s%s%s%s %s ' "$indent" '' "$c_prop" "$label" "$c_off" "$(printf '%*s' "$dots" '' | tr ' ' '.')"
+    for piece in "$@"; do
+        rest="${piece#*:}"; color="${rest%%:*}"; text="${rest#*:}"
+        if [ "${piece%%:*}" = b ]; then
+            token=" $text "
+            if [ "$column" -gt 0 ] && [ $((column + 1 + ${#token})) -gt "$room" ]; then
+                printf '\n%*s' "$value_column" ''; column=0
+            fi
+            if [ "$column" -gt 0 ]; then printf ' '; column=$((column + 1)); fi
+            if [ -z "$c_off" ]; then
+                printf '%s' "$token"
+            else
+                case "$color" in
+                    red) printf '\033[30;41m%s\033[0m' "$token" ;;
+                    green) printf '\033[30;42m%s\033[0m' "$token" ;;
+                    yellow) printf '\033[30;43m%s\033[0m' "$token" ;;
+                    *) printf '%s' "$token" ;;
+                esac
+            fi
+            column=$((column + ${#token}))
+            continue
+        fi
+        while [ -n "$text" ]; do
+            if [ "$column" -ge "$room" ]; then printf '\n%*s' "$value_column" ''; column=0; fi
+            count=$((room - column)); [ "$count" -le "${#text}" ] || count=${#text}
+            printf '%s%s%s' "$(info_color "$color")" "${text:0:count}" "$c_off"
+            column=$((column + count)); text="${text:count}"
+        done
+    done
+    echo
+}
 
 # Version of a file: its '# Version: x.y.z' line (empty when absent).
 file_version() { sed -n 's/^# Version: *//p' "$1" 2>/dev/null | head -n 1; }

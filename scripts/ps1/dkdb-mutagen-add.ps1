@@ -1,5 +1,5 @@
 # Add a folder (a new Mutagen session) to a running Mutagen container.
-# Version: 0.1.0
+# Version: 0.1.1
 # Same Add (relative) / Add (absolute) flow as the synchronization menu, without the other options.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -23,7 +23,7 @@ if ($Help) {
         -Notes @(
             'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; %VAR% and ~ are accepted for the host folder and $HOME and ~ for the folder of the container.',
             'Both folders are checked: a missing host folder aborts the operation; a missing folder of the container is created after asking. The new session is added to the active ones: it pauses the active sessions it covers, and changes nothing when an active session already covers it.',
-            'Sessions are never terminated; use dkdb-mutagen-remove for that. The other options of the synchronization menu (Keep as is, Custom, All registered, None) are in dkdb-mutagen-sync.'
+            'Sessions are never terminated; use dkdb-mutagen-remove for that. The other options of the synchronization menu (Keep (no changes), Custom, All (registered), None (pause all)) are in dkdb-mutagen-sync.'
         )
     exit 0
 }
