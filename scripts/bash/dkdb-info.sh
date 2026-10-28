@@ -1,25 +1,27 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.1.0
-# Show how this container is set up, seen from inside it: user, folders, mounts, AI client and the Mutagen sessions.
-# Same layout as dkdb-info.ps1 on the host. It only reads. The Mutagen part comes from the state file that the host
-# scripts write (~/.devbox-state): it can be out of date, and it says when it was written.
+# Version: 0.2.0
+# Show how this container is set up, seen from inside it: user, folders, mounts, AI client, published ports and the
+# Mutagen sessions.
+# Same layout as dkdb-info.ps1 on the host. It only reads. The ports and the Mutagen part come from the state file
+# that the host scripts write (~/.devbox-state): it can be out of date, and it says when it was written.
 set -u
 # shellcheck source=dkdb-common.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dkdb-common.sh"
 
 usage() {
-    show_help 'Shows how this container is set up: user, image version, folders, mounts, AI client and, with Mutagen, the synchronization sessions as the host last reported them.' \
-        'Prints the container, its folders, mounts and Mutagen sessions.' \
+    show_help 'Shows how this container is set up: user, image version, folders, mounts, AI client, published ports and, with Mutagen, the synchronization sessions as the host last reported them.' \
+        'Prints the container, its folders, mounts, published ports and Mutagen sessions.' \
         'For the versions see dkdb-version.sh.' \
-        'The Mutagen sessions come from ~/.devbox-state, written by the host (dkdb-container-connect, dkdb-mutagen-sync, dkdb-mutagen-status and dkdb-mutagen-stop refresh it).'
+        'The published ports and the Mutagen sessions come from ~/.devbox-state, written by the host (dkdb-container-connect, dkdb-mutagen-sync, dkdb-mutagen-status and dkdb-mutagen-stop refresh it).'
 }
 MAN_PURPOSE='Shows how this container is set up, in the same layout as dkdb-info on the host.'
-MAN_NEEDS=('Nothing. The Mutagen part needs the state file ~/.devbox-state, which the host scripts write.')
+MAN_NEEDS=('Nothing. The ports and the Mutagen part need the state file ~/.devbox-state, which the host scripts write.')
 MAN_STEPS=(
     'Prints the container name, user, image version, operating system, AI client and type of projects volume.'
     'Prints the folders ~/devbox/bash, ~/devbox/tools and ~/devbox/projects with their mount mode, in red when one does not exist.'
     'Lists the mounts under ~/devbox.'
+    'Prints the published ports (host ip:port -> container port) as the host last reported them: they are fixed when the container is created, and the container cannot see them by itself.'
     'With Mutagen, prints the daemon and the sessions (host folder <-> container folder, state, conflicts and last error) as the host last reported them, and says when; it warns in red when no Mutagen agent is connected, because the list may then be out of date.'
 )
 MAN_CHANGES=('Nothing: it only reads.')
@@ -92,6 +94,26 @@ if [ -n "$mounts" ]; then
         case "$options" in ro|ro,*) mode='read-only' ;; esac
         printf '  %s (%s, %s)\n' "$where" "$kind" "$mode"
     done <<< "$mounts"
+fi
+
+# --- Published ports (from the state file written by the host; spec 09) ---
+# A container cannot see its own published ports: the host reports them as ports=<count> and port|ip|host|container/proto.
+echo
+echo 'Ports'
+if [ ! -r "$DEVBOX_STATE_FILE" ]; then
+    bad '  no state yet: run dkdb-container-connect on the host to write it'
+else
+    ports_count="$(state_get ports)"
+    if [ -z "$ports_count" ]; then
+        echo '  not reported yet (the host scripts that wrote the state file are older than the ports; dkdb-container-connect refreshes it)'
+    elif [ "$ports_count" = 0 ]; then
+        echo '  none published (Docker cannot add ports to an existing container; create a new one)'
+    else
+        while IFS='|' read -r bind_ip host_port target; do
+            [ -n "$host_port" ] || continue
+            printf '  %s:%s -> %s\n' "$bind_ip" "$host_port" "$target"
+        done < <(state_each port)
+    fi
 fi
 
 # --- Mutagen (from the state file written by the host) ---

@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.7.0
+# Version: 0.8.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -636,6 +636,154 @@ function Get-DevboxContainerEnv {
 function Get-DevboxContainerUser {
     param([Parameter(Mandatory)][string]$Container)
     return Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_USER'
+}
+
+# --- Published ports (spec 09) ---
+# The ports of a container are fixed when it is created (docker create -p ...): Docker cannot add one to an
+# existing container. These functions parse and check what the user types in dkdb-container-create, and read
+# back what a container has published (dkdb-info, the state file).
+
+# One mapping typed by the user: [ip:]host_port:container_port[/tcp|/udp]; a single number N means N:N and the
+# ip is 127.0.0.1 (only this computer) when it is not given. Returns an object with Valid, Message (when it is
+# not valid), BindIp, HostPort, ContainerPort, Protocol and DockerArg (the text for docker create -p).
+function ConvertFrom-DevboxPortSpec {
+    param([Parameter(Mandatory)][string]$Text)
+    $spec = $Text.Trim()
+    $protocol = 'tcp'
+    $invalid = { param($message) [pscustomobject]@{ Valid = $false; Text = $Text; Message = $message } }
+    if ($spec -match '^(.+)/([A-Za-z]+)$') {
+        $spec = $Matches[1]
+        $protocol = $Matches[2].ToLowerInvariant()
+        if ($protocol -ne 'tcp' -and $protocol -ne 'udp') { return (& $invalid 'the protocol after "/" must be tcp or udp') }
+    } elseif ($spec.Contains('/')) {
+        return (& $invalid 'the protocol after "/" must be tcp or udp')
+    }
+    $parts = @($spec -split ':')
+    $bindIp = '127.0.0.1'
+    if ($parts.Count -eq 1) { $hostText = $parts[0]; $containerText = $parts[0] }
+    elseif ($parts.Count -eq 2) { $hostText = $parts[0]; $containerText = $parts[1] }
+    elseif ($parts.Count -eq 3) { $bindIp = $parts[0]; $hostText = $parts[1]; $containerText = $parts[2] }
+    else { return (& $invalid 'use [ip:]host_port:container_port[/tcp|/udp]') }
+    if ($bindIp -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -or @($bindIp -split '\.' | Where-Object { [int]$_ -gt 255 }).Count -gt 0) {
+        return (& $invalid "'$bindIp' is not an IPv4 address")
+    }
+    foreach ($port in @($hostText, $containerText)) {
+        if ($port -notmatch '^\d{1,5}$' -or [int]$port -lt 1 -or [int]$port -gt 65535) {
+            return (& $invalid "'$port' is not a port number (1 to 65535)")
+        }
+    }
+    $hostPort = [int]$hostText
+    $containerPort = [int]$containerText
+    return [pscustomobject]@{
+        Valid = $true; Text = $Text; Message = ''
+        BindIp = $bindIp; HostPort = $hostPort; ContainerPort = $containerPort; Protocol = $protocol
+        DockerArg = "${bindIp}:${hostPort}:${containerPort}/${protocol}"
+    }
+}
+
+# Every mapping of a list typed by the user (commas, semicolons or spaces separate them) or given as several
+# strings. Returns one ConvertFrom-DevboxPortSpec object per mapping; none when the list is empty.
+function ConvertFrom-DevboxPortList {
+    param([AllowNull()][AllowEmptyCollection()][string[]]$Items = @())
+    $result = @()
+    foreach ($item in @($Items)) {
+        foreach ($piece in ([string]$item -split '[,;\s]+')) {
+            if ($piece) { $result += ConvertFrom-DevboxPortSpec -Text $piece }
+        }
+    }
+    return @($result)
+}
+
+# The process that listens on a host port (TCP) or has it open (UDP), or $null when it is free or cannot be
+# told (best effort: it never fails). Returns an object with Name and ProcessId.
+function Get-DevboxHostPortOwner {
+    param([Parameter(Mandatory)][int]$Port, [string]$Protocol = 'tcp')
+    try {
+        if ($Protocol -eq 'udp') { $found = @(Get-NetUDPEndpoint -LocalPort $Port -ErrorAction Stop) }
+        else { $found = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop) }
+    } catch { return $null }
+    if ($found.Count -eq 0) { return $null }
+    $processId = $found[0].OwningProcess
+    $name = ''
+    try { $name = (Get-Process -Id $processId -ErrorAction Stop).ProcessName } catch { $name = '' }
+    return [pscustomobject]@{ Name = $name; ProcessId = $processId }
+}
+
+# The port ranges that Windows reserves (Hyper-V, WSL, Docker Desktop) and that cannot be published, as objects
+# with Start and End. Best effort: an empty list when netsh cannot be read.
+function Get-DevboxExcludedPortRanges {
+    param([string]$Protocol = 'tcp')
+    $ranges = @()
+    $netsh = Join-Path ([Environment]::GetFolderPath('System')) 'netsh.exe'
+    if (-not (Test-Path -LiteralPath $netsh -PathType Leaf)) { return @() }
+    try {
+        $result = Invoke-DevboxNative -Path $netsh -Arguments @('interface', 'ipv4', 'show', 'excludedportrange', "protocol=$Protocol")
+        if ($result.ExitCode -eq 0) {
+            foreach ($line in ($result.Output -split "\r?\n")) {
+                if ($line -match '^\s*(\d+)\s+(\d+)\s*\*?\s*$') { $ranges += [pscustomobject]@{ Start = [int]$Matches[1]; End = [int]$Matches[2] } }
+            }
+        }
+    } catch { return @() }
+    return @($ranges)
+}
+
+# Check a list of mappings (the objects of ConvertFrom-DevboxPortList) before creating anything. Returns an
+# object with Errors (what must stop the creation) and Warnings (shown, but the creation goes on).
+function Test-DevboxPortSpecs {
+    param([AllowNull()][AllowEmptyCollection()][object[]]$Specs = @())
+    $errors = @()
+    $warnings = @()
+    $seen = @{}
+    $excluded = @{}
+    foreach ($spec in @($Specs)) {
+        if (-not $spec.Valid) { $errors += "Port '$($spec.Text)': $($spec.Message)."; continue }
+        $label = "$($spec.BindIp):$($spec.HostPort) -> $($spec.ContainerPort)/$($spec.Protocol)"
+        $key = "$($spec.BindIp):$($spec.HostPort)/$($spec.Protocol)"
+        if ($seen.ContainsKey($key)) { $errors += "Port ${label}: the host port $($spec.BindIp):$($spec.HostPort)/$($spec.Protocol) appears twice."; continue }
+        $seen[$key] = $true
+        $owner = Get-DevboxHostPortOwner -Port $spec.HostPort -Protocol $spec.Protocol
+        if ($owner) {
+            $who = 'another program'
+            if ($owner.Name) { $who = "'$($owner.Name)' (PID $($owner.ProcessId))" }
+            $errors += "Port ${label}: the host port $($spec.HostPort)/$($spec.Protocol) is already in use by $who. Choose another host port; the container port ($($spec.ContainerPort)) can stay the same."
+            continue
+        }
+        if (-not $excluded.ContainsKey($spec.Protocol)) { $excluded[$spec.Protocol] = @(Get-DevboxExcludedPortRanges -Protocol $spec.Protocol) }
+        foreach ($range in $excluded[$spec.Protocol]) {
+            if ($spec.HostPort -ge $range.Start -and $spec.HostPort -le $range.End) {
+                $errors += "Port ${label}: the host port $($spec.HostPort) is inside a range that Windows reserves ($($range.Start)-$($range.End)); Docker cannot publish it. Choose another one (see: netsh interface ipv4 show excludedportrange protocol=$($spec.Protocol))."
+                break
+            }
+        }
+        if ($spec.BindIp -ne '127.0.0.1') {
+            $warnings += "Port ${label}: the host ip $($spec.BindIp) is not 127.0.0.1, so other computers may reach this port. The password of the container user is weak by design (spec 04)."
+        }
+    }
+    return [pscustomobject]@{ Errors = @($errors); Warnings = @($warnings) }
+}
+
+# The ports that a container publishes, read from Docker (HostConfig.PortBindings), sorted by host port.
+# Objects with BindIp (0.0.0.0 when Docker did not store one), HostPort, ContainerPort and Protocol; none when
+# the container publishes nothing or cannot be read.
+function Get-DevboxContainerPorts {
+    param([Parameter(Mandatory)][string]$Container)
+    $format = '{{range $port, $bindings := .HostConfig.PortBindings}}{{range $bindings}}{{$port}}|{{.HostIp}}|{{.HostPort}}{{println}}{{end}}{{end}}'
+    $docker = (Get-Command docker -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+    if (-not $docker) { return @() }
+    $result = Invoke-DevboxNative -Path $docker -Arguments @('inspect', '--format', $format, $Container)
+    if ($result.ExitCode -ne 0) { return @() }
+    $ports = @()
+    foreach ($line in @(($result.Output -split "\r?\n") | Where-Object { $_ })) {
+        $parts = $line -split '\|'
+        if ($parts.Count -lt 3) { continue }
+        $target = $parts[0] -split '/'
+        $bindIp = $parts[1]
+        if (-not $bindIp) { $bindIp = '0.0.0.0' }
+        $protocol = 'tcp'
+        if ($target.Count -gt 1) { $protocol = $target[1] }
+        $ports += [pscustomobject]@{ BindIp = $bindIp; HostPort = [int]$parts[2]; ContainerPort = [int]$target[0]; Protocol = $protocol }
+    }
+    return @($ports | Sort-Object HostPort, Protocol)
 }
 
 # Shared root of the installation (default C:\shared). It is never stored: it is deduced
@@ -1838,8 +1986,8 @@ function Invoke-DevboxSyncPickCore {
 # --- State file inside the container (spec 08) ---
 # The bash scripts of the container (dkdb-info.sh, dkdb-version.sh) cannot see the host: this writes
 # ~/.devbox-state inside the container (key=value and key|field|field lines): the versions of the
-# package, the bash files of the manifest and, with Mutagen, the daemon and the sessions as the host
-# sees them. It never fails loudly: when the container is not running or the write fails it returns
+# package, the bash files of the manifest, the published ports and, with Mutagen, the daemon and the
+# sessions as the host sees them. It never fails loudly: when the container is not running or the write fails it returns
 # $false, and the file may be out of date (it carries the time it was written).
 function Update-DevboxContainerState {
     param([Parameter(Mandatory)][string]$Container)
@@ -1861,6 +2009,13 @@ function Update-DevboxContainerState {
                 $lines += ('file|' + $entry.Name + '|' + $entry.Value)
             }
         } catch { Write-Verbose 'manifest.json could not be read' }
+    }
+    # Published ports (spec 09): ports=<count> says that they were reported (0 means none), and one
+    # port|<host ip>|<host port>|<container port>/<protocol> line per port.
+    $publishedPorts = @(Get-DevboxContainerPorts -Container $Container)
+    $lines += ('ports=' + $publishedPorts.Count)
+    foreach ($published in $publishedPorts) {
+        $lines += ('port|' + $published.BindIp + '|' + $published.HostPort + '|' + $published.ContainerPort + '/' + $published.Protocol)
     }
     if ((Get-DevboxContainerEnv -Container $Container -Name 'DEVBOX_SYNC') -eq 'mutagen') {
         $lines += 'volume=mutagen'

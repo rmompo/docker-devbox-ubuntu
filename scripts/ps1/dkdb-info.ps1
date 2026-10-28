@@ -1,6 +1,6 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.2.0
-# volumes and Mutagen. For the versions, see dkdb-version.
+# Version: 0.3.0
+# volumes, published ports and Mutagen. For the versions, see dkdb-version.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -10,7 +10,7 @@ param(
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Shows how everything is set up: folders, PATH, Docker, images, containers, volumes and Mutagen.' `
+        -Description 'Shows how everything is set up: folders, PATH, Docker, images, containers, volumes, published ports and Mutagen.' `
         -Usage 'dkdb-info [-Help]' `
         -Examples @(
             @{ Command = 'dkdb-info'; Description = 'Prints the installation, Docker, containers and Mutagen sessions.' }
@@ -29,7 +29,7 @@ if ($Man) {
         -Steps @(
             'Prints the shared root and its folders and the PATH.',
             'Prints Docker.',
-            'Lists images and containers with their state, user, volume type and mounts.',
+            'Lists images and containers with their state, user, volume type, mounts and published ports (host ip:port -> container port).',
             'Prints the Mutagen daemon and, per container, its sessions with their progress, the overlaps of active sessions and the host folders shared by several containers.'
         ) `
         -Changes @(
@@ -112,6 +112,12 @@ if ($dockerReachable) {
             $mode = 'read/write'
             if ($parts[2] -eq 'false') { $mode = 'read-only' }
             Write-Host ('    {0} -> {1} ({2})' -f $parts[0], $parts[1], $mode)
+        }
+        # Published ports (spec 09): fixed when the container was created.
+        $published = @(Get-DevboxContainerPorts -Container $container)
+        if ($published.Count -eq 0) { Write-Host '    ports: none published' }
+        foreach ($port in $published) {
+            Write-Host ('    port {0}:{1} -> {2}/{3}' -f $port.BindIp, $port.HostPort, $port.ContainerPort, $port.Protocol)
         }
     }
 }

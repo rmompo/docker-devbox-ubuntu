@@ -65,14 +65,14 @@ The scripts of `~/devbox/bash` run by name in a container created from image 0.2
 
 | Script | What it shows |
 |--------|---------------|
-| `dkdb-info.sh` | Container, user, image version, folders and mounts, AI client and the Mutagen sessions. |
+| `dkdb-info.sh` | Container, user, image version, folders and mounts, AI client, published ports and the Mutagen sessions. |
 | `dkdb-version.sh` | The package and image versions, each bash script against the manifest, the tools and whether the container image is compatible. |
 
 The installer and `dkdb-update` also copy the subfolders of `scripts/bash` listed in the manifest (for example `ntm-ssologin/`, with its own `README.md`), which the container sees under `~/devbox/bash/`.
 
 If an image lacks tools that the scripts need (for example one older than the scripts), `dkdb-install-tools.sh` checks them by group (`base`: curl, git, jq; `keyring`: dbus, gnome-keyring, libsecret-tools) and installs the missing ones with apt (as root or with sudo). `dkdb-install-tools.sh check` only reports what is missing; the `keyring` group installs about 90 packages, which is why it is not part of the image.
 
-The Mutagen sessions and the manifest versions come from `~/.devbox-state`, a file that the host scripts write (`dkdb-container-connect`, `dkdb-mutagen-sync`, `dkdb-mutagen-status` and `dkdb-mutagen-stop` refresh it); it carries the time it was written, so it can be out of date.
+The published ports, the Mutagen sessions and the manifest versions come from `~/.devbox-state`, a file that the host scripts write (`dkdb-container-connect`, `dkdb-mutagen-sync`, `dkdb-mutagen-status` and `dkdb-mutagen-stop` refresh it); it carries the time it was written, so it can be out of date.
 
 ## Usage
 
@@ -81,7 +81,7 @@ From any folder, in a new terminal:
 | # | Command | What it does |
 |---|---------|--------------|
 | 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
-| 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path and the projects volume type: Docker bind mount or Mutagen). |
+| 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path, the projects volume type: Docker bind mount or Mutagen, and the ports to publish; `-Ports <list>` skips that last question). |
 | 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container it then shows the synchronization menu; the first option, **Keep as is**, is the default. |
 | 4 | `dkdb-container-connect` | Opens a shell in a running container; for a Mutagen container it shows the same synchronization menu first. |
 | 5 | `dkdb-container-stop` | Stops a running container. |
@@ -95,7 +95,7 @@ From any folder, in a new terminal:
 | 13 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
 | 14 | `dkdb-mutagen-sync` | Chooses a running Mutagen container and shows the synchronization menu (the same one as start and connect). |
 | 15 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers. |
-| 16 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes and Mutagen. |
+| 16 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes, published ports and Mutagen. |
 | 17 | `dkdb-update` | Updates the installed scripts from the repository (`-Branch <name>` to use another branch or tag; default `main`). Only files whose version changed are replaced, after a `[y/N]`. |
 | 18 | `dkdb-mutagen-add` | Adds a folder (a new Mutagen session) to a running Mutagen container: Add (relative) or Add (absolute), with both folders checked (`-Container <name>` skips the container menu). The same Add flow as the synchronization menu, without the other options. |
 
@@ -182,6 +182,14 @@ The `bash` path is not asked, and the default tools path is not stored anywhere:
 
 **Mutagen (optional):** `dkdb-container-create` asks whether the projects volume is a Docker bind mount or a Mutagen sync. If you pick Mutagen and it is not installed, the script asks before downloading it (about 100 MB, checksum verified, into `<root>\devbox\mutagen`). With Mutagen, `~/devbox/projects` is a folder inside the container, kept in sync with the host projects path (everything, including `.git`; only symbolic links are ignored), and `dkdb-container-start` creates or resumes the session. Nothing else has to be run. `dkdb-mutagen-start` and `dkdb-mutagen-stop` check and start or stop the Mutagen daemon by hand (stopping it stops all your Mutagen sessions). `tools` is never synchronized: it stays a bind mount. Mutagen is third-party and is downloaded from its official release (MIT, with SSPL-licensed parts); see [spec 08](specs/08-mutagen.md).
 
+**Published ports (optional):** a server that runs inside the container can only be opened from Windows if its port is published, and Docker decides that when the container is created. `dkdb-container-create` asks for them last (the question explains the format) or takes `-Ports`:
+
+```powershell
+dkdb-container-create -Ports 8080:8080,3100:3000,9000
+```
+
+Each mapping is `[ip:]host_port:container_port[/tcp|/udp]`; a single number `N` means `N:N`; several are separated by commas. Without an ip the port is bound to `127.0.0.1` (only this computer); another ip, such as `0.0.0.0`, exposes it to your network and only warns. Before creating anything the script checks the format, repeated ports, host ports already in use (it names the program) and the ranges that Windows reserves. The ports of an existing container cannot be changed: create a new container (with Mutagen your projects come back from the host folder). `dkdb-info` and `dkdb-info.sh` show what each container publishes. See [spec 09](specs/09-ports.md).
+
 ## Repository layout
 
 ```
@@ -214,6 +222,7 @@ Each spec follows the pattern **Context -> Reasoning -> Decision -> Consequences
 | 06 | [Verifications and open items](specs/06-verifications.md) | Checks already done and items still to validate |
 | 07 | [Installer](specs/07-installer.md) | install.ps1: shared root, download, PATH |
 | 08 | [Mutagen](specs/08-mutagen.md) | Optional projects sync (avoids slow 9p mounts) |
+| 09 | [Published ports](specs/09-ports.md) | Ports opened from Windows, chosen when the container is created |
 
 ## License
 

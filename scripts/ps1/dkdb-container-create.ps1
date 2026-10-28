@@ -1,24 +1,30 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.2.0
+# Version: 0.3.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [string[]]$Ports,
     [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Creates a devbox container from a devbox image; it is not started. It asks for the image, the container name, the user, the host projects path, the host tools path and the projects volume type (Docker bind mount or Mutagen sync).' `
-        -Usage 'dkdb-container-create [-Help]' `
+        -Description 'Creates a devbox container from a devbox image; it is not started. It asks for the image, the container name, the user, the host projects path, the host tools path, the projects volume type (Docker bind mount or Mutagen sync) and the ports to publish.' `
+        -Usage 'dkdb-container-create [-Ports <list>] [-Help]' `
+        -Parameters @(
+            @{ Name = '-Ports <list>'; Description = 'Ports to publish, so that a server inside the container can be opened from Windows. Each mapping is [ip:]host_port:container_port[/tcp|/udp]; a single number N means N:N; separate them with commas. The host ip is 127.0.0.1 (only this computer) unless you give another one. It skips the question; an empty value (-Ports "") publishes nothing.' }
+        ) `
         -Examples @(
-            @{ Command = 'dkdb-container-create'; Description = 'Asks for everything, with defaults, and creates the container.' }
+            @{ Command = 'dkdb-container-create'; Description = 'Asks for everything, with defaults (including the ports, which explains the format), and creates the container.' },
+            @{ Command = 'dkdb-container-create -Ports 8080:8080,3100:3000,9000'; Description = 'Publishes 127.0.0.1:8080 -> 8080, 127.0.0.1:3100 -> 3000 and 127.0.0.1:9000 -> 9000; it does not ask for the ports.' }
         ) `
         -Notes @(
             'Folders inside the container: ~/devbox/projects (bind mount, or a copy synchronized by Mutagen), ~/devbox/tools (read/write) and ~/devbox/bash (read-only).',
             'The host paths must exist: nothing is created for you.',
             'The password of the user is its name (weak by design: local development only).',
-            'Mutagen is downloaded on demand if you choose it and it is not installed (about 100 MB, checksum verified).'
+            'Mutagen is downloaded on demand if you choose it and it is not installed (about 100 MB, checksum verified).',
+            'Ports can only be chosen here: Docker cannot add a port to an existing container (create a new one; with Mutagen your projects come back from the host folder). A host port that is already in use, or that Windows reserves, stops the creation before anything is created. See spec 09.'
         )
     exit 0
 }
@@ -32,10 +38,10 @@ if ($Man) {
         ) `
         -Steps @(
             'Checks the package against manifest.json and checks Docker.',
-            'Asks for the image, the container name, the user (default: the container name), the host projects path, the host tools path and the projects volume type (Docker bind mount or Mutagen).',
-            'Validates everything before creating: the image exists (the highest compatible tag; an older one only warns), the container name is free, the host paths exist and have no commas.',
+            'Asks for the image, the container name, the user (default: the container name), the host projects path, the host tools path, the projects volume type (Docker bind mount or Mutagen) and the ports to publish (skipped with -Ports; the question explains the format: [ip:]host_port:container_port[/tcp|/udp], commas between mappings, a single number N means N:N, the ip is 127.0.0.1 unless you type another one, empty means none).',
+            'Validates everything before creating: the image exists (the highest compatible tag; an older one only warns), the container name is free, the host paths exist and have no commas, and every port is well formed, appears once, is not in use on the host and is not inside a range that Windows reserves. A host ip other than 127.0.0.1 only warns (other computers may reach the port).',
             'If Mutagen was chosen: installs it when missing and checks its version.',
-            'Runs docker create with DEVBOX_USER, tools mounted at ~/devbox/tools, scripts\bash at ~/devbox/bash (read-only) and, for a bind mount, the projects at ~/devbox/projects. With Mutagen there is no projects mount: the container only gets DEVBOX_SYNC and DEVBOX_SYNC_PATH.'
+            'Runs docker create with DEVBOX_USER, one -p per published port, tools mounted at ~/devbox/tools, scripts\bash at ~/devbox/bash (read-only) and, for a bind mount, the projects at ~/devbox/projects. With Mutagen there is no projects mount: the container only gets DEVBOX_SYNC and DEVBOX_SYNC_PATH.'
         ) `
         -Changes @(
             'Adds a stopped container.',
@@ -44,7 +50,8 @@ if ($Man) {
         -Never @(
             'Starts the container.',
             'Creates host folders.',
-            'Starts the Mutagen daemon or creates any Mutagen session.'
+            'Starts the Mutagen daemon or creates any Mutagen session.',
+            'Changes the ports of an existing container (Docker cannot).'
         ) `
         -Next 'dkdb-container-start (with Mutagen its menu lets you choose what to synchronize), then dkdb-container-connect.'
     exit 0
@@ -84,6 +91,22 @@ if (-not $syncMode) {
 }
 $useMutagen = ($syncMode -eq $DevboxSyncModeMutagen)
 
+# Ports to publish (spec 09): -Ports skips the question. Docker cannot add a port to an existing container,
+# so this is the only moment to choose them.
+if ($PSBoundParameters.ContainsKey('Ports')) {
+    $portInput = @($Ports)
+} else {
+    Write-Host ''
+    Write-Host 'Ports to publish (optional)'
+    Write-Host '  A server inside the container (for example Angular on 3000) can only be opened from Windows if its port is published.'
+    Write-Host '  Format:  [ip:]host_port:container_port[/tcp|/udp]   Separate several with commas. A single number N means N:N.'
+    Write-Host '  Example: 8080:8080,3100:3000   opens http://localhost:8080, and http://localhost:3100 which reaches port 3000 inside.'
+    Write-Host '  The ip is 127.0.0.1 (only this computer) unless you type another one; 0.0.0.0 exposes the port to your network.'
+    Write-Host '  The host port must be free on Windows. They cannot be changed later: you would create a new container.'
+    $portText = Read-Host 'Ports [none]'
+    $portInput = @($portText)
+}
+
 # Docker mount sources must not end with a backslash.
 $projectsPath = $projectsPath.Trim().TrimEnd('\')
 $toolsPath = $toolsPath.Trim().TrimEnd('\')
@@ -108,11 +131,17 @@ foreach ($path in @($projectsPath, $toolsPath, $bashPath)) {
     }
     if ($path.Contains(',')) { $errors += "Host path must not contain commas: $path" }
 }
+# Ports: format, duplicates, host ports in use or reserved by Windows (spec 09).
+$portSpecs = @(ConvertFrom-DevboxPortList -Items $portInput)
+$portCheck = Test-DevboxPortSpecs -Specs $portSpecs
+$errors += $portCheck.Errors
 if ($errors.Count -gt 0) {
     foreach ($e in $errors) { Write-DevboxWarning "Error: $e" }
     Write-DevboxWarning 'Aborted. Nothing was created.'
     exit 1
 }
+
+foreach ($w in $portCheck.Warnings) { Write-DevboxWarning "Warning: $w" }
 
 if ($imageIsOlder) {
     Write-DevboxWarning "Warning: '$imageRef' is not compatible with the image version that the scripts expect ($(Get-DevboxImageVersion)). The container is created from it anyway and works, but newer features may be missing."
@@ -154,6 +183,7 @@ if ($useMutagen) {
 } else {
     $createArgs += @('--mount', "type=bind,source=$projectsPath,target=$mountBase/projects")
 }
+foreach ($portSpec in $portSpecs) { $createArgs += @('-p', $portSpec.DockerArg) }
 $createArgs += @(
     '--mount', "type=bind,source=$toolsPath,target=$mountBase/tools",
     '--mount', "type=bind,source=$bashPath,target=$mountBase/bash,readonly",
@@ -165,6 +195,14 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-DevboxSuccess "Container '$containerName' created from image '$imageRef' (user '$userName', password equal to the user name)."
+if ($portSpecs.Count -gt 0) {
+    Write-Host 'Published ports (fixed for this container; they open when it is started):'
+    foreach ($portSpec in $portSpecs) {
+        Write-Host ('  {0}:{1} -> {2}/{3}' -f $portSpec.BindIp, $portSpec.HostPort, $portSpec.ContainerPort, $portSpec.Protocol)
+    }
+} else {
+    Write-Host 'Published ports: none (Docker cannot add them later; create a new container if you need them).'
+}
 if ($useMutagen) {
     Write-Host "Projects: with Mutagen, '$projectsPath' is synchronized only when you choose it in the menu of dkdb-container-start, dkdb-container-connect or dkdb-mutagen-sync."
 }
