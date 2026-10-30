@@ -81,7 +81,7 @@ From any folder, in a new terminal:
 | # | Command | What it does |
 |---|---------|--------------|
 | 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
-| 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path, the projects volume type: Docker bind mount or Mutagen, and the ports to publish; `-Ports <list>` skips that last question). |
+| 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path, the projects volume type: Mutagen (the first option and the default) or Docker bind mount, and the ports to publish; `-Ports <list>` skips that last question). |
 | 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container it then shows the synchronization menu; the first option, **Keep (no changes)**, is the default. |
 | 4 | `dkdb-container-connect` | Opens a shell in a running container; for a Mutagen container it shows the same synchronization menu first. |
 | 5 | `dkdb-container-stop` | Stops a running container. |
@@ -180,7 +180,7 @@ Inside the container:
 
 The `bash` path is not asked, and the default tools path is not stored anywhere: both are deduced from where the scripts are, so they follow the shared root you chose. The projects and tools paths must already exist (the installer creates the default tools folder); nothing else is created for you.
 
-**Mutagen (optional):** `dkdb-container-create` asks whether the projects volume is a Docker bind mount or a Mutagen sync. If you pick Mutagen and it is not installed, the script asks before downloading it (about 100 MB, checksum verified, into `<root>\devbox\mutagen`). With Mutagen, `~/devbox/projects` is a folder inside the container, kept in sync with the host projects path (everything, including `.git`; only symbolic links are ignored), and `dkdb-container-start` creates or resumes the session. Nothing else has to be run. `dkdb-mutagen-start` and `dkdb-mutagen-stop` check and start or stop the Mutagen daemon by hand (stopping it stops all your Mutagen sessions). `tools` is never synchronized: it stays a bind mount. Mutagen is third-party and is downloaded from its official release (MIT, with SSPL-licensed parts); see [spec 08](specs/08-mutagen.md).
+**Mutagen (the default option):** `dkdb-container-create` asks whether the projects volume is a Mutagen sync (listed first, so Enter selects it) or a Docker bind mount. A bind mount from `C:\` goes through 9p, which is very slow with many small files. If you pick Mutagen and it is not installed, the script asks before downloading it (about 100 MB, checksum verified, into `<root>\devbox\mutagen`). With Mutagen, `~/devbox/projects` is a folder inside the container, kept in sync with the host projects path (everything, including `.git`; only symbolic links are ignored), and `dkdb-container-start` creates or resumes the session. Nothing else has to be run. `dkdb-mutagen-start` and `dkdb-mutagen-stop` check and start or stop the Mutagen daemon by hand (stopping it stops all your Mutagen sessions). `tools` is never synchronized: it stays a bind mount. Mutagen is third-party and is downloaded from its official release (MIT, with SSPL-licensed parts); see [spec 08](specs/08-mutagen.md).
 
 **Published ports (optional):** a server that runs inside the container can only be opened from Windows if its port is published, and Docker decides that when the container is created. `dkdb-container-create` asks for them last (the question explains the format) or takes `-Ports`:
 
