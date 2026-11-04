@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.3.0
+# Version: 0.4.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -10,7 +10,7 @@ param(
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Creates a devbox container from a devbox image; it is not started. It asks for the image, the container name, the user, the host projects path, the host tools path, the projects volume type (Docker bind mount or Mutagen sync) and the ports to publish.' `
+        -Description 'Creates a devbox container from a devbox image; it is not started. It asks for the image, the container name, the user, the host projects path, the host tools path, the projects volume type (Mutagen sync, the default, or Docker bind mount) and the ports to publish.' `
         -Usage 'dkdb-container-create [-Ports <list>] [-Help]' `
         -Parameters @(
             @{ Name = '-Ports <list>'; Description = 'Ports to publish, so that a server inside the container can be opened from Windows. Each mapping is [ip:]host_port:container_port[/tcp|/udp]; a single number N means N:N; separate them with commas. The host ip is 127.0.0.1 (only this computer) unless you give another one. It skips the question; an empty value (-Ports "") publishes nothing.' }
@@ -23,6 +23,7 @@ if ($Help) {
             'Folders inside the container: ~/devbox/projects (bind mount, or a copy synchronized by Mutagen), ~/devbox/tools (read/write) and ~/devbox/bash (read-only).',
             'The host paths must exist: nothing is created for you.',
             'The password of the user is its name (weak by design: local development only).',
+            'The projects volume type menu lists Mutagen sync first, so Enter selects it: a Docker bind mount from C:\ goes through 9p and is much slower.',
             'Mutagen is downloaded on demand if you choose it and it is not installed (about 100 MB, checksum verified).',
             'Ports can only be chosen here: Docker cannot add a port to an existing container (create a new one; with Mutagen your projects come back from the host folder). A host port that is already in use, or that Windows reserves, stops the creation before anything is created. See spec 09.'
         )
@@ -38,7 +39,7 @@ if ($Man) {
         ) `
         -Steps @(
             'Checks the package against manifest.json and checks Docker.',
-            'Asks for the image, the container name, the user (default: the container name), the host projects path, the host tools path, the projects volume type (Docker bind mount or Mutagen) and the ports to publish (skipped with -Ports; the question explains the format: [ip:]host_port:container_port[/tcp|/udp], commas between mappings, a single number N means N:N, the ip is 127.0.0.1 unless you type another one, empty means none).',
+            'Asks for the image, the container name, the user (default: the container name), the host projects path, the host tools path, the projects volume type (Mutagen, the first option and the default, or Docker bind mount) and the ports to publish (skipped with -Ports; the question explains the format: [ip:]host_port:container_port[/tcp|/udp], commas between mappings, a single number N means N:N, the ip is 127.0.0.1 unless you type another one, empty means none).',
             'Validates everything before creating: the image exists (the highest compatible tag; an older one only warns), the container name is free, the host paths exist and have no commas, and every port is well formed, appears once, is not in use on the host and is not inside a range that Windows reserves. A host ip other than 127.0.0.1 only warns (other computers may reach the port).',
             'If Mutagen was chosen: installs it when missing and checks its version.',
             'Runs docker create with DEVBOX_USER, one -p per published port, tools mounted at ~/devbox/tools, scripts\bash at ~/devbox/bash (read-only) and, for a bind mount, the projects at ~/devbox/projects. With Mutagen there is no projects mount: the container only gets DEVBOX_SYNC and DEVBOX_SYNC_PATH.'
@@ -84,7 +85,8 @@ $toolsPath = Read-Host "Host tools path [$defaultToolsPath]"
 if ([string]::IsNullOrWhiteSpace($toolsPath)) { $toolsPath = $defaultToolsPath }
 
 # Volume type for the projects folder (Mutagen is downloaded later if needed).
-$syncMode = Select-DevboxItem -Title 'Projects volume type:' -Items @($DevboxSyncModeBind, $DevboxSyncModeMutagen)
+# Mutagen is the first option, so it is the one Enter selects: a bind mount from C:\ goes through 9p and is very slow.
+$syncMode = Select-DevboxItem -Title 'Projects volume type:' -Items @($DevboxSyncModeMutagen, $DevboxSyncModeBind)
 if (-not $syncMode) {
     Write-Host 'Cancelled. Nothing was created.'
     exit 0
