@@ -1,5 +1,5 @@
 # Update the installed scripts from the repository (optionally from another branch or tag).
-# Version: 0.1.1
+# Version: 0.2.0
 # It downloads manifest.json and the files whose version changed into a temporary folder, checks them
 # and only then copies them over the installation. Nothing is changed if anything fails.
 # PositionalBinding is off so that a stray argument is an error.
@@ -24,7 +24,7 @@ if ($Help) {
         -Notes @(
             'Only the files whose version differs from the manifest (or that are missing) are replaced; manual edits to those files are lost.',
             'Files that are no longer in the repository are not deleted (dkdb-verify reports them as notes).',
-            'dkdb-install.ps1 is not replaced: it is downloaded by hand; the script tells you when its version changed.',
+            'dkdb-install.ps1 and dkdb-uninstall.ps1 are replaced like any other file; running dkdb-install.ps1 again is only needed to change the shared root or the PATH.',
             'It never touches images, containers, Mutagen sessions or your projects.'
         )
     exit 0
@@ -50,7 +50,7 @@ if ($Man) {
         ) `
         -Never @(
             'Deletes files, images, containers, Mutagen sessions or projects.',
-            'Replaces dkdb-install.ps1 (downloaded by hand) or changes the PATH.',
+            'Changes the PATH or the shared root (run dkdb-install.ps1 for that).',
             'Changes anything when a download or a check fails.'
         ) `
         -Next 'dkdb-version shows the result; if it says so, rebuild the image (dkdb-image-create) and recreate the containers.'
@@ -115,24 +115,19 @@ try {
     $newImage = [string]$manifest.image
     Write-Host "Installed: $oldVersion (image $oldImage). Repository ($Branch): $newVersion (image $newImage)."
 
-    # What changes: files that are missing or whose version differs. dkdb-install.ps1 is only compared.
+    # What changes: files that are missing or whose version differs (the installer and the uninstaller too).
     $changes = @()
-    $installerNote = $null
     foreach ($entry in $entries) {
         $relative = $entry.Name
         $path = Join-Path $base ($relative -replace '/', [System.IO.Path]::DirectorySeparatorChar)
         $current = Get-DevboxFileVersion -Path $path
-        if ($relative -eq 'install/dkdb-install.ps1') {
-            if ($current -and $current -ne [string]$entry.Value) { $installerNote = "dkdb-install.ps1 is version $current here and $($entry.Value) in ${Branch}: download it again by hand." }
-            continue
-        }
         if ($current -ne [string]$entry.Value) {
             $changes += [pscustomobject]@{ Relative = $relative; Path = $path; Old = $current; New = [string]$entry.Value }
         }
     }
     if ($changes.Count -eq 0 -and $oldVersion -eq $newVersion) {
         Write-DevboxSuccess "Already up to date ($oldVersion)."
-        if ($installerNote) { Write-DevboxNext "Next: $installerNote" } else { Write-DevboxNext 'Next: nothing to do; dkdb-version shows every version.' }
+        Write-DevboxNext 'Next: nothing to do; dkdb-version shows every version.'
         exit 0
     }
     Write-Host 'Files to update:'
@@ -185,7 +180,6 @@ try {
         Write-DevboxWarning 'The installation is inconsistent with the new manifest.json: run the installer again.'
         exit 1
     }
-    if ($installerNote) { Write-DevboxNext "Next: $installerNote" }
     if (-not (Test-DevboxVersionCompatible -Left $oldImage -Right $newImage)) {
         Write-DevboxNext "Next: the image version changed ($oldImage -> $newImage): rebuild the image (dkdb-image-create) and recreate the containers."
     } else {

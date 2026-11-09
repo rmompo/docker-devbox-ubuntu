@@ -1,5 +1,5 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.3.1
+# Version: 0.3.2
 # It downloads manifest.json and every file it lists (scripts and dkdb-uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -360,7 +360,7 @@ Write-Host "Version: $version"
 
 foreach ($entry in $entries) {
     $relative = $entry.Name
-    # The installer itself was downloaded by hand: only its version is compared.
+    # The installer itself is the running script: only its version is compared (dkdb-update replaces it later).
     if ($relative -eq 'install/dkdb-install.ps1') {
         if ($selfVersion -ne [string]$entry.Value) {
             Write-InstallWarning "Warning: this installer is version $selfVersion but $Branch expects $($entry.Value). Download dkdb-install.ps1 again from that branch."

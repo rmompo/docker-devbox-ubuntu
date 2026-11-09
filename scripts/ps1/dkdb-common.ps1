@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.11.0
+# Version: 0.11.1
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -283,8 +283,9 @@ function Get-DevboxIntegrity {
         $listed[$relative] = $true
         $path = Join-Path $Base ($relative -replace '/', [System.IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-            # dkdb-install.ps1 is downloaded by hand: it may legitimately be elsewhere.
-            if ($relative -eq 'install/dkdb-install.ps1') { $notes += "not found (downloaded by hand): $relative" }
+            # The installer is only needed to install or move the package, and a missing one must not stop the use of
+            # the scripts: it is a note, and dkdb-update downloads it.
+            if ($relative -eq 'install/dkdb-install.ps1') { $notes += "not found (dkdb-update downloads it): $relative" }
             else { $errors += "missing: $relative" }
             continue
         }

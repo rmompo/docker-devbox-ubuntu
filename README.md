@@ -160,7 +160,7 @@ Host (default values; the shared root is chosen once by `dkdb-install.ps1`):
 C:\shared\                       shared root
   devbox\
     manifest.json                 project version and the version of every file
-    install\                     dkdb-install.ps1 (downloaded by hand) and dkdb-uninstall.ps1
+    install\                     dkdb-install.ps1 (the first one you download; dkdb-update keeps it up to date) and dkdb-uninstall.ps1
     scripts\
       ps1\                       added to the user PATH (Windows)
       bash\                      AI client installers -> ~/devbox/bash (read-only)

@@ -1,5 +1,5 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.4.1
+# Version: 0.4.2
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -94,7 +94,7 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
             Write-Host ('  {0} ' -f $entry.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor $DevboxNameColor
             Write-Host ('{0} ' -f ([string]$entry.Value).PadRight($versionWidth)) -NoNewline -ForegroundColor $DevboxSuccessColor
             if ($actual -eq [string]$entry.Value) { Write-Host $shownActual -ForegroundColor $DevboxSuccessColor }
-            elseif ($entry.Name -eq 'install/dkdb-install.ps1' -and -not $actual) { Write-Host "$shownActual (downloaded by hand)" }
+            elseif ($entry.Name -eq 'install/dkdb-install.ps1' -and -not $actual) { Write-Host "$shownActual (not found: dkdb-update downloads it)" }
             else { Write-Host $shownActual -ForegroundColor $DevboxErrorColor; $mismatches++ }
         }
     }
