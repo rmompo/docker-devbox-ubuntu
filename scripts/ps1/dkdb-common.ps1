@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.11.1
+# Version: 0.11.2
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -48,8 +48,8 @@ $DevboxStateDisconnectedColor = 'Gray'
 $DevboxStateScanningColor = 'Yellow'
 $DevboxStateWorkingColor = 'DarkYellow'
 $DevboxStateErrorColor = 'Red'
-# Menus: the row under the pointer, and a row whose check mark changed.
-$DevboxSelectedColor = 'White'
+# Menus: the row under the pointer (cyan, as it always was), and a row whose check mark changed.
+$DevboxSelectedColor = 'Cyan'
 $DevboxChangedColor = 'Yellow'
 
 # --- Help (-Help): one layout for every script (spec 01) ---
@@ -597,7 +597,7 @@ function Select-DevboxItem {
             for ($i = 0; $i -lt $Items.Count; $i++) {
                 [Console]::SetCursorPosition(0, $top + $i)
                 if ($i -eq $index) {
-                    Write-Host ('> ' + $Items[$i]).PadRight($width) -NoNewline -ForegroundColor $DevboxTitleColor
+                    Write-Host ('> ' + $Items[$i]).PadRight($width) -NoNewline -ForegroundColor $DevboxSelectedColor
                 } else {
                     Write-Host ('  ' + $Items[$i]).PadRight($width) -NoNewline
                 }
