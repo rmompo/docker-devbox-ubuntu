@@ -1,5 +1,5 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.2.0
+# Version: 0.2.1
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -98,8 +98,10 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
         $dockerReachable = $true
         $serverVersion = (docker version --format '{{.Server.Version}}' 2>$null | Out-String).Trim()
         Write-Host "  Docker engine   $serverVersion"
+        $engineKind = switch (Get-DevboxDockerEngineKind) { 'DockerDesktop' { 'Docker Desktop' } 'LinuxEngine' { 'Linux engine (WSL): bind mounts use /mnt/<drive>/' } default { 'unknown' } }
+        Write-Host "  Engine type     $engineKind"
     } else {
-        Write-DevboxWarning '  Docker engine   not reachable (start Docker Desktop): images and containers are not listed'
+        Write-DevboxWarning '  Docker engine   not reachable (start Docker Desktop, or the Docker engine in WSL): images and containers are not listed'
         $problems++
     }
 } else {

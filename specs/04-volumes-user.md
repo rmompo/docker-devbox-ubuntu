@@ -26,5 +26,6 @@ VS Code and Docker must point to the same projects folder on the host. The conta
 
 ## Consequences
 - Permissions inside Windows bind mounts are handled by Docker Desktop, not by `chown`.
+- **Source path of a bind mount depends on the engine.** Docker Desktop takes the Windows path (`C:\x`). A Docker engine inside WSL (docker.exe is only the client) needs `/mnt/<drive>/x` (and `\\wsl$\<distro>\x` becomes `/x`). `Get-DevboxDockerEngineKind` detects it with `docker info` (`OperatingSystem` contains `Docker Desktop`, or not; `OSType` must be `linux`) and `Convert-DevboxDockerMountPath` converts only the sources of the three `--mount` of `dkdb-container-create`. `DEVBOX_DOCKER_PATHS=windows|wsl` forces the mode. Validation (`Test-Path`), messages, `DEVBOX_SYNC_PATH` and the Mutagen paths always keep the Windows path. Assumes the default WSL automount root `/mnt/`.
 - The password is weak by design; the container must not be exposed to untrusted networks.
 - The user is never named `ubuntu`, so it cannot clash with the user shipped in newer images.

@@ -18,7 +18,7 @@ Typical problems and their fixes. Commands in `PowerShell` run on the Windows ho
 
 | # | Problem | Fix |
 |---|---------|-----|
-| 1 | "the Docker daemon is not reachable" | Start Docker Desktop and wait until it is running. |
+| 1 | "the Docker daemon is not reachable" | Start Docker Desktop (or the Docker engine in WSL) and wait until it is running. |
 | 2 | "Host path does not exist" in `dkdb-container-create` | The projects and tools folders must exist before creating the container. Create them, or type another path. |
 | 3 | `git` says "dubious ownership" in the projects folder | With the bind mount, git is trusted only for `~/devbox/projects/*` (entrypoint). Rebuild the image and recreate the container if it was created before that setting. |
 | 4 | `dkdb-image-delete` fails | A container still uses the image. Delete the container first with `dkdb-container-delete`. |
@@ -59,3 +59,4 @@ Typical problems and their fixes. Commands in `PowerShell` run on the Windows ho
 | 8 | `dkdb-container-create` stops with "inside a range that Windows reserves" | Hyper-V, WSL or Docker Desktop reserve blocks of ports and Docker cannot publish them. See them with `netsh interface ipv4 show excludedportrange protocol=tcp` and choose a host port outside every range. |
 | 9 | I need a port on a container that already exists | Docker cannot add a published port to an existing container. Create a new container with `-Ports` (see [spec 09](specs/09-ports.md)); with Mutagen the projects come back from the host folder, but what lives in the container home (for example the AI client and its login) has to be installed again. |
 | 10 | The port is published but the browser cannot open the server | The server inside must listen on all interfaces (`0.0.0.0`), not only on `127.0.0.1`: for Angular `ng serve --host 0.0.0.0` (or `npm start -- --host 0.0.0.0`). Check with `dkdb-info` which ports the container publishes, and remember to use the host port in the URL. |
+| 11 | `dkdb-container-create` fails with a mount error, or the folders are empty in the container | With a Docker engine inside WSL the host folders must be mounted as `/mnt/<drive>/...`; the scripts detect the engine (`dkdb-version` shows it as `Engine type`). If the detection is wrong (for example a remote engine), set `DEVBOX_DOCKER_PATHS=windows` (Docker Desktop style paths) or `DEVBOX_DOCKER_PATHS=wsl` (`/mnt/<drive>/...`) before running the script. |

@@ -38,6 +38,7 @@ On Docker Desktop with WSL2, bind mounts from `C:\` (9p) are slow for projects w
 - Symbolic links are ignored; in `portable` mode (Mutagen's default) a non-portable link would halt the synchronization.
 - With folder sessions, files outside the synchronized folders exist on one side only until their folder is added.
 - Mutagen halts instead of propagating the deletion or emptying of a sync root (safety mechanisms); recover with `mutagen sync resume` or `mutagen sync reset`.
+- Mutagen does not depend on the kind of Docker engine: alpha is the Windows path read by mutagen.exe, beta is `docker://user@id/path` (a `docker exec` through the same docker.exe), so no host path is translated for it (spec 04 only translates the bind mounts).
 - Mutagen identifies a docker endpoint by the container identifier it is given; the ID is used (not the name) so that a leftover session never reaches another container. Leftovers (container deleted outside the scripts, or daemon stopped at that moment) are removed with `dkdb-mutagen-clean`.
 - Syncing everything between Windows and Linux has risks: platform-specific `node_modules` or `.venv`, slow first scan on big trees, and case-insensitive host names. If it becomes a problem, add `--ignore` patterns in `Invoke-DevboxSyncPick`.
 - Not documented by Mutagen and still to verify: whether sessions resume after rebooting the PC (its data is stored in `~/.mutagen`), behavior when Docker Desktop stops with the container running, and how case-only name differences between Windows and Linux are handled.

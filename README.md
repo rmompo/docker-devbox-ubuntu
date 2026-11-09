@@ -20,7 +20,7 @@ Conventions:
 ## Requirements
 
 1. Windows with PowerShell 5.1 or newer.
-2. Docker Desktop, running.
+2. Docker Desktop, running, or a Docker engine inside WSL (with `docker.exe` as the client). The scripts detect which one it is; see `TROUBLESHOOTING.md` if the detection must be forced.
 3. Internet access (the installer downloads from GitHub, and the AI clients download their own installers).
 
 ## Installation

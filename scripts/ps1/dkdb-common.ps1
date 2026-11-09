@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.9.1
+# Version: 0.10.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -438,9 +438,71 @@ function Assert-DevboxDocker {
     }
     docker info *> $null
     if ($LASTEXITCODE -ne 0) {
-        Write-DevboxWarning 'Error: the Docker daemon is not reachable. Is Docker Desktop running?'
+        Write-DevboxWarning 'Error: the Docker daemon is not reachable. Is Docker running (Docker Desktop, or the Docker engine in WSL)?'
         exit 1
     }
+}
+
+# --- Docker engine kind and host paths of bind mounts (spec 04) ---
+# The path that Docker needs as the source of a bind mount depends on where the engine runs:
+#   DockerDesktop  the Windows path (C:\x) as it is.
+#   LinuxEngine    an engine inside WSL (docker.exe is only the client): /mnt/<drive>/x.
+#   Unknown        Windows containers or the engine cannot be read: the path is left as it is.
+# DEVBOX_DOCKER_PATHS=windows|wsl forces the mode (for example a remote engine that cannot be told apart).
+function Get-DevboxDockerEngineKind {
+    if ($script:DevboxDockerEngineKind) { return $script:DevboxDockerEngineKind }
+    $kind = 'Unknown'
+    $forced = $env:DEVBOX_DOCKER_PATHS
+    if ($forced -eq 'windows') { $kind = 'DockerDesktop' }
+    elseif ($forced -eq 'wsl') { $kind = 'LinuxEngine' }
+    elseif (Get-Command docker -ErrorAction SilentlyContinue) {
+        $run = Invoke-DevboxNative -Path (Get-Command docker -CommandType Application | Select-Object -First 1).Source -Arguments @('info', '--format', '{{.OperatingSystem}}|{{.OSType}}')
+        if ($run.ExitCode -eq 0) {
+            $parts = ($run.Output.Trim()) -split '\|'
+            if ($parts.Count -ge 2 -and $parts[-1].Trim() -eq 'linux') {
+                if ($parts[0] -match 'Docker Desktop') { $kind = 'DockerDesktop' } else { $kind = 'LinuxEngine' }
+            }
+        }
+    }
+    $script:DevboxDockerEngineKind = $kind
+    return $kind
+}
+
+# The source of a bind mount for Docker, from a Windows path. Only an engine inside WSL changes it:
+# C:\a\b (or C:) -> /mnt/c/a/b; \\wsl$\Distro\x and \\wsl.localhost\Distro\x -> /x. Anything else stays as it is.
+function Convert-DevboxDockerMountPath {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string]$EngineKind
+    )
+    if (-not $EngineKind) { $EngineKind = Get-DevboxDockerEngineKind }
+    if ($EngineKind -ne 'LinuxEngine') { return $Path }
+    if ($Path -match '^([A-Za-z]):(?:[\\/](.*))?$') {
+        $rest = ($Matches[2] -replace '\\', '/').TrimEnd('/')
+        if ($rest) { return '/mnt/' + $Matches[1].ToLowerInvariant() + '/' + $rest }
+        return '/mnt/' + $Matches[1].ToLowerInvariant()
+    }
+    if ($Path -match '^\\\\wsl(?:\$|\.localhost)\\[^\\]+(?:\\(.*))?$') {
+        $rest = ($Matches[1] -replace '\\', '/').TrimEnd('/')
+        return '/' + $rest
+    }
+    return $Path
+}
+
+# The reverse, only to show a mount source as a Windows path: /mnt/c/a/b -> C:\a\b (other paths stay as they are).
+function ConvertFrom-DevboxDockerMountPath {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string]$EngineKind
+    )
+    if (-not $EngineKind) { $EngineKind = Get-DevboxDockerEngineKind }
+    if ($EngineKind -ne 'LinuxEngine') { return $Path }
+    if ($Path -match '^/mnt/([a-z])(?:/(.*))?$') {
+        $drive = $Matches[1].ToUpperInvariant() + ':'
+        if ($Matches[2]) { return $drive + '\' + ($Matches[2] -replace '/', '\') }
+        return $drive + '\'
+    }
+    return $Path
 }
 
 function Get-DevboxFullName {

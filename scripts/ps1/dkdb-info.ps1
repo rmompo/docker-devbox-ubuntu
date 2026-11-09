@@ -1,5 +1,5 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.4.0
+# Version: 0.4.1
 # volumes, published ports and Mutagen. For the versions, see dkdb-version.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -94,7 +94,7 @@ $dockerReachable = $false
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     docker info *> $null
     if ($LASTEXITCODE -eq 0) { $dockerReachable = $true; Show-InfoText -Label 'Engine' -Text 'running' -Color 'Green' -LabelWidth 6 }
-    else { Show-InfoText -Label 'Engine' -Text 'not reachable (start Docker Desktop)' -Color 'Red' -LabelWidth 6 }
+    else { Show-InfoText -Label 'Engine' -Text 'not reachable (start Docker Desktop, or the Docker engine in WSL)' -Color 'Red' -LabelWidth 6 }
 } else {
     Show-InfoText -Label 'Engine' -Text 'docker was not found in the PATH' -Color 'Red' -LabelWidth 6
 }
@@ -131,7 +131,7 @@ if ($dockerReachable) {
         foreach ($mount in @($mounts | Where-Object { $_ })) {
             $parts = $mount -split '\|'
             Write-DevboxInfoField -Label 'Mount' -LabelWidth 8 -Indent 4 -Value @(
-                (Get-InfoHost $parts[0]), (Get-InfoPlain ' -> '), (Get-InfoContainer $parts[1]), (Get-InfoModeBadge -ReadOnly ($parts[2] -eq 'false')))
+                (Get-InfoHost (ConvertFrom-DevboxDockerMountPath $parts[0])), (Get-InfoPlain ' -> '), (Get-InfoContainer $parts[1]), (Get-InfoModeBadge -ReadOnly ($parts[2] -eq 'false')))
         }
         # Published ports (spec 09): fixed when the container was created.
         $published = @(Get-DevboxContainerPorts -Container $container)

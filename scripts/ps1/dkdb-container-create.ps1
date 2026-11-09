@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.4.0
+# Version: 0.5.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -42,7 +42,7 @@ if ($Man) {
             'Asks for the image, the container name, the user (default: the container name), the host projects path, the host tools path, the projects volume type (Mutagen, the first option and the default, or Docker bind mount) and the ports to publish (skipped with -Ports; the question explains the format: [ip:]host_port:container_port[/tcp|/udp], commas between mappings, a single number N means N:N, the ip is 127.0.0.1 unless you type another one, empty means none).',
             'Validates everything before creating: the image exists (the highest compatible tag; an older one only warns), the container name is free, the host paths exist and have no commas, and every port is well formed, appears once, is not in use on the host and is not inside a range that Windows reserves. A host ip other than 127.0.0.1 only warns (other computers may reach the port).',
             'If Mutagen was chosen: installs it when missing and checks its version.',
-            'Runs docker create with DEVBOX_USER, one -p per published port, tools mounted at ~/devbox/tools, scripts\bash at ~/devbox/bash (read-only) and, for a bind mount, the projects at ~/devbox/projects. With Mutagen there is no projects mount: the container only gets DEVBOX_SYNC and DEVBOX_SYNC_PATH.'
+            'Runs docker create with DEVBOX_USER, one -p per published port, tools mounted at ~/devbox/tools, scripts\bash at ~/devbox/bash (read-only) and, for a bind mount, the projects at ~/devbox/projects. With Mutagen there is no projects mount: the container only gets DEVBOX_SYNC and DEVBOX_SYNC_PATH. The engine is detected: with Docker Desktop the Windows paths are used as they are; with a Docker engine inside WSL they are translated to /mnt/<drive>/... (DEVBOX_DOCKER_PATHS=windows or wsl forces one of them).'
         ) `
         -Changes @(
             'Adds a stopped container.',
@@ -183,14 +183,17 @@ if ($useMutagen) {
     # synchronizes it with the host path when the container is started.
     $createArgs += @('-e', 'DEVBOX_SYNC=mutagen', '-e', "DEVBOX_SYNC_PATH=$projectsPath")
 } else {
-    $createArgs += @('--mount', "type=bind,source=$projectsPath,target=$mountBase/projects")
+    $createArgs += @('--mount', "type=bind,source=$(Convert-DevboxDockerMountPath $projectsPath),target=$mountBase/projects")
 }
 foreach ($portSpec in $portSpecs) { $createArgs += @('-p', $portSpec.DockerArg) }
 $createArgs += @(
-    '--mount', "type=bind,source=$toolsPath,target=$mountBase/tools",
-    '--mount', "type=bind,source=$bashPath,target=$mountBase/bash,readonly",
+    '--mount', "type=bind,source=$(Convert-DevboxDockerMountPath $toolsPath),target=$mountBase/tools",
+    '--mount', "type=bind,source=$(Convert-DevboxDockerMountPath $bashPath),target=$mountBase/bash,readonly",
     $imageRef
 )
+if ((Get-DevboxDockerEngineKind) -eq 'LinuxEngine') {
+    Write-Host 'Docker engine: Linux engine (WSL). The host folders are mounted through /mnt/<drive>/ (for example C:\x becomes /mnt/c/x).'
+}
 docker @createArgs | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-DevboxWarning 'Error: docker create failed.'
