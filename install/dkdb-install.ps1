@@ -1,5 +1,5 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.3.0
+# Version: 0.3.1
 # It downloads manifest.json and every file it lists (scripts and dkdb-uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -19,19 +19,26 @@ $DefaultRootPath = 'C:\shared\'
 
 $ErrorActionPreference = 'Stop'
 
-# Message colors (spec 01): success (something was done correctly) in green, warnings and errors in red,
-# the natural next step in yellow. Other messages keep the default color.
+# Colors of the output (spec 01; the same table as dkdb-common.ps1, repeated because this file is downloaded
+# on its own): green success, red warnings and errors, yellow the next step, white titles, orange names
+# (scripts, commands, parameters), dark gray the version line.
+$ColorSuccess = 'Green'
+$ColorError = 'Red'
+$ColorNext = 'Yellow'
+$ColorTitle = 'White'
+$ColorName = 'DarkYellow'
+$ColorNote = 'DarkGray'
 function Write-InstallSuccess {
     param([string]$Text)
-    Write-Host $Text -ForegroundColor Green
+    Write-Host $Text -ForegroundColor $ColorSuccess
 }
 function Write-InstallWarning {
     param([string]$Text)
-    Write-Host $Text -ForegroundColor Red
+    Write-Host $Text -ForegroundColor $ColorError
 }
 function Write-InstallNext {
     param([string]$Text)
-    Write-Host $Text -ForegroundColor Yellow
+    Write-Host $Text -ForegroundColor $ColorNext
 }
 
 function Stop-Install {
@@ -126,34 +133,34 @@ function Show-InstallHelp {
         if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
     } catch { $width = 100 }
     $parameters = @(@{ Name = '-Help'; Description = 'Show this help and exit.' }, @{ Name = '-Man'; Description = 'Show the manual (what the script does, step by step) and exit.' })
-    if ($VersionLine) { Write-Host $VersionLine -ForegroundColor DarkGray }
+    if ($VersionLine) { Write-Host $VersionLine -ForegroundColor $ColorNote }
     Write-Host ''
-    Write-Host 'NAME' -ForegroundColor Cyan
-    Write-Host "    $Name" -ForegroundColor Green
+    Write-Host 'NAME' -ForegroundColor $ColorTitle
+    Write-Host "    $Name" -ForegroundColor $ColorName
     Write-Host ''
-    Write-Host 'DESCRIPTION' -ForegroundColor Cyan
+    Write-Host 'DESCRIPTION' -ForegroundColor $ColorTitle
     foreach ($line in (Get-InstallWrappedLines -Text $Description -Width ($width - 4))) { Write-Host "    $line" }
     Write-Host ''
-    Write-Host 'USAGE' -ForegroundColor Cyan
-    Write-Host "    $Usage" -ForegroundColor Green
+    Write-Host 'USAGE' -ForegroundColor $ColorTitle
+    Write-Host "    $Usage" -ForegroundColor $ColorName
     Write-Host ''
-    Write-Host 'PARAMETERS' -ForegroundColor Cyan
+    Write-Host 'PARAMETERS' -ForegroundColor $ColorTitle
     $nameWidth = ($parameters | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum + 3
     foreach ($parameter in $parameters) {
-        Write-Host ('    ' + $parameter.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor Green
+        Write-Host ('    ' + $parameter.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor $ColorName
         Write-Host $parameter.Description
     }
     if ($Examples.Count -gt 0) {
         Write-Host ''
-        Write-Host 'EXAMPLES' -ForegroundColor Cyan
+        Write-Host 'EXAMPLES' -ForegroundColor $ColorTitle
         foreach ($example in $Examples) {
-            Write-Host "    $($example.Command)" -ForegroundColor Green
+            Write-Host "    $($example.Command)" -ForegroundColor $ColorName
             foreach ($line in (Get-InstallWrappedLines -Text $example.Description -Width ($width - 8))) { Write-Host "        $line" }
         }
     }
     if ($Notes.Count -gt 0) {
         Write-Host ''
-        Write-Host 'NOTES' -ForegroundColor Cyan
+        Write-Host 'NOTES' -ForegroundColor $ColorTitle
         foreach ($note in $Notes) {
             $lines = @(Get-InstallWrappedLines -Text $note -Width ($width - 6))
             Write-Host "    - $($lines[0])"
@@ -180,10 +187,10 @@ function Show-InstallMan {
         if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
     } catch { $width = 100 }
     Write-Host ''
-    Write-Host 'MANUAL' -ForegroundColor Cyan
-    Write-Host "    $Name" -ForegroundColor Green
+    Write-Host 'MANUAL' -ForegroundColor $ColorTitle
+    Write-Host "    $Name" -ForegroundColor $ColorName
     Write-Host ''
-    Write-Host 'PURPOSE' -ForegroundColor Cyan
+    Write-Host 'PURPOSE' -ForegroundColor $ColorTitle
     foreach ($line in (Get-InstallWrappedLines -Text $Purpose -Width ($width - 4))) { Write-Host "    $line" }
     $sections = @(
         @{ Title = 'REQUIREMENTS'; Items = $Needs; Numbered = $false },
@@ -194,29 +201,29 @@ function Show-InstallMan {
     foreach ($section in $sections) {
         if (@($section.Items).Count -eq 0) { continue }
         Write-Host ''
-        Write-Host $section.Title -ForegroundColor Cyan
+        Write-Host $section.Title -ForegroundColor $ColorTitle
         $number = 0
         foreach ($item in $section.Items) {
             $number++
             $marker = if ($section.Numbered) { ('{0,2}. ' -f $number) } else { '  - ' }
             $lines = @(Get-InstallWrappedLines -Text $item -Width ($width - 8))
             Write-Host '    ' -NoNewline
-            Write-Host $marker -NoNewline -ForegroundColor Green
+            Write-Host $marker -NoNewline -ForegroundColor $ColorName
             Write-Host $lines[0]
             foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host ('        ' + $line) }
         }
     }
     if ($Next) {
         Write-Host ''
-        Write-Host 'NEXT STEP' -ForegroundColor Cyan
-        foreach ($line in (Get-InstallWrappedLines -Text $Next -Width ($width - 4))) { Write-Host "    $line" -ForegroundColor Yellow }
+        Write-Host 'NEXT STEP' -ForegroundColor $ColorTitle
+        foreach ($line in (Get-InstallWrappedLines -Text $Next -Width ($width - 4))) { Write-Host "    $line" -ForegroundColor $ColorNext }
     }
     Write-Host ''
 }
 
 $selfVersion = Get-InstallFileVersion -Path $PSCommandPath
 if (-not $selfVersion) { $selfVersion = 'unknown' }
-Write-Host "install $selfVersion (docker-devbox-ubuntu installer)" -ForegroundColor DarkGray
+Write-Host "install $selfVersion (docker-devbox-ubuntu installer)" -ForegroundColor $ColorNote
 if ($Help) {
     Show-InstallHelp -Name 'dkdb-install.ps1' `
         -Description 'Installs docker-devbox-ubuntu: downloads manifest.json and every file it lists into <root>\devbox, creates <root>\tools and adds <root>\devbox\scripts\ps1 to the user PATH. It asks for the shared root and for the branch or tag to download.' `

@@ -1,5 +1,5 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.4.0
+# Version: 0.4.1
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -54,8 +54,8 @@ function Show-InfoText {
 # Reverse-video word that says whether a version is compatible.
 function Write-InfoCompatible {
     param([bool]$Compatible)
-    if ($Compatible) { Write-Host ' COMPATIBLE ' -NoNewline -ForegroundColor Black -BackgroundColor Green }
-    else { Write-Host ' NOT-COMPATIBLE ' -NoNewline -ForegroundColor Black -BackgroundColor Red }
+    if ($Compatible) { Write-Host ' COMPATIBLE ' -NoNewline -ForegroundColor Black -BackgroundColor $DevboxBadgeCompatibleColor }
+    else { Write-Host ' NOT-COMPATIBLE ' -NoNewline -ForegroundColor Black -BackgroundColor $DevboxBadgeIncompatibleColor }
 }
 
 $scripts = Get-DevboxVersion
@@ -65,16 +65,16 @@ $problems = 0
 
 # --- Project ---
 Write-DevboxInfoSection -Title 'Project'
-Write-DevboxInfoField -Label 'Version' -LabelWidth 7 -Value @((New-DevboxInfoText "$scripts" 'Green'), (Get-InfoPlain ' (docker-devbox-ubuntu, manifest.json)'))
-Write-DevboxInfoField -Label 'Image' -LabelWidth 7 -Value @((New-DevboxInfoText "$expectedImage" 'Green'), (Get-InfoPlain ' (the image version that the scripts build and expect)'))
+Write-DevboxInfoField -Label 'Version' -LabelWidth 7 -Value @((New-DevboxInfoText "$scripts" $DevboxSuccessColor), (Get-InfoPlain ' (docker-devbox-ubuntu, manifest.json)'))
+Write-DevboxInfoField -Label 'Image' -LabelWidth 7 -Value @((New-DevboxInfoText "$expectedImage" $DevboxSuccessColor), (Get-InfoPlain ' (the image version that the scripts build and expect)'))
 
 # --- Files: the version in manifest.json against the version in the file header ---
 # Name in orange, version of the manifest in green, version of the file green when it matches and red when not.
 Write-Host ''
-Write-Host 'FILES' -NoNewline -ForegroundColor $DevboxInfoSectionColor
-Write-Host ' (' -NoNewline -ForegroundColor DarkGray
-Write-Host 'manifest' -NoNewline -ForegroundColor Green
-Write-Host ' / file)' -ForegroundColor DarkGray
+Write-Host 'FILES' -NoNewline -ForegroundColor $DevboxSectionColor
+Write-Host ' (' -NoNewline -ForegroundColor $DevboxNoteColor
+Write-Host 'manifest' -NoNewline -ForegroundColor $DevboxSuccessColor
+Write-Host ' / file)' -ForegroundColor $DevboxNoteColor
 $manifestPath = Join-Path $base 'manifest.json'
 $mismatches = 0
 $listed = 0
@@ -91,11 +91,11 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
             $actual = Get-DevboxFileVersion -Path $path
             $shownActual = $actual
             if (-not $actual) { $shownActual = 'missing' }
-            Write-Host ('  {0} ' -f $entry.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor $DevboxInfoPropertyColor
-            Write-Host ('{0} ' -f ([string]$entry.Value).PadRight($versionWidth)) -NoNewline -ForegroundColor Green
-            if ($actual -eq [string]$entry.Value) { Write-Host $shownActual -ForegroundColor Green }
+            Write-Host ('  {0} ' -f $entry.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor $DevboxNameColor
+            Write-Host ('{0} ' -f ([string]$entry.Value).PadRight($versionWidth)) -NoNewline -ForegroundColor $DevboxSuccessColor
+            if ($actual -eq [string]$entry.Value) { Write-Host $shownActual -ForegroundColor $DevboxSuccessColor }
             elseif ($entry.Name -eq 'install/dkdb-install.ps1' -and -not $actual) { Write-Host "$shownActual (downloaded by hand)" }
-            else { Write-Host $shownActual -ForegroundColor Red; $mismatches++ }
+            else { Write-Host $shownActual -ForegroundColor $DevboxErrorColor; $mismatches++ }
         }
     }
 }
@@ -124,11 +124,11 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
         $engineKind = switch (Get-DevboxDockerEngineKind) { 'DockerDesktop' { 'Docker Desktop' } 'LinuxEngine' { 'Linux engine (WSL): bind mounts use /mnt/<drive>/' } default { 'unknown' } }
         Show-InfoText -Label 'Engine type' -Text $engineKind
     } else {
-        Show-InfoText -Label 'Docker engine' -Text 'not reachable (start Docker Desktop, or the Docker engine in WSL): images and containers are not listed' -Color 'Red'
+        Show-InfoText -Label 'Docker engine' -Text 'not reachable (start Docker Desktop, or the Docker engine in WSL): images and containers are not listed' -Color $DevboxErrorColor
         $problems++
     }
 } else {
-    Show-InfoText -Label 'Docker client' -Text 'not found in the PATH' -Color 'Red'
+    Show-InfoText -Label 'Docker client' -Text 'not found in the PATH' -Color $DevboxErrorColor
     $problems++
 }
 $mutagenExe = Get-DevboxMutagenExe
@@ -137,10 +137,10 @@ if ($mutagenExe) {
     if (-not $mutagenFound) {
         Write-DevboxInfoField -Label 'Mutagen' -LabelWidth 13 -Value @((Get-InfoPlain 'version unknown '), (Get-InfoHost "($mutagenExe)"))
     } elseif ($mutagenFound -lt [version]$DevboxMutagenVersion) {
-        Write-DevboxInfoField -Label 'Mutagen' -LabelWidth 13 -Value @((New-DevboxInfoText "$mutagenFound " 'Red'), (Get-InfoHost "($mutagenExe)"), (New-DevboxInfoText " is older than the required $DevboxMutagenVersion" 'Red'))
+        Write-DevboxInfoField -Label 'Mutagen' -LabelWidth 13 -Value @((New-DevboxInfoText "$mutagenFound " $DevboxErrorColor), (Get-InfoHost "($mutagenExe)"), (New-DevboxInfoText " is older than the required $DevboxMutagenVersion" $DevboxErrorColor))
         $problems++
     } else {
-        Write-DevboxInfoField -Label 'Mutagen' -LabelWidth 13 -Value @((New-DevboxInfoText "$mutagenFound " 'Green'), (Get-InfoHost "($mutagenExe)"), (Get-InfoPlain " required $DevboxMutagenVersion or newer"))
+        Write-DevboxInfoField -Label 'Mutagen' -LabelWidth 13 -Value @((New-DevboxInfoText "$mutagenFound " $DevboxSuccessColor), (Get-InfoHost "($mutagenExe)"), (Get-InfoPlain " required $DevboxMutagenVersion or newer"))
     }
 } else {
     Show-InfoText -Label 'Mutagen' -Text 'not installed (optional; dkdb-container-create installs it on demand)'
@@ -156,9 +156,9 @@ if ($dockerReachable) {
     foreach ($image in $images) {
         $tag = $image.Substring($image.LastIndexOf(':') + 1)
         $compatible = [bool](Test-DevboxVersionCompatible -Left $tag -Right $expectedImage)
-        Write-Host ('  {0} ' -f $image.PadRight($imageWidth)) -NoNewline -ForegroundColor $DevboxInfoPropertyColor
+        Write-Host ('  {0} ' -f $image.PadRight($imageWidth)) -NoNewline -ForegroundColor $DevboxNameColor
         Write-InfoCompatible -Compatible $compatible
-        if (-not $compatible) { Write-Host ' (or not a version tag)' -ForegroundColor Red; $problems++ } else { Write-Host '' }
+        if (-not $compatible) { Write-Host ' (or not a version tag)' -ForegroundColor $DevboxErrorColor; $problems++ } else { Write-Host '' }
     }
 
     Write-DevboxInfoSection -Title 'Containers' -Note '(version of the image they were created from)'
@@ -171,12 +171,12 @@ if ($dockerReachable) {
         $shown = $imageVersion
         if (-not $shown) { $shown = 'unknown' }
         $compatible = [bool]($imageVersion -and (Test-DevboxVersionCompatible -Left $imageVersion -Right $expectedImage))
-        $versionColor = 'Red'
-        if ($compatible) { $versionColor = 'Green' }
-        Write-Host ('  {0} ' -f $container.PadRight($containerWidth)) -NoNewline -ForegroundColor $DevboxInfoPropertyColor
+        $versionColor = $DevboxErrorColor
+        if ($compatible) { $versionColor = $DevboxSuccessColor }
+        Write-Host ('  {0} ' -f $container.PadRight($containerWidth)) -NoNewline -ForegroundColor $DevboxNameColor
         Write-Host ('{0,-9} ' -f $shown) -NoNewline -ForegroundColor $versionColor
         Write-InfoCompatible -Compatible $compatible
-        if (-not $compatible) { Write-Host ' (it keeps working; newer features may be missing)' -ForegroundColor Red; $problems++ } else { Write-Host '' }
+        if (-not $compatible) { Write-Host ' (it keeps working; newer features may be missing)' -ForegroundColor $DevboxErrorColor; $problems++ } else { Write-Host '' }
     }
 }
 

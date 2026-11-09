@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.1.0
+# Version: 0.1.1
 # Install the tools that the devbox scripts need and that an image may not have (for example an image older
 # than the scripts). Run it inside the container: bash ~/devbox/bash/dkdb-install-tools.sh
 set -u
@@ -18,12 +18,10 @@ declare -A GROUP_TOOLS=(
     [keyring]='dbus-daemon:dbus gnome-keyring-daemon:gnome-keyring secret-tool:libsecret-tools script:bsdutils'
 )
 
-warn() { printf '%s%s%s\n' "$c_red" "$*" "$c_off" >&2; }
-
 usage() {
     local name cyan green off
     name="$(basename "$0")"
-    cyan="$c_cyan"; green="$c_green"; off="$c_off"
+    cyan="$c_title"; green="$c_name"; off="$c_off"
     banner "$0"
     printf '\n%sNAME%s\n    %s%s%s\n' "$cyan" "$off" "$green" "$name" "$off"
     printf '\n%sDESCRIPTION%s\n' "$cyan" "$off"

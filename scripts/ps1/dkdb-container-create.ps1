@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.5.0
+# Version: 0.5.1
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -209,7 +209,9 @@ if ($portSpecs.Count -gt 0) {
     Write-Host 'Published ports: none (Docker cannot add them later; create a new container if you need them).'
 }
 if ($useMutagen) {
-    Write-Host "Projects: with Mutagen, '$projectsPath' is synchronized only when you choose it in the menu of dkdb-container-start, dkdb-container-connect or dkdb-mutagen-sync."
+    Write-Host "Projects: with Mutagen, '" -NoNewline
+    Write-Host $projectsPath -NoNewline -ForegroundColor $DevboxHostColor
+    Write-Host "' is synchronized only when you choose it in the menu of dkdb-container-start, dkdb-container-connect or dkdb-mutagen-sync."
 }
 if ($useMutagen) {
     Write-DevboxNext 'Next: dkdb-container-start to start it (its menu lets you choose what to synchronize), then dkdb-container-connect.'

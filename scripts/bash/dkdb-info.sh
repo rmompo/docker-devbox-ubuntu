@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.3.0
+# Version: 0.3.1
 # Show how this container is set up, seen from inside it: user, folders, mounts, AI client, published ports and the
 # Mutagen sessions.
 # Same layout as dkdb-info.ps1 on the host. It only reads. The ports and the Mutagen part come from the state file
@@ -41,8 +41,8 @@ show_path() {
     local label="$1" path="$2" mode="$3" note="${4:-}" pieces
     pieces=("t:container:$path")
     case "$mode" in
-        read-only) pieces+=('b:green:READ-ONLY') ;;
-        read/write) pieces+=('b:red:READ-WRITE') ;;
+        read-only) pieces+=('b:readonly:READ-ONLY') ;;
+        read/write) pieces+=('b:readwrite:READ-WRITE') ;;
         '') ;;
         *) pieces+=("t:none: ($mode)") ;;
     esac
@@ -68,10 +68,10 @@ else
     info_field 'AI client' 13 2 't:none:none (bash ~/devbox/bash/dkdb-install-claudecode.sh or dkdb-install-ghcopilot-cli.sh)'
 fi
 if [ "$sync_kind" = mutagen ]; then
-    info_field 'Volume' 13 2 'b:yellow:MUTAGEN-SYNC'
-    info_field 'Projects' 13 2 "t:host:${DEVBOX_SYNC_PATH:-unknown}" 't:none: <-> ' 't:container:~/devbox/projects' 'b:red:MUTAGEN'
+    info_field 'Volume' 13 2 'b:sync:MUTAGEN-SYNC'
+    info_field 'Projects' 13 2 "t:host:${DEVBOX_SYNC_PATH:-unknown}" 't:none: <-> ' 't:container:~/devbox/projects' 'b:mutagen:MUTAGEN'
 else
-    info_field 'Volume' 13 2 'b:red:VOLUME-P9'
+    info_field 'Volume' 13 2 'b:volume:VOLUME-P9'
 fi
 
 # --- Folders and mounts ---
@@ -97,8 +97,8 @@ if [ -n "$mounts" ]; then
     info_section 'Mounts'
     while IFS='|' read -r where kind options; do
         case "$options" in
-            ro|ro,*) info_field 'Mount' 5 2 "t:container:$where" "t:none: ($kind)" 'b:green:READ-ONLY' ;;
-            *) info_field 'Mount' 5 2 "t:container:$where" "t:none: ($kind)" 'b:red:READ-WRITE' ;;
+            ro|ro,*) info_field 'Mount' 5 2 "t:container:$where" "t:none: ($kind)" 'b:readonly:READ-ONLY' ;;
+            *) info_field 'Mount' 5 2 "t:container:$where" "t:none: ($kind)" 'b:readwrite:READ-WRITE' ;;
         esac
     done <<< "$mounts"
 fi

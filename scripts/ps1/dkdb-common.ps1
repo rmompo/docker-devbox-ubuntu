@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.10.1
+# Version: 0.11.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -12,6 +12,45 @@ $DevboxDefaultProjectsPath = 'C:\LocalFiles\proyectos\'
 # Optional Mutagen (file sync, spec 08), downloaded on demand by dkdb-container-create.
 # It is also the minimum accepted version (0.18.1 fixed the compatibility with Docker Engine 28+).
 $DevboxMutagenVersion = '0.18.1'
+
+# --- Colors of the output (spec 01): ONE table, every script uses these variables (never a color name) ---
+# Messages: green success, red warnings and errors, yellow the next step.
+$DevboxSuccessColor = 'Green'
+$DevboxErrorColor = 'Red'
+$DevboxNextColor = 'Yellow'
+# Sides: cyan a path of the host, magenta a path of the container.
+$DevboxHostColor = 'Cyan'
+$DevboxContainerColor = 'Magenta'
+# Text roles: a title (the headings of -Help and -Man), a section (SECTIONS of dkdb-info and dkdb-version), a label
+# (a PROPERTY in capitals), a name (a script, command, parameter or file) and a note (version line, hints).
+$DevboxTitleColor = 'White'
+$DevboxSectionColor = 'White'
+$DevboxLabelColor = 'DarkYellow'
+$DevboxNameColor = 'DarkYellow'
+$DevboxNoteColor = 'DarkGray'
+# State words: [running] and [stopped].
+$DevboxRunningColor = 'Green'
+$DevboxStoppedColor = 'Red'
+# Badges (reverse video, black text on this background).
+$DevboxBadgeReadOnlyColor = 'Green'
+$DevboxBadgeReadWriteColor = 'Red'
+$DevboxBadgeMutagenColor = 'Red'
+$DevboxBadgeSyncColor = 'Yellow'
+$DevboxBadgeVolumeColor = 'Red'
+$DevboxBadgeCompatibleColor = 'Green'
+$DevboxBadgeIncompatibleColor = 'Red'
+# Mutagen sessions: active or paused, and the state badge (watching, disconnected, scanning or connecting,
+# reconciling or staging, halted or error).
+$DevboxActiveColor = 'Green'
+$DevboxPausedColor = 'Red'
+$DevboxStateWatchingColor = 'Green'
+$DevboxStateDisconnectedColor = 'Gray'
+$DevboxStateScanningColor = 'Yellow'
+$DevboxStateWorkingColor = 'DarkYellow'
+$DevboxStateErrorColor = 'Red'
+# Menus: the row under the pointer, and a row whose check mark changed.
+$DevboxSelectedColor = 'White'
+$DevboxChangedColor = 'Yellow'
 
 # --- Help (-Help): one layout for every script (spec 01) ---
 # Words of $Text wrapped in lines of at most $Width characters.
@@ -29,7 +68,7 @@ function Get-DevboxWrappedLines {
 }
 
 # Print the help of a script: NAME, DESCRIPTION, USAGE, PARAMETERS, EXAMPLES and NOTES. Headings in
-# cyan, names, usage and example commands in green, the text in the default color; columns aligned.
+# white, names, usage and example commands in orange, the text in the default color; columns aligned.
 # Parameters: @{ Name = '-Help'; Description = '...' }; Examples: @{ Command = '...'; Description = '...' }.
 function Show-DevboxHelp {
     param(
@@ -50,34 +89,34 @@ function Show-DevboxHelp {
     $Parameters = @($Parameters) + @(@{ Name = '-Help'; Description = 'Show this help and exit.' }, @{ Name = '-Man'; Description = 'Show the manual (what the script does, step by step) and exit.' })
     if ($Script) { Show-DevboxVersion -Script $Script }
     Write-Host ''
-    Write-Host 'NAME' -ForegroundColor Cyan
-    Write-Host "    $Name" -ForegroundColor Green
+    Write-Host 'NAME' -ForegroundColor $DevboxTitleColor
+    Write-Host "    $Name" -ForegroundColor $DevboxNameColor
     Write-Host ''
-    Write-Host 'DESCRIPTION' -ForegroundColor Cyan
+    Write-Host 'DESCRIPTION' -ForegroundColor $DevboxTitleColor
     foreach ($line in (Get-DevboxWrappedLines -Text $Description -Width ($width - 4))) { Write-Host "    $line" }
     Write-Host ''
-    Write-Host 'USAGE' -ForegroundColor Cyan
-    Write-Host "    $Usage" -ForegroundColor Green
+    Write-Host 'USAGE' -ForegroundColor $DevboxTitleColor
+    Write-Host "    $Usage" -ForegroundColor $DevboxNameColor
     Write-Host ''
-    Write-Host 'PARAMETERS' -ForegroundColor Cyan
+    Write-Host 'PARAMETERS' -ForegroundColor $DevboxTitleColor
     $nameWidth = ($Parameters | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum + 3
     foreach ($parameter in $Parameters) {
         $lines = @(Get-DevboxWrappedLines -Text $parameter.Description -Width ($width - 4 - $nameWidth))
-        Write-Host ('    ' + $parameter.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor Green
+        Write-Host ('    ' + $parameter.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor $DevboxNameColor
         Write-Host $lines[0]
         foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host ((' ' * (4 + $nameWidth)) + $line) }
     }
     if ($Examples.Count -gt 0) {
         Write-Host ''
-        Write-Host 'EXAMPLES' -ForegroundColor Cyan
+        Write-Host 'EXAMPLES' -ForegroundColor $DevboxTitleColor
         foreach ($example in $Examples) {
-            Write-Host "    $($example.Command)" -ForegroundColor Green
+            Write-Host "    $($example.Command)" -ForegroundColor $DevboxNameColor
             foreach ($line in (Get-DevboxWrappedLines -Text $example.Description -Width ($width - 8))) { Write-Host "        $line" }
         }
     }
     if ($Notes.Count -gt 0) {
         Write-Host ''
-        Write-Host 'NOTES' -ForegroundColor Cyan
+        Write-Host 'NOTES' -ForegroundColor $DevboxTitleColor
         foreach ($note in $Notes) {
             $lines = @(Get-DevboxWrappedLines -Text $note -Width ($width - 6))
             Write-Host "    - $($lines[0])"
@@ -122,10 +161,10 @@ function Show-DevboxMan {
     if (-not $Name -and $Script) { $Name = [System.IO.Path]::GetFileNameWithoutExtension($Script) }
     if ($Script) { Show-DevboxVersion -Script $Script }
     Write-Host ''
-    Write-Host 'MANUAL' -ForegroundColor Cyan
-    Write-Host "    $Name" -ForegroundColor Green
+    Write-Host 'MANUAL' -ForegroundColor $DevboxTitleColor
+    Write-Host "    $Name" -ForegroundColor $DevboxNameColor
     Write-Host ''
-    Write-Host 'PURPOSE' -ForegroundColor Cyan
+    Write-Host 'PURPOSE' -ForegroundColor $DevboxTitleColor
     foreach ($line in (Get-DevboxWrappedLines -Text $Purpose -Width ($width - 4))) { Write-Host "    $line" }
     $sections = @(
         @{ Title = 'REQUIREMENTS'; Items = $Needs; Numbered = $false },
@@ -136,22 +175,22 @@ function Show-DevboxMan {
     foreach ($section in $sections) {
         if (@($section.Items).Count -eq 0) { continue }
         Write-Host ''
-        Write-Host $section.Title -ForegroundColor Cyan
+        Write-Host $section.Title -ForegroundColor $DevboxTitleColor
         $number = 0
         foreach ($item in $section.Items) {
             $number++
             $marker = if ($section.Numbered) { ('{0,2}. ' -f $number) } else { '  - ' }
             $lines = @(Get-DevboxWrappedLines -Text $item -Width ($width - 8))
             Write-Host '    ' -NoNewline
-            Write-Host $marker -NoNewline -ForegroundColor Green
+            Write-Host $marker -NoNewline -ForegroundColor $DevboxNameColor
             Write-Host $lines[0]
             foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host ('        ' + $line) }
         }
     }
     if ($Next) {
         Write-Host ''
-        Write-Host 'NEXT STEP' -ForegroundColor Cyan
-        foreach ($line in (Get-DevboxWrappedLines -Text $Next -Width ($width - 4))) { Write-Host "    $line" -ForegroundColor Yellow }
+        Write-Host 'NEXT STEP' -ForegroundColor $DevboxTitleColor
+        foreach ($line in (Get-DevboxWrappedLines -Text $Next -Width ($width - 4))) { Write-Host "    $line" -ForegroundColor $DevboxNextColor }
     }
     Write-Host ''
 }
@@ -209,12 +248,12 @@ function Show-DevboxVersion {
     param([string]$Script)
     $package = Get-DevboxVersion
     if (-not $Script) {
-        Write-Host "docker-devbox-ubuntu $package" -ForegroundColor DarkGray
+        Write-Host "docker-devbox-ubuntu $package" -ForegroundColor $DevboxNoteColor
         return
     }
     $own = Get-DevboxFileVersion -Path $Script
     if (-not $own) { $own = 'unknown' }
-    Write-Host "$([System.IO.Path]::GetFileNameWithoutExtension($Script)) $own (docker-devbox-ubuntu $package)" -ForegroundColor DarkGray
+    Write-Host "$([System.IO.Path]::GetFileNameWithoutExtension($Script)) $own (docker-devbox-ubuntu $package)" -ForegroundColor $DevboxNoteColor
 }
 
 # Compare the files under $Base with manifest.json: every listed file must exist and its
@@ -338,22 +377,22 @@ $DevboxMaxInputLength = 32 - ($DevboxPrefix.Length + 1)
 # The menu (Select-DevboxItem) keeps its own colors.
 function Write-DevboxSuccess {
     param([string]$Text)
-    Write-Host $Text -ForegroundColor Green
+    Write-Host $Text -ForegroundColor $DevboxSuccessColor
 }
 function Write-DevboxWarning {
     param([string]$Text)
-    Write-Host $Text -ForegroundColor Red
+    Write-Host $Text -ForegroundColor $DevboxErrorColor
 }
 function Write-DevboxNext {
     param([string]$Text)
-    Write-Host $Text -ForegroundColor Yellow
+    Write-Host $Text -ForegroundColor $DevboxNextColor
 }
 
 # One line of the list of registered syncs: [active] in green, [paused] in red, then the label.
 function Write-DevboxSyncLine {
     param([Parameter(Mandatory)]$Session)
     $state = if ($Session.Paused) { 'paused' } else { 'active' }
-    $color = if ($Session.Paused) { 'Red' } else { 'Green' }
+    $color = if ($Session.Paused) { $DevboxPausedColor } else { $DevboxActiveColor }
     Write-Host '  ' -NoNewline
     Write-Host "[$state]" -ForegroundColor $color -NoNewline
     Write-Host " $($Session.Label)"
@@ -387,10 +426,7 @@ function Read-DevboxLine {
     }
 }
 
-# Colors that tie a prompt to its side: the HOST badge and the symbols % and ~ of the host, the CONTAINER
-# badge and the symbols $ and ~ of the container.
-$DevboxHostColor = 'Cyan'
-$DevboxContainerColor = 'Magenta'
+# The colors that tie a prompt to its side ($DevboxHostColor, $DevboxContainerColor) are in the table at the top.
 
 # Expand what a user types as a host (Windows) folder: %VAR% (for example %USERPROFILE%) and a leading ~
 # (the user profile folder). $ is a Linux symbol and is not expanded. The result is what gets stored (it
@@ -420,7 +456,7 @@ function Write-DevboxSymbolText {
     param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Color)
     foreach ($part in [regex]::Split($Text, '([$%~])')) {
         if ($part -match '^[$%~]$') { Write-Host $part -NoNewline -ForegroundColor $Color }
-        elseif ($part) { Write-Host $part -NoNewline -ForegroundColor DarkGray }
+        elseif ($part) { Write-Host $part -NoNewline -ForegroundColor $DevboxNoteColor }
     }
     Write-Host ''
 }
@@ -548,7 +584,7 @@ function Select-DevboxItem {
     }
 
     Write-Host $Title
-    Write-Host '(Up/Down: move, Enter: select, Esc: cancel)' -ForegroundColor DarkGray
+    Write-Host '(Up/Down: move, Enter: select, Esc: cancel)' -ForegroundColor $DevboxNoteColor
     foreach ($item in $Items) { Write-Host '' }
     $top = [Console]::CursorTop - $Items.Count
     $width = [Console]::WindowWidth - 1
@@ -560,7 +596,7 @@ function Select-DevboxItem {
             for ($i = 0; $i -lt $Items.Count; $i++) {
                 [Console]::SetCursorPosition(0, $top + $i)
                 if ($i -eq $index) {
-                    Write-Host ('> ' + $Items[$i]).PadRight($width) -NoNewline -ForegroundColor Cyan
+                    Write-Host ('> ' + $Items[$i]).PadRight($width) -NoNewline -ForegroundColor $DevboxTitleColor
                 } else {
                     Write-Host ('  ' + $Items[$i]).PadRight($width) -NoNewline
                 }
@@ -609,7 +645,7 @@ function Select-DevboxItems {
     }
 
     Write-Host $Title
-    Write-Host '(Up/Down: move, Space: check/uncheck, Enter: apply, Esc: cancel)' -ForegroundColor DarkGray
+    Write-Host '(Up/Down: move, Space: check/uncheck, Enter: apply, Esc: cancel)' -ForegroundColor $DevboxNoteColor
     foreach ($item in $Items) { Write-Host '' }
     $top = [Console]::CursorTop - $Items.Count
     $width = [Console]::WindowWidth - 1
@@ -623,14 +659,13 @@ function Select-DevboxItems {
                 $box = if ($marks[$i]) { '[x]' } else { '[ ]' }
                 $pointer = if ($i -eq $index) { '> ' } else { '  ' }
                 $changed = ($marks[$i] -ne $initial[$i])
-                $mainColor = if ($changed) { 'Yellow' } elseif ($i -eq $index) { 'Cyan' } else { $null }
+                $mainColor = if ($changed) { $DevboxChangedColor } elseif ($i -eq $index) { $DevboxSelectedColor } else { $null }
                 $badge = if ($i -lt $Badges.Count) { $Badges[$i] } else { '' }
                 $badgeColor = if ($i -lt $BadgeColors.Count -and $BadgeColors[$i]) { $BadgeColors[$i] } else { $mainColor }
                 $label = $Items[$i]
                 $used = $pointer.Length + $box.Length + 1 + $(if ($badge) { $badge.Length + 1 } else { 0 }) + $label.Length
                 $pad = ' ' * [Math]::Max(0, $width - $used)
-                $cyan = if ($i -eq $index) { 'Cyan' } else { $null }
-                $pointerColor = $cyan
+                $pointerColor = if ($i -eq $index) { $DevboxSelectedColor } else { $null }
                 Write-DevboxColored -Text $pointer -Color $pointerColor
                 Write-DevboxColored -Text "$box " -Color $mainColor
                 if ($badge) {
@@ -1282,8 +1317,6 @@ function Write-DevboxBadgeField {
 # up to the column of the values, VALUES in the color of what they are: host paths always cyan, container
 # paths always magenta, the rest in the default color. A value wider than the console continues right under
 # itself. Special words are shown in reverse video (badges): MUTAGEN, MUTAGEN-SYNC, VOLUME-P9, READ-ONLY, READ-WRITE.
-$DevboxInfoSectionColor = 'White'
-$DevboxInfoPropertyColor = 'DarkYellow'
 
 # A piece of a value: text in a color (no color = the default one), or a badge (reverse video, one piece).
 function New-DevboxInfoText {
@@ -1298,8 +1331,8 @@ function New-DevboxInfoBadge {
 function Write-DevboxInfoSection {
     param([Parameter(Mandatory)][string]$Title, [string]$Note)
     Write-Host ''
-    Write-Host $Title.ToUpperInvariant() -NoNewline -ForegroundColor $DevboxInfoSectionColor
-    if ($Note) { Write-Host " $Note" -NoNewline -ForegroundColor DarkGray }
+    Write-Host $Title.ToUpperInvariant() -NoNewline -ForegroundColor $DevboxSectionColor
+    if ($Note) { Write-Host " $Note" -NoNewline -ForegroundColor $DevboxNoteColor }
     Write-Host ''
 }
 
@@ -1317,7 +1350,7 @@ function Write-DevboxInfoField {
     $valueColumn = $Indent + $LabelWidth + 4
     $room = [math]::Max(10, $Width - $valueColumn)
     Write-Host (' ' * $Indent) -NoNewline
-    Write-Host $label -NoNewline -ForegroundColor $DevboxInfoPropertyColor
+    Write-Host $label -NoNewline -ForegroundColor $DevboxLabelColor
     # Always two dots at least; more when the label is shorter than the longest one of the block.
     Write-Host (' ' + ('.' * [math]::Max(2, $LabelWidth - $label.Length + 2)) + ' ') -NoNewline
     $column = 0
@@ -1365,7 +1398,7 @@ function Show-DevboxSyncCard {
         return "$protocol`://$user$($Endpoint.host)$path"
     }
     $yesNo = { param($Flag) if ($Flag) { 'YES' } else { 'NO' } }
-    $yesNoColor = { param($Flag) if ($Flag) { 'Green' } else { 'Red' } }
+    $yesNoColor = { param($Flag) if ($Flag) { $DevboxSuccessColor } else { $DevboxErrorColor } }
     Write-Host ('=' * $width)
     Write-DevboxCardField -Label ' NAME' -Value ([string]$Session.name) -Width $width
     Write-DevboxCardField -Label ' IDENTIFIER' -Value ([string]$Session.identifier) -Width $width
@@ -1376,9 +1409,9 @@ function Show-DevboxSyncCard {
     Write-DevboxCardField -Label '   - URL' -Value (& $endpointUrl $Session.beta) -Color $DevboxContainerColor -Width $width
     Write-Host ''
     if ($Session.paused) {
-        Write-DevboxCardField -Label '  STATUS' -Value 'PAUSED' -Color 'Red' -Badge -Width $width
+        Write-DevboxCardField -Label '  STATUS' -Value 'PAUSED' -Color $DevboxErrorColor -Badge -Width $width
     } else {
-        Write-DevboxCardField -Label '  STATUS' -Value 'ACTIVE' -Color 'Green' -Badge -Width $width
+        Write-DevboxCardField -Label '  STATUS' -Value 'ACTIVE' -Color $DevboxSuccessColor -Badge -Width $width
     }
 }
 
@@ -1389,13 +1422,13 @@ function Write-DevboxStateBadge {
     param([string]$Status, [string]$LastError)
     $state = ([string]$Status).ToUpperInvariant()
     if (-not $state) { $state = 'UNKNOWN' }
-    $color = 'Gray'
-    if ($state -eq 'WATCHING') { $color = 'Green' }
-    elseif ($state -eq 'DISCONNECTED') { $color = 'Gray' }
-    elseif ($state -like 'HALTED*') { $color = 'Red' }
-    elseif ($state -eq 'SCANNING' -or $state -eq 'WAITING-FOR-RESCAN' -or $state -like 'CONNECTING*') { $color = 'Yellow' }
-    elseif ($state -eq 'RECONCILING' -or $state -like 'STAGING*' -or $state -eq 'TRANSITIONING' -or $state -eq 'SAVING') { $color = 'DarkYellow' }
-    if ($LastError) { $state = 'ERROR'; $color = 'Red' }
+    $color = $DevboxStateDisconnectedColor
+    if ($state -eq 'WATCHING') { $color = $DevboxStateWatchingColor }
+    elseif ($state -eq 'DISCONNECTED') { $color = $DevboxStateDisconnectedColor }
+    elseif ($state -like 'HALTED*') { $color = $DevboxStateErrorColor }
+    elseif ($state -eq 'SCANNING' -or $state -eq 'WAITING-FOR-RESCAN' -or $state -like 'CONNECTING*') { $color = $DevboxStateScanningColor }
+    elseif ($state -eq 'RECONCILING' -or $state -like 'STAGING*' -or $state -eq 'TRANSITIONING' -or $state -eq 'SAVING') { $color = $DevboxStateWorkingColor }
+    if ($LastError) { $state = 'ERROR'; $color = $DevboxStateErrorColor }
     Write-Host $state -ForegroundColor Black -BackgroundColor $color
 }
 
@@ -1417,11 +1450,11 @@ function Show-DevboxSyncProgress {
     }
     Write-DevboxStateBadge -Status $Progress.Status -LastError $Progress.LastError
     if ($Progress.Paused) {
-        Write-Host '    The session is paused: ' -ForegroundColor Red -NoNewline
-        Write-Host 'dkdb-container-start' -ForegroundColor Cyan -NoNewline
-        Write-Host ' or ' -ForegroundColor Red -NoNewline
-        Write-Host 'dkdb-container-connect' -ForegroundColor Cyan -NoNewline
-        Write-Host ' resume it.' -ForegroundColor Red
+        Write-Host '    The session is paused: ' -ForegroundColor $DevboxErrorColor -NoNewline
+        Write-Host 'dkdb-container-start' -ForegroundColor $DevboxNameColor -NoNewline
+        Write-Host ' or ' -ForegroundColor $DevboxErrorColor -NoNewline
+        Write-Host 'dkdb-container-connect' -ForegroundColor $DevboxNameColor -NoNewline
+        Write-Host ' resume it.' -ForegroundColor $DevboxErrorColor
     }
     if ($Progress.LastError) { Write-DevboxWarning "    Mutagen reports an error: $($Progress.LastError)" }
     if ($Progress.Conflicts -gt 0) { Write-DevboxWarning "    $($Progress.Conflicts) conflicts: see TROUBLESHOOTING.md." }
@@ -2042,7 +2075,7 @@ function Invoke-DevboxSyncPickCore {
         $ordered = @($sessions | Sort-Object { $_.Label })
         $itemLabels = @($ordered | ForEach-Object { $_.Label })
         $badges = @($ordered | ForEach-Object { if ($_.Paused) { '[paused]' } else { '[active]' } })
-        $badgeColors = @($ordered | ForEach-Object { if ($_.Paused) { 'Red' } else { 'Green' } })
+        $badgeColors = @($ordered | ForEach-Object { if ($_.Paused) { $DevboxPausedColor } else { $DevboxActiveColor } })
         $initial = @($ordered | ForEach-Object { -not $_.Paused })
         $picked = Select-DevboxItems -Title "Check the folders to keep synchronized in '$Container' (the others are paused):" -Items $itemLabels -Checked $initial -Badges $badges -BadgeColors $badgeColors
         if ($picked.Cancelled) {
@@ -2102,7 +2135,7 @@ function Invoke-DevboxSyncPickCore {
         Write-DevboxSymbolText -Text ' %VAR% (for example %USERPROFILE%) and ~ mean your Windows user folder.' -Color $DevboxHostColor
         Write-DevboxSideBadge -Text 'CONTAINER' -Color $DevboxContainerColor
         Write-DevboxSymbolText -Text ' $HOME and ~ mean /home/<user> in the container.' -Color $DevboxContainerColor
-        Write-DevboxSymbolText -Text 'They are resolved now and stored resolved (not recalculated later).' -Color DarkGray
+        Write-DevboxSymbolText -Text 'They are resolved now and stored resolved (not recalculated later).' -Color $DevboxNoteColor
         $typedHost = Read-DevboxLine 'Folder to add (absolute path; Esc or empty cancels)' -Badge 'HOST' -BadgeColor $DevboxHostColor
         if (-not $typedHost -or -not $typedHost.Trim()) {
             Write-Host 'Cancelled: nothing was changed.'

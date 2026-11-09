@@ -1,5 +1,5 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.4.2
+# Version: 0.4.3
 # volumes, published ports and Mutagen. For the versions, see dkdb-version.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -51,8 +51,8 @@ function Get-InfoContainer { param([string]$Text) New-DevboxInfoText $Text $Devb
 function Get-InfoPlain { param([string]$Text) New-DevboxInfoText $Text $null }
 function Get-InfoModeBadge {
     param([bool]$ReadOnly)
-    if ($ReadOnly) { return (New-DevboxInfoBadge 'READ-ONLY' 'Green') }
-    return (New-DevboxInfoBadge 'READ-WRITE' 'Red')
+    if ($ReadOnly) { return (New-DevboxInfoBadge 'READ-ONLY' $DevboxBadgeReadOnlyColor) }
+    return (New-DevboxInfoBadge 'READ-WRITE' $DevboxBadgeReadWriteColor)
 }
 
 # A host folder, optionally with the container folder it is mounted at and its mode; red note when it is missing.
@@ -61,7 +61,7 @@ function Show-InfoPath {
     $value = @((Get-InfoHost $Path))
     if ($Target) { $value += @((Get-InfoPlain ' -> '), (Get-InfoContainer $Target)) }
     if ($null -ne $Mode) { $value += @((Get-InfoModeBadge -ReadOnly $Mode)) }
-    if (-not (Test-Path -LiteralPath $Path)) { $value += @((New-DevboxInfoText ' [does not exist]' 'Red')) }
+    if (-not (Test-Path -LiteralPath $Path)) { $value += @((New-DevboxInfoText ' [does not exist]' $DevboxErrorColor)) }
     Write-DevboxInfoField -Label $Label -Value $value -LabelWidth $LabelWidth
 }
 
@@ -85,7 +85,7 @@ $entries = @()
 if ($userPath) { $entries = @($userPath -split ';' | Where-Object { $_ -ne '' } | ForEach-Object { $_.TrimEnd('\') }) }
 $ps1Folder = (Join-Path $devbox 'scripts\ps1').TrimEnd('\')
 if ($entries -contains $ps1Folder) { Show-InfoText -Label 'User PATH' -Text 'contains the scripts folder' }
-else { Show-InfoText -Label 'User PATH' -Text 'does not contain the scripts folder (run dkdb-install.ps1 again)' -Color 'Red' }
+else { Show-InfoText -Label 'User PATH' -Text 'does not contain the scripts folder (run dkdb-install.ps1 again)' -Color $DevboxErrorColor }
 Show-InfoText -Label 'Default names' -Text "image, container and user: $DevboxPrefix-$DevboxDefaultName"
 
 # --- Docker, images and containers ---
@@ -93,10 +93,10 @@ Write-DevboxInfoSection -Title 'Docker'
 $dockerReachable = $false
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     docker info *> $null
-    if ($LASTEXITCODE -eq 0) { $dockerReachable = $true; Show-InfoText -Label 'Engine' -Text 'running' -Color 'Green' -LabelWidth 6 }
-    else { Show-InfoText -Label 'Engine' -Text 'not reachable (start Docker Desktop, or the Docker engine in WSL)' -Color 'Red' -LabelWidth 6 }
+    if ($LASTEXITCODE -eq 0) { $dockerReachable = $true; Show-InfoText -Label 'Engine' -Text 'running' -Color $DevboxSuccessColor -LabelWidth 6 }
+    else { Show-InfoText -Label 'Engine' -Text 'not reachable (start Docker Desktop, or the Docker engine in WSL)' -Color $DevboxErrorColor -LabelWidth 6 }
 } else {
-    Show-InfoText -Label 'Engine' -Text 'docker was not found in the PATH' -Color 'Red' -LabelWidth 6
+    Show-InfoText -Label 'Engine' -Text 'docker was not found in the PATH' -Color $DevboxErrorColor -LabelWidth 6
 }
 
 $mutagenContainers = @()
@@ -115,17 +115,17 @@ if ($dockerReachable) {
         $user = Get-DevboxContainerEnv -Container $container -Name 'DEVBOX_USER'
         $sync = Get-DevboxContainerEnv -Container $container -Name 'DEVBOX_SYNC'
         Write-Host "  $container " -NoNewline
-        if ($isRunning) { Write-DevboxColored -Text '[running]' -Color 'Green' } else { Write-DevboxColored -Text '[stopped]' -Color 'Red' }
+        if ($isRunning) { Write-DevboxColored -Text '[running]' -Color $DevboxRunningColor } else { Write-DevboxColored -Text '[stopped]' -Color $DevboxStoppedColor }
         Write-Host ''
         Show-InfoText -Label 'User' -Text $user -LabelWidth 8 -Indent 4
         if ($sync -eq 'mutagen') {
             $mutagenContainers += $container
-            Write-DevboxInfoField -Label 'Volume' -Value @((New-DevboxInfoBadge 'MUTAGEN-SYNC' 'Yellow')) -LabelWidth 8 -Indent 4
+            Write-DevboxInfoField -Label 'Volume' -Value @((New-DevboxInfoBadge 'MUTAGEN-SYNC' $DevboxBadgeSyncColor)) -LabelWidth 8 -Indent 4
             Write-DevboxInfoField -Label 'Projects' -LabelWidth 8 -Indent 4 -Value @(
                 (Get-InfoHost (Get-DevboxContainerEnv -Container $container -Name 'DEVBOX_SYNC_PATH')),
-                (Get-InfoPlain ' <-> '), (Get-InfoContainer '~/devbox/projects'), (New-DevboxInfoBadge 'MUTAGEN' 'Red'))
+                (Get-InfoPlain ' <-> '), (Get-InfoContainer '~/devbox/projects'), (New-DevboxInfoBadge 'MUTAGEN' $DevboxBadgeMutagenColor))
         } else {
-            Write-DevboxInfoField -Label 'Volume' -Value @((New-DevboxInfoBadge 'VOLUME-P9' 'Red')) -LabelWidth 8 -Indent 4
+            Write-DevboxInfoField -Label 'Volume' -Value @((New-DevboxInfoBadge 'VOLUME-P9' $DevboxBadgeVolumeColor)) -LabelWidth 8 -Indent 4
         }
         $mounts = docker inspect --format '{{range .Mounts}}{{.Source}}|{{.Destination}}|{{.RW}}{{println}}{{end}}' $container
         foreach ($mount in @($mounts | Where-Object { $_ })) {
@@ -150,9 +150,9 @@ if (-not (Test-DevboxMutagen)) {
 } else {
     Write-DevboxInfoField -Label 'Executable' -Value @((Get-InfoHost (Get-DevboxMutagenExe))) -LabelWidth 10
     if (-not (Test-DevboxMutagenDaemon)) {
-        Show-InfoText -Label 'Daemon' -Text 'stopped (dkdb-mutagen-start, dkdb-mutagen-sync, or starting or connecting a Mutagen container, start it)' -Color 'Red' -LabelWidth 10
+        Show-InfoText -Label 'Daemon' -Text 'stopped (dkdb-mutagen-start, dkdb-mutagen-sync, or starting or connecting a Mutagen container, start it)' -Color $DevboxErrorColor -LabelWidth 10
     } else {
-        Show-InfoText -Label 'Daemon' -Text 'running' -Color 'Green' -LabelWidth 10
+        Show-InfoText -Label 'Daemon' -Text 'running' -Color $DevboxSuccessColor -LabelWidth 10
         $sessions = @(Get-DevboxMutagenSessions)
         if ($mutagenContainers.Count -eq 0 -and $sessions.Count -eq 0) { Show-InfoText -Label 'Sessions' -Text 'none' -LabelWidth 10 }
         $byHostFolder = @{}
@@ -167,7 +167,7 @@ if (-not (Test-DevboxMutagen)) {
                 if ($session.Paused) { $state = "$state (paused)" }
                 $value = @((Get-InfoHost $session.AlphaPath), (Get-InfoPlain ' <-> '), (Get-InfoContainer $session.BetaPath), (Get-InfoPlain " [$state$counts]"))
                 if ($session.LastError -or $session.Conflicts -gt 0) {
-                    $value += @((New-DevboxInfoText " [conflicts: $($session.Conflicts); last error: $($session.LastError)]" 'Red'))
+                    $value += @((New-DevboxInfoText " [conflicts: $($session.Conflicts); last error: $($session.LastError)]" $DevboxErrorColor))
                 }
                 Write-DevboxInfoField -Label 'Session' -Value $value -LabelWidth 10 -Indent 4
                 $key = $session.AlphaPath.TrimEnd('\', '/').ToLowerInvariant()

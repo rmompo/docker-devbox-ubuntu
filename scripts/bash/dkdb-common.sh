@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.2.1
+# Version: 0.3.1
 # Common definitions of the devbox bash scripts that show information (dkdb-info.sh, dkdb-version.sh).
 # Source it, do not run it:  . "$(dirname "${BASH_SOURCE[0]}")/dkdb-common.sh"; the script defines usage() and, for the manual, MAN_*.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -8,27 +8,34 @@
 # and the Mutagen sessions as the host sees them. It can be out of date: it carries the time it was written.
 DEVBOX_STATE_FILE="${DEVBOX_STATE_FILE:-$HOME/.devbox-state}"
 
-# Colors (spec 01): green success, red warnings and errors, yellow the next step, cyan headings, gray
-# the version line. Off when the output is not a terminal or NO_COLOR is set.
+# Colors of the output (spec 01; same table as dkdb-common.ps1): ONE table, every script uses these variables.
+# Messages: green success, red warnings and errors, yellow the next step. Sides: cyan a path of the host,
+# magenta a path of the container. Text roles: a title (headings of -h and man), a section (SECTIONS of dkdb-info
+# and dkdb-version), a label (a PROPERTY in capitals), a name (a script, command, parameter or file) and a note
+# (version line, hints). Off when the output is not a terminal or NO_COLOR is set. The scripts that are not part
+# of this file load it too (. dkdb-common.sh) instead of defining their own colors.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-    c_green=$'\033[32m'; c_red=$'\033[31m'; c_yellow=$'\033[33m'; c_cyan=$'\033[36m'; c_gray=$'\033[90m'; c_off=$'\033[0m'
+    c_green=$'\033[32m'; c_red=$'\033[31m'; c_yellow=$'\033[33m'; c_gray=$'\033[90m'; c_off=$'\033[0m'
+    c_host=$'\033[36m'; c_container=$'\033[35m'
+    c_title=$'\033[97m'; c_section=$'\033[97m'; c_label=$'\033[33m'; c_name=$'\033[33m'
+    # Badges (reverse video, black text): the number of the background color of each one.
+    badge_readonly=42; badge_readwrite=41; badge_mutagen=41; badge_sync=43; badge_volume=41; badge_compatible=42; badge_incompatible=41
 else
-    c_green=''; c_red=''; c_yellow=''; c_cyan=''; c_gray=''; c_off=''
+    c_green=''; c_red=''; c_yellow=''; c_gray=''; c_off=''
+    c_host=''; c_container=''
+    c_title=''; c_section=''; c_label=''; c_name=''
+    badge_readonly=''; badge_readwrite=''; badge_mutagen=''; badge_sync=''; badge_volume=''; badge_compatible=''; badge_incompatible=''
 fi
 ok() { printf '%s%s%s\n' "$c_green" "$*" "$c_off"; }
 bad() { printf '%s%s%s\n' "$c_red" "$*" "$c_off"; }
+warn() { printf '%s%s%s\n' "$c_red" "$*" "$c_off" >&2; }
 next() { printf '%s%s%s\n' "$c_yellow" "$*" "$c_off"; }
 
-# The layout of dkdb-info (same look as the host): SECTIONS in capitals and one color, PROPERTIES in capitals and
-# another color followed by dots (at least two) up to the column of the values, VALUES in the color of what they
-# are: host paths cyan, container paths magenta, the rest in the default color. A value wider than the terminal
-# continues right under itself. Special words are badges (reverse video): MUTAGEN, MUTAGEN-SYNC, VOLUME-P9,
-# READ-ONLY, READ-WRITE.
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-    c_section=$'\033[97m'; c_prop=$'\033[33m'; c_host=$'\033[36m'; c_container=$'\033[35m'
-else
-    c_section=''; c_prop=''; c_host=''; c_container=''
-fi
+# The layout of dkdb-info and dkdb-version (same look as the host): SECTIONS in capitals and one color, PROPERTIES in
+# capitals and another color followed by dots (at least two) up to the column of the values, VALUES in the color of
+# what they are: host paths cyan, container paths magenta, the rest in the default color. A value wider than the
+# terminal continues right under itself. Special words are badges (reverse video): MUTAGEN, MUTAGEN-SYNC,
+# VOLUME-P9, READ-ONLY, READ-WRITE, COMPATIBLE, NOT-COMPATIBLE.
 
 info_width() {
     local columns="${COLUMNS:-}"
@@ -57,6 +64,14 @@ info_color() {
 }
 
 # info_field LABEL LABEL_WIDTH INDENT PIECE...
+# A badge (reverse video) for a role: readonly, readwrite, mutagen, sync, volume, compatible or incompatible.
+# Plain text when the output is not a terminal.
+badge() {
+    local code="badge_$1" text="${2:-}"
+    code="${!code:-}"
+    if [ -z "$c_off" ] || [ -z "$code" ]; then printf '%s' "$text"; else printf '\033[30;%sm%s\033[0m' "$code" "$text"; fi
+}
+
 info_field() {
     local label="${1^^}" label_width="$2" indent="$3" dots column=0 value_column room piece rest color text count token
     shift 3
@@ -65,7 +80,7 @@ info_field() {
     [ "$room" -ge 10 ] || room=10
     # Always two dots at least; more when the label is shorter than the longest one of the block.
     dots=$((label_width - ${#label} + 2)); [ "$dots" -ge 2 ] || dots=2
-    printf '%*s%s%s%s %s ' "$indent" '' "$c_prop" "$label" "$c_off" "$(printf '%*s' "$dots" '' | tr ' ' '.')"
+    printf '%*s%s%s%s %s ' "$indent" '' "$c_label" "$label" "$c_off" "$(printf '%*s' "$dots" '' | tr ' ' '.')"
     for piece in "$@"; do
         rest="${piece#*:}"; color="${rest%%:*}"; text="${rest#*:}"
         if [ "${piece%%:*}" = b ]; then
@@ -74,16 +89,7 @@ info_field() {
                 printf '\n%*s' "$value_column" ''; column=0
             fi
             if [ "$column" -gt 0 ]; then printf ' '; column=$((column + 1)); fi
-            if [ -z "$c_off" ]; then
-                printf '%s' "$token"
-            else
-                case "$color" in
-                    red) printf '\033[30;41m%s\033[0m' "$token" ;;
-                    green) printf '\033[30;42m%s\033[0m' "$token" ;;
-                    yellow) printf '\033[30;43m%s\033[0m' "$token" ;;
-                    *) printf '%s' "$token" ;;
-                esac
-            fi
+            printf '%s' "$(badge "$color" "$token")"
             column=$((column + ${#token}))
             continue
         fi
@@ -133,17 +139,17 @@ show_help() {
     shift 2
     name="$(basename "$0")"
     banner "$0"
-    printf '\n%sNAME%s\n    %s%s%s\n' "$c_cyan" "$c_off" "$c_green" "$name" "$c_off"
-    printf '\n%sDESCRIPTION%s\n' "$c_cyan" "$c_off"
+    printf '\n%sNAME%s\n    %s%s%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
+    printf '\n%sDESCRIPTION%s\n' "$c_title" "$c_off"
     wrap_text 92 "$description" | sed 's/^/    /'
-    printf '\n%sUSAGE%s\n    %sbash ~/devbox/bash/%s [-h | man]%s\n' "$c_cyan" "$c_off" "$c_green" "$name" "$c_off"
-    printf '\n%sPARAMETERS%s\n' "$c_cyan" "$c_off"
-    printf '    %s%-10s%s Show this help and exit.\n' "$c_green" "-h, --help" "$c_off"
-    printf '    %s%-10s%s Show the manual (what the script does, step by step) and exit.\n' "$c_green" "man" "$c_off"
-    printf '\n%sEXAMPLES%s\n    %sbash ~/devbox/bash/%s%s\n' "$c_cyan" "$c_off" "$c_green" "$name" "$c_off"
+    printf '\n%sUSAGE%s\n    %sbash ~/devbox/bash/%s [-h | man]%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
+    printf '\n%sPARAMETERS%s\n' "$c_title" "$c_off"
+    printf '    %s%-10s%s Show this help and exit.\n' "$c_name" "-h, --help" "$c_off"
+    printf '    %s%-10s%s Show the manual (what the script does, step by step) and exit.\n' "$c_name" "man" "$c_off"
+    printf '\n%sEXAMPLES%s\n    %sbash ~/devbox/bash/%s%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
     wrap_text 88 "$example" | sed 's/^/        /'
     if [ "$#" -gt 0 ]; then
-        printf '\n%sNOTES%s\n' "$c_cyan" "$c_off"
+        printf '\n%sNOTES%s\n' "$c_title" "$c_off"
         for note in "$@"; do wrap_text 90 "$note" | sed '1s/^/    - /;2,$s/^/      /'; done
     fi
     printf '\n'
@@ -155,23 +161,23 @@ show_help() {
 show_manual() {
     local title item number mark list numbered
     banner "$0"
-    printf '\n%sMANUAL%s\n    %s%s%s\n' "$c_cyan" "$c_off" "$c_green" "$(basename "$0")" "$c_off"
-    printf '\n%sPURPOSE%s\n' "$c_cyan" "$c_off"
+    printf '\n%sMANUAL%s\n    %s%s%s\n' "$c_title" "$c_off" "$c_name" "$(basename "$0")" "$c_off"
+    printf '\n%sPURPOSE%s\n' "$c_title" "$c_off"
     wrap_text 92 "$MAN_PURPOSE" | sed 's/^/    /'
     for title in REQUIREMENTS:MAN_NEEDS:0 'WHAT IT DOES:MAN_STEPS:1' 'WHAT IT CHANGES:MAN_CHANGES:0' 'WHAT IT NEVER DOES:MAN_NEVER:0'; do
         list="${title#*:}"; numbered="${list#*:}"; list="${list%%:*}"; title="${title%%:*}"
         local -n items="$list"
         [ "${#items[@]}" -gt 0 ] || continue
-        printf '\n%s%s%s\n' "$c_cyan" "$title" "$c_off"
+        printf '\n%s%s%s\n' "$c_title" "$title" "$c_off"
         number=0
         for item in "${items[@]}"; do
             number=$((number + 1))
             if [ "$numbered" = 1 ]; then mark="$(printf '%2d.' "$number")"; else mark='  -'; fi
-            wrap_text 84 "$item" | sed "1s/^/    $c_green$mark$c_off /;2,\$s/^/        /"
+            wrap_text 84 "$item" | sed "1s/^/    $c_name$mark$c_off /;2,\$s/^/        /"
         done
         unset -n items
     done
-    printf '\n%sNEXT STEP%s\n' "$c_cyan" "$c_off"
+    printf '\n%sNEXT STEP%s\n' "$c_title" "$c_off"
     wrap_text 92 "$MAN_NEXT" | sed "s/^/    $c_yellow/; s/\$/$c_off/"
     printf '\n'
 }

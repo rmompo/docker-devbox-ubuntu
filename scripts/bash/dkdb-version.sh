@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.3.0
+# Version: 0.3.1
 # Show every version seen from inside the container: the image, the bash scripts against the manifest and the tools.
 # Same layout as dkdb-version.ps1 on the host. It only reads; it works even when the host has not written the state.
 set -u
@@ -36,12 +36,7 @@ updated="$(state_get updated)"
 
 # Reverse-video word (only on a terminal): COMPATIBLE green, NOT-COMPATIBLE red.
 compat_badge() {
-    local text token
-    if [ "$1" = yes ]; then text='COMPATIBLE'; else text='NOT-COMPATIBLE'; fi
-    token=" $text "
-    if [ -z "$c_off" ]; then printf '%s' "$token"
-    elif [ "$1" = yes ]; then printf '\033[30;42m%s\033[0m' "$token"
-    else printf '\033[30;41m%s\033[0m' "$token"; fi
+    if [ "$1" = yes ]; then badge compatible ' COMPATIBLE '; else badge incompatible ' NOT-COMPATIBLE '; fi
 }
 
 # --- Project ---
@@ -72,7 +67,7 @@ while IFS='|' read -r name wanted; do
     listed=$((listed + 1))
     actual="$(file_version "$dir/${name#scripts/bash/}")"
     # Name in orange, version of the manifest in green, version of the file green when it matches and red when not.
-    printf '  %s%-*s%s %s%-*s%s ' "$c_prop" "$name_width" "$name" "$c_off" "$c_green" "$version_width" "$wanted" "$c_off"
+    printf '  %s%-*s%s %s%-*s%s ' "$c_name" "$name_width" "$name" "$c_off" "$c_green" "$version_width" "$wanted" "$c_off"
     if [ "$actual" = "$wanted" ]; then printf '%s%s%s\n' "$c_green" "$actual" "$c_off"; else printf '%s%s%s\n' "$c_red" "${actual:-missing}" "$c_off"; mismatches=$((mismatches + 1)); fi
 done < <(state_each file)
 if [ "$listed" -eq 0 ]; then
@@ -106,10 +101,10 @@ image_version="${DEVBOX_IMAGE_VERSION:-}"
 [ -n "$image_version" ] || image_version="$(cat /etc/devbox-image-version 2>/dev/null)"
 shown="${image_version:-unknown}"
 if [ -n "$expected" ] && version_compatible "$shown" "$expected"; then
-    printf '  %s%s%s %s%-9s%s ' "$c_prop" "$(hostname)" "$c_off" "$c_green" "$shown" "$c_off"
+    printf '  %s%s%s %s%-9s%s ' "$c_name" "$(hostname)" "$c_off" "$c_green" "$shown" "$c_off"
     compat_badge yes; echo
 else
-    printf '  %s%s%s %s%-9s%s ' "$c_prop" "$(hostname)" "$c_off" "$c_red" "$shown" "$c_off"
+    printf '  %s%s%s %s%-9s%s ' "$c_name" "$(hostname)" "$c_off" "$c_red" "$shown" "$c_off"
     compat_badge no; printf '%s (it keeps working; newer features may be missing)%s\n' "$c_red" "$c_off"
     problems=$((problems + 1))
 fi
