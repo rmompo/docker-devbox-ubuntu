@@ -1,5 +1,5 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.4.1
+# Version: 0.4.2
 # volumes, published ports and Mutagen. For the versions, see dkdb-version.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -85,7 +85,7 @@ $entries = @()
 if ($userPath) { $entries = @($userPath -split ';' | Where-Object { $_ -ne '' } | ForEach-Object { $_.TrimEnd('\') }) }
 $ps1Folder = (Join-Path $devbox 'scripts\ps1').TrimEnd('\')
 if ($entries -contains $ps1Folder) { Show-InfoText -Label 'User PATH' -Text 'contains the scripts folder' }
-else { Show-InfoText -Label 'User PATH' -Text 'does not contain the scripts folder (run install.ps1 again)' -Color 'Red' }
+else { Show-InfoText -Label 'User PATH' -Text 'does not contain the scripts folder (run dkdb-install.ps1 again)' -Color 'Red' }
 Show-InfoText -Label 'Default names' -Text "image, container and user: $DevboxPrefix-$DevboxDefaultName"
 
 # --- Docker, images and containers ---

@@ -1,5 +1,5 @@
 # Update the installed scripts from the repository (optionally from another branch or tag).
-# Version: 0.1.0
+# Version: 0.1.1
 # It downloads manifest.json and the files whose version changed into a temporary folder, checks them
 # and only then copies them over the installation. Nothing is changed if anything fails.
 # PositionalBinding is off so that a stray argument is an error.
@@ -24,7 +24,7 @@ if ($Help) {
         -Notes @(
             'Only the files whose version differs from the manifest (or that are missing) are replaced; manual edits to those files are lost.',
             'Files that are no longer in the repository are not deleted (dkdb-verify reports them as notes).',
-            'install.ps1 is not replaced: it is downloaded by hand; the script tells you when its version changed.',
+            'dkdb-install.ps1 is not replaced: it is downloaded by hand; the script tells you when its version changed.',
             'It never touches images, containers, Mutagen sessions or your projects.'
         )
     exit 0
@@ -34,7 +34,7 @@ if ($Man) {
         -Purpose 'Updates the installed scripts from the repository without running the installer again.' `
         -Needs @(
             'Internet access to raw.githubusercontent.com (the repository is public).',
-            'The package installed by install.ps1.'
+            'The package installed by dkdb-install.ps1.'
         ) `
         -Steps @(
             'Downloads manifest.json of the branch or tag (default main) into a temporary folder.',
@@ -50,7 +50,7 @@ if ($Man) {
         ) `
         -Never @(
             'Deletes files, images, containers, Mutagen sessions or projects.',
-            'Replaces install.ps1 (downloaded by hand) or changes the PATH.',
+            'Replaces dkdb-install.ps1 (downloaded by hand) or changes the PATH.',
             'Changes anything when a download or a check fails.'
         ) `
         -Next 'dkdb-version shows the result; if it says so, rebuild the image (dkdb-image-create) and recreate the containers.'
@@ -115,15 +115,15 @@ try {
     $newImage = [string]$manifest.image
     Write-Host "Installed: $oldVersion (image $oldImage). Repository ($Branch): $newVersion (image $newImage)."
 
-    # What changes: files that are missing or whose version differs. install.ps1 is only compared.
+    # What changes: files that are missing or whose version differs. dkdb-install.ps1 is only compared.
     $changes = @()
     $installerNote = $null
     foreach ($entry in $entries) {
         $relative = $entry.Name
         $path = Join-Path $base ($relative -replace '/', [System.IO.Path]::DirectorySeparatorChar)
         $current = Get-DevboxFileVersion -Path $path
-        if ($relative -eq 'install/install.ps1') {
-            if ($current -and $current -ne [string]$entry.Value) { $installerNote = "install.ps1 is version $current here and $($entry.Value) in ${Branch}: download it again by hand." }
+        if ($relative -eq 'install/dkdb-install.ps1') {
+            if ($current -and $current -ne [string]$entry.Value) { $installerNote = "dkdb-install.ps1 is version $current here and $($entry.Value) in ${Branch}: download it again by hand." }
             continue
         }
         if ($current -ne [string]$entry.Value) {

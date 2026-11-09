@@ -1,5 +1,5 @@
 # Check the installed package against manifest.json: every listed file must exist and carry
-# Version: 0.2.0
+# Version: 0.2.1
 # the version that the manifest says. Exit code 1 when something is inconsistent.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -24,7 +24,7 @@ if ($Man) {
     Show-DevboxMan -Script $PSCommandPath `
         -Purpose 'Checks the installed package against manifest.json.' `
         -Needs @(
-            'The package installed by install.ps1.'
+            'The package installed by dkdb-install.ps1.'
         ) `
         -Steps @(
             'Reads manifest.json and checks that every listed file exists and has the version of the manifest.',
@@ -34,7 +34,7 @@ if ($Man) {
             'Nothing: it only reads.'
         ) `
         -Never @(
-            'Downloads or repairs files (run install.ps1 again for that).'
+            'Downloads or repairs files (run dkdb-install.ps1 again for that).'
         ) `
         -Next 'dkdb-image-create builds the image, then dkdb-container-create.'
     exit 0
@@ -47,7 +47,7 @@ Write-Host "Checked $($result.Checked) files in $base"
 foreach ($problem in $result.Errors) { Write-DevboxWarning "  ERROR: $problem" }
 foreach ($note in $result.Notes) { Write-DevboxWarning "  note: $note" }
 if ($result.Errors.Count -gt 0) {
-    Write-DevboxWarning 'The package is inconsistent with manifest.json: run install.ps1 again.'
+    Write-DevboxWarning 'The package is inconsistent with manifest.json: run dkdb-install.ps1 again.'
     exit 1
 }
 Write-DevboxSuccess 'The package is consistent with manifest.json.'

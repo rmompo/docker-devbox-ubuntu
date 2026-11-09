@@ -1,5 +1,5 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
-# Version: 0.2.0
+# Version: 0.2.2
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -188,12 +188,12 @@ if ($Help) {
     foreach ($line in (Get-Content -LiteralPath $PSCommandPath -TotalCount 15)) {
         if ($line -match '^#\s*Version:\s*(\d+\.\d+\.\d+)\s*$') { $helpVersion = $Matches[1]; break }
     }
-    Show-UninstallHelp -Name 'uninstall.ps1' `
+    Show-UninstallHelp -Name 'dkdb-uninstall.ps1' `
         -VersionLine "uninstall $helpVersion (docker-devbox-ubuntu uninstaller)" `
         -Description 'Removes the scripts and Mutagen of this installation (<root>\devbox\scripts and <root>\devbox\mutagen) and their user PATH entries, after asking for confirmation. It keeps this install folder, the tools folder, your projects, containers and images.' `
-        -Usage 'uninstall.ps1 [-Help]' `
+        -Usage 'dkdb-uninstall.ps1 [-Help]' `
         -Examples @(
-            @{ Command = '& "C:\shared\devbox\install\uninstall.ps1"'; Description = 'Lists what will be removed and asks before doing it.' }
+            @{ Command = '& "C:\shared\devbox\install\dkdb-uninstall.ps1"'; Description = 'Lists what will be removed and asks before doing it.' }
         ) `
         -Notes @(
             'Run it from <root>\devbox\install.',
@@ -207,7 +207,7 @@ if ($Man) {
         if ($line -match '^#\s*Version:\s*(\d+\.\d+\.\d+)\s*$') { $manVersion = $Matches[1]; break }
     }
     Write-Host "uninstall $manVersion (docker-devbox-ubuntu uninstaller)" -ForegroundColor DarkGray
-    Show-UninstallMan -Name 'uninstall.ps1' `
+    Show-UninstallMan -Name 'dkdb-uninstall.ps1' `
         -Purpose 'Removes the scripts and Mutagen of this installation and their user PATH entries.' `
         -Needs @(
             'Run it from <root>\devbox\install.'
@@ -226,7 +226,7 @@ if ($Man) {
             'Removes the install folder, the tools folder, your projects, containers or images.',
             'Stops the Mutagen daemon without asking.'
         ) `
-        -Next 'To install again, run install.ps1.'
+        -Next 'To install again, run dkdb-install.ps1.'
     exit 0
 }
 
@@ -300,4 +300,4 @@ foreach ($folder in @($scriptsPath, $(if ($removeMutagen) { $mutagenPath }))) {
 Write-Host ''
 Write-UninstallSuccess 'Uninstalled.'
 Write-Host "Kept: $installDir (delete $devboxPath by hand to remove it completely), the tools folder and your projects."
-Write-UninstallNext 'Next: open a new terminal so that the PATH is refreshed. To install again, download install.ps1 as the README says.'
+Write-UninstallNext 'Next: open a new terminal so that the PATH is refreshed. To install again, download dkdb-install.ps1 as the README says.'

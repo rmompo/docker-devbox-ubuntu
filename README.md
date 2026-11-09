@@ -9,7 +9,7 @@ A lightweight Ubuntu Docker image, managed with PowerShell scripts, for running 
 | 1 | Image | Minimal Ubuntu 26.04 LTS with generic development tools and Python 3. No user and no AI client. |
 | 2 | Container | The user is created when the container is created (not in the image); the main process runs as that user. **One AI client per container.** |
 | 3 | PowerShell scripts | Create and delete images; create, start, stop, connect to and delete containers; manage the optional Mutagen sync (daemon, status, clean-up). |
-| 4 | Installer | `install/install.ps1`, the only file you download. It installs the rest. |
+| 4 | Installer | `install/dkdb-install.ps1`, the only file you download. It installs the rest. |
 | 5 | Volumes | `projects` (your projects), `tools` (shared tools such as Maven or JDKs) and `bash` (AI client installers, read-only). Optionally, `projects` can be synchronized with [Mutagen](https://mutagen.io) instead of a bind mount. |
 
 Conventions:
@@ -32,14 +32,14 @@ In PowerShell, download the installer to `C:\shared\devbox\install\` and run it:
 ```powershell
 $dir = 'C:\shared\devbox\install'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
-iwr -UseBasicParsing 'https://raw.githubusercontent.com/rmompo/docker-devbox-ubuntu/main/install/install.ps1' -OutFile "$dir\install.ps1"
-powershell -ExecutionPolicy Bypass -File "$dir\install.ps1"
+iwr -UseBasicParsing 'https://raw.githubusercontent.com/rmompo/docker-devbox-ubuntu/main/install/dkdb-install.ps1' -OutFile "$dir\dkdb-install.ps1"
+powershell -ExecutionPolicy Bypass -File "$dir\dkdb-install.ps1"
 ```
 
-It asks for the **shared root** (default `C:\shared\`, created on confirmation) and the **branch or tag** to download (default `main`), downloads `scripts\{bash,ps1,docker}` into `<root>\devbox\` plus `uninstall.ps1` into `<root>\devbox\install\` (asking before overwriting an existing install), creates `<root>\tools\` and adds `<root>\devbox\scripts\ps1` to your user PATH (offering to remove the PATH entries of a previous installation). Then **open a new terminal**.
+It asks for the **shared root** (default `C:\shared\`, created on confirmation) and the **branch or tag** to download (default `main`), downloads `scripts\{bash,ps1,docker}` into `<root>\devbox\` plus `dkdb-uninstall.ps1` into `<root>\devbox\install\` (asking before overwriting an existing install), creates `<root>\tools\` and adds `<root>\devbox\scripts\ps1` to your user PATH (offering to remove the PATH entries of a previous installation). Then **open a new terminal**.
 
 - Update: `dkdb-update` (optionally `-Branch <branch or tag>`) replaces only the files whose version changed; or run the installer again.
-- Uninstall: run `C:\shared\devbox\install\uninstall.ps1` (it keeps `tools`, your projects, containers and images).
+- Uninstall: run `C:\shared\devbox\install\dkdb-uninstall.ps1` (it keeps `tools`, your projects, containers and images).
 - Change the shared root: run the installer with the new root and recreate your containers (they keep the host paths they were created with).
 - Scripts blocked by the execution policy: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
 
@@ -137,7 +137,7 @@ Every script has two switches, with or without other parameters, and does nothin
 ```powershell
 dkdb-container-start -Help
 dkdb-mutagen-sync -Man
-& "C:\shared\devbox\install\install.ps1" -Man
+& "C:\shared\devbox\install\dkdb-install.ps1" -Man
 bash ~/devbox/bash/dkdb-install-claudecode.sh man   # inside the container
 ```
 
@@ -148,19 +148,19 @@ Problems? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 `manifest.json` lists the project version, the image version and every file with its own version (each file also carries a `# Version: x.y.z` line). It is installed as `<root>\devbox\manifest.json`, and:
 
 1. Every script prints its own version and the project version when it starts.
-2. `install.ps1` downloads the manifest first and then exactly the files it lists, checking that each file has the version the manifest says (a mixed or partial download stops the installation). When an update changes the major.minor version (0.x), it tells you to rebuild the images and recreate the containers.
+2. `dkdb-install.ps1` downloads the manifest first and then exactly the files it lists, checking that each file has the version the manifest says (a mixed or partial download stops the installation). When an update changes the major.minor version (0.x), it tells you to rebuild the images and recreate the containers.
 3. `dkdb-verify` checks the installed package against the manifest. `dkdb-image-create` and `dkdb-container-create`, which create things, stop if the package is inconsistent. `dkdb-container-start` and `dkdb-container-connect` only warn: **a version bump never blocks the use of an existing container.**
 4. Images have their own version (`image` in the manifest, bumped only when the `Dockerfile` or the entrypoint change, so a new project version never touches them) and are tagged with it (`dkdb-<name>:<image version>`, never `latest`). `dkdb-container-create` uses the highest tag that is compatible with the scripts (same major.minor in 0.x, same major from 1.0) with the image version the scripts expect; when only older images exist it uses the highest of them with a warning. `start` and `connect` show the version of the image the container was created from and, when it is not compatible with the scripts, only warn: the container keeps working with its image, and you update it by rebuilding the image and recreating the container when you want.
 
 ## Folders
 
-Host (default values; the shared root is chosen once by `install.ps1`):
+Host (default values; the shared root is chosen once by `dkdb-install.ps1`):
 
 ```
 C:\shared\                       shared root
   devbox\
     manifest.json                 project version and the version of every file
-    install\                     install.ps1 (downloaded by hand) and uninstall.ps1
+    install\                     dkdb-install.ps1 (downloaded by hand) and dkdb-uninstall.ps1
     scripts\
       ps1\                       added to the user PATH (Windows)
       bash\                      AI client installers -> ~/devbox/bash (read-only)
@@ -194,7 +194,7 @@ Each mapping is `[ip:]host_port:container_port[/tcp|/udp]`; a single number `N` 
 
 ```
 manifest.json       Project version and the version of every file (the installer's file list)
-install/    install.ps1 (the single-file installer) and uninstall.ps1
+install/    dkdb-install.ps1 (the single-file installer) and dkdb-uninstall.ps1
 scripts/
   docker/   Dockerfile and entrypoint.sh
   ps1/      PowerShell scripts (dkdb-*.ps1)
@@ -220,7 +220,7 @@ Each spec follows the pattern **Context -> Reasoning -> Decision -> Consequences
 | 04 | [Volumes and user](specs/04-volumes-user.md) | Host paths, mounts, user, sudo |
 | 05 | [AI client installation](specs/05-ai-clients.md) | Bash scripts for Claude Code and Copilot CLI |
 | 06 | [Verifications and open items](specs/06-verifications.md) | Checks already done and items still to validate |
-| 07 | [Installer](specs/07-installer.md) | install.ps1: shared root, download, PATH |
+| 07 | [Installer](specs/07-installer.md) | dkdb-install.ps1: shared root, download, PATH |
 | 08 | [Mutagen](specs/08-mutagen.md) | Optional projects sync (avoids slow 9p mounts) |
 | 09 | [Published ports](specs/09-ports.md) | Ports opened from Windows, chosen when the container is created |
 

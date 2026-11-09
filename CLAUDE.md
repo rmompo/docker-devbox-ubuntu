@@ -9,7 +9,7 @@ Instructions for working on this repository (docker-devbox-ubuntu). The design l
 **These rules are MANDATORY; follow them in every change, without being asked:**
 
 1. **Changing a listed file means bumping its version.** Raise the `# Version:` line of the file and its entry in `manifest.json` in the same change. Patch (0.1.0 -> 0.1.1) for fixes and wording; minor (0.1.0 -> 0.2.0) for a change of behavior. They must always be equal.
-2. **Adding, renaming or removing a file under `scripts/` or `install/`** means adding, renaming or removing its entry in `manifest.json` `files` and giving a new file its `# Version:` line. The installer downloads exactly the files of that list, and `install/install.ps1` is listed too (it is downloaded by hand).
+2. **Adding, renaming or removing a file under `scripts/` or `install/`** means adding, renaming or removing its entry in `manifest.json` `files` and giving a new file its `# Version:` line. The installer downloads exactly the files of that list, and `install/dkdb-install.ps1` is listed too (it is downloaded by hand).
 3. **Bump the image version** (`image` in `manifest.json`) **whenever `scripts/docker/Dockerfile` or `scripts/docker/entrypoint.sh` change** (bump their own `# Version:` too). Only those two files define the image: a change to `dkdb-image-create.ps1` or a new project version does not change it. A change of the image is also critical (next rule).
 4. **Bump the project version** (`version` in `manifest.json`) **when a change affects the project critically** (see below).
 5. **A version bump must never block the use of an existing container.** `dkdb-container-start` and `dkdb-container-connect` (and every script that uses a container that already exists) may only warn about versions, never stop; the container keeps working with the image it was created from. Creating a container from an image older than the scripts only warns too (it refuses only when no image of that name exists), and a feature that depends on the image (for example the ready marker of the entrypoint) must have a fallback for older images. Only a damaged package (`dkdb-image-create`, `dkdb-container-create`) may refuse to continue. Do not add a version or integrity check that blocks the use of existing containers or images.
@@ -27,7 +27,7 @@ A change is critical when, after it, users must act (reinstall, rebuild the imag
 
 1. Image changes: `Dockerfile`, `entrypoint.sh`, base Ubuntu version, installed packages.
 2. Volume or path changes: folder layout, mount targets such as `~/devbox/projects`, `~/devbox/tools`, `~/devbox/bash`, default host paths, the shared root layout.
-3. Installer changes: `install.ps1`, `uninstall.ps1`, what is installed or where, the PATH handling.
+3. Installer changes: `dkdb-install.ps1`, `dkdb-uninstall.ps1`, what is installed or where, the PATH handling.
 4. Renaming, adding or removing a `dkdb-*` script, or changing what a script does in a way users notice.
 5. Default names (image, container, user) or the `dkdb` prefix.
 6. Mutagen behavior: session naming, sync mode, flags, minimum version, lifecycle in start, stop, connect or delete.

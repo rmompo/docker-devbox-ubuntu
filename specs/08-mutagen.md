@@ -6,7 +6,7 @@ On Docker Desktop with WSL2, bind mounts from `C:\` (9p) are slow for projects w
 ## Reasoning
 1. A copy in the container removes the 9p bottleneck; Mutagen replicates changes in both directions.
 2. The choice is per container, not per installation -> `dkdb-container-create` asks for it with a menu.
-3. Mutagen is third-party and about 100 MB -> it is optional and installed on demand: `install.ps1` runs once, while the choice is made per container in `dkdb-container-create`.
+3. Mutagen is third-party and about 100 MB -> it is optional and installed on demand: `dkdb-install.ps1` runs once, while the choice is made per container in `dkdb-container-create`.
 4. The agent is copied into the container by Mutagen itself (`docker cp` + `docker exec`) -> nothing is added to the image.
 5. Files created by Mutagen belong to the container user -> no "dubious ownership" problem in git.
 6. Sessions are created or resumed by `start` and `connect`; `stop` never touches Mutagen, and `delete` terminates only the session of the container it deletes (a leftover session cannot reach another container because it is bound to the container ID).

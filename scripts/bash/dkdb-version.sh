@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.1.1
+# Version: 0.1.2
 # Show every version seen from inside the container: the image, the bash scripts against the manifest and the tools.
 # Same layout as dkdb-version.ps1 on the host. It only reads; it works even when the host has not written the state.
 set -u
@@ -60,7 +60,7 @@ if [ "$listed" -eq 0 ]; then
     bad '  the state file lists no file (run dkdb-container-connect on the host)'
     problems=$((problems + 1))
 elif [ "$mismatches" -gt 0 ]; then
-    bad "  $mismatches of $listed files differ from the manifest: run install.ps1 again on the host (dkdb-verify shows the details)."
+    bad "  $mismatches of $listed files differ from the manifest: run dkdb-install.ps1 again on the host (dkdb-verify shows the details)."
     problems=$((problems + 1))
 else
     ok "  All $listed files match the manifest."

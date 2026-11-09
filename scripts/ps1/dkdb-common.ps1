@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.10.0
+# Version: 0.10.1
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -162,7 +162,7 @@ function Get-DevboxBase {
     return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 }
 
-# Project version, read from <root>\devbox\manifest.json (downloaded by install.ps1).
+# Project version, read from <root>\devbox\manifest.json (downloaded by dkdb-install.ps1).
 # 'unknown' when the manifest is missing or unreadable.
 function Get-DevboxVersion {
     $manifest = Join-Path (Get-DevboxBase) 'manifest.json'
@@ -244,8 +244,8 @@ function Get-DevboxIntegrity {
         $listed[$relative] = $true
         $path = Join-Path $Base ($relative -replace '/', [System.IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-            # install.ps1 is downloaded by hand: it may legitimately be elsewhere.
-            if ($relative -eq 'install/install.ps1') { $notes += "not found (downloaded by hand): $relative" }
+            # dkdb-install.ps1 is downloaded by hand: it may legitimately be elsewhere.
+            if ($relative -eq 'install/dkdb-install.ps1') { $notes += "not found (downloaded by hand): $relative" }
             else { $errors += "missing: $relative" }
             continue
         }
@@ -270,12 +270,12 @@ function Assert-DevboxIntegrity {
     if ($WarnOnly) {
         Write-DevboxWarning 'Warning: the installed package is inconsistent with manifest.json (continuing anyway):'
         foreach ($problem in $result.Errors) { Write-DevboxWarning "  - $problem" }
-        Write-DevboxNext 'Next: run install.ps1 again (dkdb-verify shows the details).'
+        Write-DevboxNext 'Next: run dkdb-install.ps1 again (dkdb-verify shows the details).'
         return
     }
     Write-DevboxWarning 'Error: the installed package is inconsistent with manifest.json:'
     foreach ($problem in $result.Errors) { Write-DevboxWarning "  - $problem" }
-    Write-DevboxNext 'Run install.ps1 again (dkdb-verify shows the details).'
+    Write-DevboxNext 'Run dkdb-install.ps1 again (dkdb-verify shows the details).'
     exit 1
 }
 
@@ -849,12 +849,12 @@ function Get-DevboxContainerPorts {
 }
 
 # Shared root of the installation (default C:\shared). It is never stored: it is deduced
-# from where the scripts are, <root>\devbox\scripts\ps1 (chosen once by install.ps1).
+# from where the scripts are, <root>\devbox\scripts\ps1 (chosen once by dkdb-install.ps1).
 function Get-DevboxRoot {
     $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
     $expected = Join-Path $root 'devbox\scripts\ps1'
     if ($PSScriptRoot.TrimEnd('\') -ine $expected.TrimEnd('\')) {
-        Write-DevboxWarning "Error: the scripts must be in <root>\devbox\scripts\ps1 (found: $PSScriptRoot). Run install.ps1 again."
+        Write-DevboxWarning "Error: the scripts must be in <root>\devbox\scripts\ps1 (found: $PSScriptRoot). Run dkdb-install.ps1 again."
         exit 1
     }
     return $root

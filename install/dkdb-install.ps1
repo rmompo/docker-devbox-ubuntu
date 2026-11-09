@@ -1,6 +1,6 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.2.0
-# It downloads manifest.json and every file it lists (scripts and uninstall.ps1) from the
+# Version: 0.3.0
+# It downloads manifest.json and every file it lists (scripts and dkdb-uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -218,12 +218,12 @@ $selfVersion = Get-InstallFileVersion -Path $PSCommandPath
 if (-not $selfVersion) { $selfVersion = 'unknown' }
 Write-Host "install $selfVersion (docker-devbox-ubuntu installer)" -ForegroundColor DarkGray
 if ($Help) {
-    Show-InstallHelp -Name 'install.ps1' `
+    Show-InstallHelp -Name 'dkdb-install.ps1' `
         -Description 'Installs docker-devbox-ubuntu: downloads manifest.json and every file it lists into <root>\devbox, creates <root>\tools and adds <root>\devbox\scripts\ps1 to the user PATH. It asks for the shared root and for the branch or tag to download.' `
-        -Usage 'install.ps1 [-Help]' `
+        -Usage 'dkdb-install.ps1 [-Help]' `
         -Examples @(
-            @{ Command = '& "C:\shared\devbox\install\install.ps1"'; Description = 'Installs from the console where you run it (the PATH is already updated there).' },
-            @{ Command = 'powershell -ExecutionPolicy Bypass -File "C:\shared\devbox\install\install.ps1"'; Description = 'Same, from a console where scripts are blocked by the execution policy.' }
+            @{ Command = '& "C:\shared\devbox\install\dkdb-install.ps1"'; Description = 'Installs from the console where you run it (the PATH is already updated there).' },
+            @{ Command = 'powershell -ExecutionPolicy Bypass -File "C:\shared\devbox\install\dkdb-install.ps1"'; Description = 'Same, from a console where scripts are blocked by the execution policy.' }
         ) `
         -Notes @(
             'The default shared root is C:\shared\ and the default branch is main; both are asked.',
@@ -233,7 +233,7 @@ if ($Help) {
     exit 0
 }
 if ($Man) {
-    Show-InstallMan -Name 'install.ps1' `
+    Show-InstallMan -Name 'dkdb-install.ps1' `
         -Purpose 'Installs docker-devbox-ubuntu from its GitHub repository without cloning it: you only download this file.' `
         -Needs @(
             'Internet access to raw.githubusercontent.com (the repository is public).',
@@ -354,9 +354,9 @@ Write-Host "Version: $version"
 foreach ($entry in $entries) {
     $relative = $entry.Name
     # The installer itself was downloaded by hand: only its version is compared.
-    if ($relative -eq 'install/install.ps1') {
+    if ($relative -eq 'install/dkdb-install.ps1') {
         if ($selfVersion -ne [string]$entry.Value) {
-            Write-InstallWarning "Warning: this installer is version $selfVersion but $Branch expects $($entry.Value). Download install.ps1 again from that branch."
+            Write-InstallWarning "Warning: this installer is version $selfVersion but $Branch expects $($entry.Value). Download dkdb-install.ps1 again from that branch."
         }
         continue
     }

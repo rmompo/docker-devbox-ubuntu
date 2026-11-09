@@ -15,7 +15,7 @@ VS Code and Docker must point to the same projects folder on the host. The conta
 ## Decision
 - **Host paths** (projects and tools are asked when creating the container):
   - Projects: `C:\LocalFiles\proyectos\`
-  - Tools: `<root>\tools`, by default `C:\shared\tools` (shared tools such as Maven, JDKs: one installation for every container). The root is chosen once by `install.ps1` and deduced afterwards (spec 07); the user organizes the content of `tools`.
+  - Tools: `<root>\tools`, by default `C:\shared\tools` (shared tools such as Maven, JDKs: one installation for every container). The root is chosen once by `dkdb-install.ps1` and deduced afterwards (spec 07); the user organizes the content of `tools`.
   - Bash: not asked; it is `<root>\devbox\scripts\bash`, mounted `readonly` (the container cannot modify the installers).
 - **Mutagen (optional, spec 08):** instead of the projects bind mount, `~/devbox/projects` is a folder inside the container synchronized with the host projects path.
 - **Container targets:** `/home/<user>/devbox/projects`, `/home/<user>/devbox/tools` (read/write) and `/home/<user>/devbox/bash` (read-only).

@@ -7,12 +7,12 @@ Typical problems and their fixes. Commands in `PowerShell` run on the Windows ho
 | # | Problem | Fix |
 |---|---------|-----|
 | 1 | The scripts are blocked ("running scripts is disabled on this system") | The execution policy is `Restricted` or `AllSigned`. For your user only: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`. |
-| 2 | `dkdb-...` is not recognized as a command | Open a **new** terminal (the PATH is read when the terminal starts). If it still fails, check that `<root>\devbox\scripts\ps1` is in your user PATH, or run `install.ps1` again. |
-| 3 | `install.ps1` cannot download a file | Check your internet access, that the repository is public and that the branch or tag you typed exists. |
-| 4 | "the scripts must be in `<root>\devbox\scripts\ps1`" | The scripts were moved. They deduce the shared root from their location: run `install.ps1` again instead of moving them. |
-| 5 | I want another shared root | Run `install.ps1` with the new root, then recreate your containers (they keep the host paths they were created with). The installer offers to remove the old PATH entry. |
-| 6 | I want to remove everything | Run `<root>\devbox\install\uninstall.ps1`. It keeps `tools`, your projects, containers and images. |
-| 7 | "the installed package is inconsistent with manifest.json" | A file is missing or has another version than the manifest. Run `dkdb-verify` to see which, then run `install.ps1` again. If it says "Inconsistent download" during the installation, wait a few minutes (GitHub caches raw files) and try again. |
+| 2 | `dkdb-...` is not recognized as a command | Open a **new** terminal (the PATH is read when the terminal starts). If it still fails, check that `<root>\devbox\scripts\ps1` is in your user PATH, or run `dkdb-install.ps1` again. |
+| 3 | `dkdb-install.ps1` cannot download a file | Check your internet access, that the repository is public and that the branch or tag you typed exists. |
+| 4 | "the scripts must be in `<root>\devbox\scripts\ps1`" | The scripts were moved. They deduce the shared root from their location: run `dkdb-install.ps1` again instead of moving them. |
+| 5 | I want another shared root | Run `dkdb-install.ps1` with the new root, then recreate your containers (they keep the host paths they were created with). The installer offers to remove the old PATH entry. |
+| 6 | I want to remove everything | Run `<root>\devbox\install\dkdb-uninstall.ps1`. It keeps `tools`, your projects, containers and images. |
+| 7 | "the installed package is inconsistent with manifest.json" | A file is missing or has another version than the manifest. Run `dkdb-verify` to see which, then run `dkdb-install.ps1` again. If it says "Inconsistent download" during the installation, wait a few minutes (GitHub caches raw files) and try again. |
 
 ## Docker
 

@@ -1,5 +1,5 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.2.1
+# Version: 0.2.2
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -70,7 +70,7 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
             if (-not $actual) { $shownActual = 'missing' }
             $line = '  {0,-46} {1,-9} {2}' -f $entry.Name, $entry.Value, $shownActual
             if ($actual -eq [string]$entry.Value) { Write-Host $line }
-            elseif ($entry.Name -eq 'install/install.ps1' -and -not $actual) { Write-Host ($line + ' (downloaded by hand)') }
+            elseif ($entry.Name -eq 'install/dkdb-install.ps1' -and -not $actual) { Write-Host ($line + ' (downloaded by hand)') }
             else { Write-DevboxWarning $line; $mismatches++ }
         }
     }
@@ -79,7 +79,7 @@ if ($listed -eq 0) {
     Write-DevboxWarning '  manifest.json is missing or lists no file'
     $problems++
 } elseif ($mismatches -gt 0) {
-    Write-DevboxWarning "  $mismatches of $listed files differ from the manifest: run install.ps1 again (dkdb-verify shows the details)."
+    Write-DevboxWarning "  $mismatches of $listed files differ from the manifest: run dkdb-install.ps1 again (dkdb-verify shows the details)."
     $problems++
 } else {
     Write-DevboxSuccess "  All $listed files match the manifest."
