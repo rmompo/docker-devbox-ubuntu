@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.1.2
+# Version: 0.2.0
 # Show every version seen from inside the container: the image, the bash scripts against the manifest and the tools.
 # Same layout as dkdb-version.ps1 on the host. It only reads; it works even when the host has not written the state.
 set -u
@@ -11,7 +11,8 @@ usage() {
     show_help 'Shows every version seen from inside the container: the project and the image version that the host scripts expect, each bash script against the manifest, the tools, and the image this container was created from.' \
         'Prints all the versions.' \
         'The project and manifest versions come from the state file that the host scripts write (~/.devbox-state); run dkdb-container-connect on the host to refresh it.' \
-        'An image older than the scripts is only reported; it keeps working.'
+        'An image older than the scripts is only reported; it keeps working.' \
+        'Files: the name is orange, the version of the manifest green, and the version of the file green when it matches and red when it does not. The columns line up whatever the length of the names.'
 }
 MAN_PURPOSE='Shows every version seen from inside the container, in the same layout as dkdb-version on the host.'
 MAN_NEEDS=('Nothing. The project and manifest versions need the state file ~/.devbox-state, which the host scripts write (dkdb-container-connect refreshes it).')
@@ -46,15 +47,24 @@ echo "  image version that the scripts build and expect: ${expected:-unknown}"
 
 # --- Files: the version in the manifest against the version in the file header ---
 echo
-echo 'Files (manifest / file)'
+printf '%sFiles%s (%smanifest%s / file)\n' "$c_prop" "$c_off" "$c_green" "$c_off"
 listed=0
 mismatches=0
+# The columns are as wide as the longest name and version, so that they always line up.
+name_width=0
+version_width=0
+while IFS='|' read -r name wanted; do
+    [ -n "$name" ] || continue
+    [ "${#name}" -le "$name_width" ] || name_width=${#name}
+    [ "${#wanted}" -le "$version_width" ] || version_width=${#wanted}
+done < <(state_each file)
 while IFS='|' read -r name wanted; do
     [ -n "$name" ] || continue
     listed=$((listed + 1))
     actual="$(file_version "$dir/${name#scripts/bash/}")"
-    line="$(printf '  %-46s %-9s %s' "$name" "$wanted" "${actual:-missing}")"
-    if [ "$actual" = "$wanted" ]; then echo "$line"; else bad "$line"; mismatches=$((mismatches + 1)); fi
+    # Name in orange, version of the manifest in green, version of the file green when it matches and red when not.
+    printf '  %s%-*s%s %s%-*s%s ' "$c_prop" "$name_width" "$name" "$c_off" "$c_green" "$version_width" "$wanted" "$c_off"
+    if [ "$actual" = "$wanted" ]; then printf '%s%s%s\n' "$c_green" "$actual" "$c_off"; else printf '%s%s%s\n' "$c_red" "${actual:-missing}" "$c_off"; mismatches=$((mismatches + 1)); fi
 done < <(state_each file)
 if [ "$listed" -eq 0 ]; then
     bad '  the state file lists no file (run dkdb-container-connect on the host)'

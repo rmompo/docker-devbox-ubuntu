@@ -1,5 +1,5 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.2.2
+# Version: 0.3.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -15,7 +15,8 @@ if ($Help) {
             @{ Command = 'dkdb-version'; Description = 'Prints all the versions; it works without Docker for the first sections.' }
         ) `
         -Notes @(
-            'An image or container older than the scripts is only reported; it keeps working.'
+            'An image or container older than the scripts is only reported; it keeps working.',
+            'Files: the name is orange, the version of the manifest green, and the version of the file green when it matches and red when it does not. The columns line up whatever the length of the names.'
         )
     exit 0
 }
@@ -55,23 +56,32 @@ Write-Host "  image version that the scripts build and expect: $expectedImage"
 
 # --- Files: the version in manifest.json against the version in the file header ---
 Write-Host ''
-Write-Host 'Files (manifest / file)'
+Write-Host 'Files' -NoNewline -ForegroundColor DarkYellow
+Write-Host ' (' -NoNewline
+Write-Host 'manifest' -NoNewline -ForegroundColor Green
+Write-Host ' / file)'
 $manifestPath = Join-Path $base 'manifest.json'
 $mismatches = 0
 $listed = 0
 if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     try { $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json } catch { $manifest = $null }
     if ($manifest -and $manifest.files) {
-        foreach ($entry in ($manifest.files.PSObject.Properties | Sort-Object Name)) {
+        $entries = @($manifest.files.PSObject.Properties | Sort-Object Name)
+        # The columns are as wide as the longest name and version, so that they always line up.
+        $nameWidth = ($entries | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum
+        $versionWidth = ($entries | ForEach-Object { ([string]$_.Value).Length } | Measure-Object -Maximum).Maximum
+        foreach ($entry in $entries) {
             $listed++
             $path = Join-Path $base ($entry.Name -replace '/', [System.IO.Path]::DirectorySeparatorChar)
             $actual = Get-DevboxFileVersion -Path $path
             $shownActual = $actual
             if (-not $actual) { $shownActual = 'missing' }
-            $line = '  {0,-46} {1,-9} {2}' -f $entry.Name, $entry.Value, $shownActual
-            if ($actual -eq [string]$entry.Value) { Write-Host $line }
-            elseif ($entry.Name -eq 'install/dkdb-install.ps1' -and -not $actual) { Write-Host ($line + ' (downloaded by hand)') }
-            else { Write-DevboxWarning $line; $mismatches++ }
+            # Name in orange, version of the manifest in green, version of the file green when it matches and red when not.
+            Write-Host ('  {0} ' -f $entry.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor DarkYellow
+            Write-Host ('{0} ' -f ([string]$entry.Value).PadRight($versionWidth)) -NoNewline -ForegroundColor Green
+            if ($actual -eq [string]$entry.Value) { Write-Host $shownActual -ForegroundColor Green }
+            elseif ($entry.Name -eq 'install/dkdb-install.ps1' -and -not $actual) { Write-Host "$shownActual (downloaded by hand)" }
+            else { Write-Host $shownActual -ForegroundColor Red; $mismatches++ }
         }
     }
 }
@@ -128,22 +138,26 @@ if ($dockerReachable) {
     Write-Host "Images (compatible with the image version ${expectedImage}: same major.minor in 0.x, same major from 1.0)"
     $images = @(Get-DevboxImages)
     if ($images.Count -eq 0) { Write-Host '  none' }
+    $imageWidth = 0
+    foreach ($image in $images) { if ($image.Length -gt $imageWidth) { $imageWidth = $image.Length } }
     foreach ($image in $images) {
         $tag = $image.Substring($image.LastIndexOf(':') + 1)
-        if (Test-DevboxVersionCompatible -Left $tag -Right $expectedImage) { Write-Host "  $image  compatible" }
-        else { Write-DevboxWarning "  $image  not compatible (or not a version tag)"; $problems++ }
+        if (Test-DevboxVersionCompatible -Left $tag -Right $expectedImage) { Write-Host "  $($image.PadRight($imageWidth))  compatible" }
+        else { Write-DevboxWarning "  $($image.PadRight($imageWidth))  not compatible (or not a version tag)"; $problems++ }
     }
 
     Write-Host ''
     Write-Host 'Containers (version of the image they were created from)'
     $containers = @(Get-DevboxContainers -Running $true) + @(Get-DevboxContainers -Running $false)
     if ($containers.Count -eq 0) { Write-Host '  none' }
+    $containerWidth = 0
+    foreach ($container in $containers) { if ($container.Length -gt $containerWidth) { $containerWidth = $container.Length } }
     foreach ($container in $containers) {
         $imageVersion = Get-DevboxContainerEnv -Container $container -Name 'DEVBOX_IMAGE_VERSION'
         $shown = $imageVersion
         if (-not $shown) { $shown = 'unknown' }
-        if ($imageVersion -and (Test-DevboxVersionCompatible -Left $imageVersion -Right $expectedImage)) { Write-Host ('  {0,-30} {1,-9} compatible' -f $container, $shown) }
-        else { Write-DevboxWarning ('  {0,-30} {1,-9} not compatible (it keeps working; newer features may be missing)' -f $container, $shown); $problems++ }
+        if ($imageVersion -and (Test-DevboxVersionCompatible -Left $imageVersion -Right $expectedImage)) { Write-Host ("  {0} {1,-9} compatible" -f $container.PadRight($containerWidth), $shown) }
+        else { Write-DevboxWarning ("  {0} {1,-9} not compatible (it keeps working; newer features may be missing)" -f $container.PadRight($containerWidth), $shown); $problems++ }
     }
 }
 
