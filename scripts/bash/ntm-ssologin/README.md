@@ -1,4 +1,4 @@
-# Version: 0.1.3
+# Version: 0.1.4
 # ntm-ssologin: ia4d en el contenedor
 
 Prepara un contenedor devbox con Claude Code para usar **ia4d (ntm GenAI Suite)**: llavero para el instalador,
@@ -22,7 +22,7 @@ En el repo de devbox vive en **`scripts/bash/ntm-ssologin/`**, y en el contenedo
 Las herramientas que faltan las instala `~/devbox/bash/dkdb-install-tools.sh` (un nivel por encima de esta carpeta; grupos `base` y `keyring`), que `dkdb-ntm-ssologin-ia4d.sh` ejecuta solo cuando detecta que faltan.
 
 El instalador de ia4d (`ia4d-installer-linux`, o su `ia4d-installer-linux-x64-<versión>.tar.gz`) **no va en el repo**:
-se deja en **`~/devbox/tools/iagentic/`**, donde lo busca el script por defecto. También vale junto a la carpeta del script o
+se deja en **`~/devbox/tools/linux/iagentic/`**, donde lo busca el script por defecto. También vale junto a la carpeta del script o
 indicándolo con `IA4D_INSTALLER=/ruta`. Si solo está el `tar.gz`, el script lo extrae en esa misma carpeta, que debe ser
 escribible.
 
@@ -72,7 +72,7 @@ pide esa URL (sin mostrarla al pegarla) y se la entrega al instalador con `curl`
 ## 3. Primera vez (contenedor nuevo o recreado)
 
 Requisitos: el contenedor con Claude Code instalado (`dkdb-install-claudecode.sh`), la VPN o red de ntm
-(para llegar a la plataforma y al SSO bridge) y el instalador de ia4d en `~/devbox/tools/iagentic/`.
+(para llegar a la plataforma y al SSO bridge) y el instalador de ia4d en `~/devbox/tools/linux/iagentic/`.
 
 ```bash
 bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh
@@ -135,7 +135,7 @@ bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh status
 Cuando llegue una versión nueva (`ia4d-installer-linux-x64-<versión>.tar.gz`):
 
 ```bash
-cd ~/devbox/tools/iagentic
+cd ~/devbox/tools/linux/iagentic
 tar -xzf ia4d-installer-linux-x64-<versión>.tar.gz --exclude='._*'   # sobrescribe ia4d-installer-linux
 bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh install                               # hace login antes si hace falta
 ```
@@ -143,7 +143,7 @@ bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh install               
 Para ejecutarlo a mano, siempre dentro del llavero:
 
 ```bash
-cd ~/devbox/tools/iagentic
+cd ~/devbox/tools/linux/iagentic
 dkdb-keyring-run ./ia4d-installer-linux           # instalación / actualización
 dkdb-keyring-run ./ia4d-installer-linux whoami    # sesión del instalador
 dkdb-keyring-run ./ia4d-installer-linux logout    # cerrar sesión

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.5.1
+# Version: 0.5.2
 # ia4d (ntm GenAI Suite) for Claude Code in this container: keyring, login (credential renewal) and installer.
 # Exclusive to the ntm Claude Code containers. Repo: scripts/bash/ntm-ssologin/, seen in the container (read-only)
 # as ~/devbox/bash/ntm-ssologin/. Run with: bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh [all | status | setup | login | renew | install]
@@ -8,7 +8,7 @@ set -uo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 runner="$HOME/.local/bin/dkdb-keyring-run"
-tools_dir="$HOME/devbox/tools/iagentic"
+tools_dir="$HOME/devbox/tools/linux/iagentic"
 # The script that installs the missing tools (one folder up, in ~/devbox/bash).
 tools_script="$(cd "$here/.." && pwd)/dkdb-install-tools.sh"
 # How the messages tell to run this script: its real path, with ~ for the home folder.
@@ -40,7 +40,7 @@ usage() {
     printf '    %s%-10s%s %s\n' "$c_name" '-h, --help' "$c_off" 'Show this help and exit.'
     printf '    %s%-10s%s %s\n' "$c_name" man "$c_off" 'Show the manual (what each command does, step by step) and exit.'
     printf '\n%sENVIRONMENT%s\n' "$c_title" "$c_off"
-    printf '    %s%-18s%s %s\n' "$c_name" IA4D_INSTALLER "$c_off" 'Path of ia4d-installer-linux (default: ~/devbox/tools/iagentic, or next to this folder).'
+    printf '    %s%-18s%s %s\n' "$c_name" IA4D_INSTALLER "$c_off" 'Path of ia4d-installer-linux (default: ~/devbox/tools/linux/iagentic, or next to this folder).'
     printf '    %s%-18s%s %s\n' "$c_name" DKDB_KEYRING_PASS "$c_off" 'Keyring password (default: devbox). Never change it once the keyring exists.'
     printf '\n'
 }
@@ -77,7 +77,7 @@ redact() {
         grep -avE '^[^A-Za-z]*(Usuario|Email|Rol|Grupos)[: ]'
 }
 
-# The installer: IA4D_INSTALLER, else next to this folder, else ~/devbox/tools/iagentic (where it is dropped);
+# The installer: IA4D_INSTALLER, else next to this folder, else ~/devbox/tools/linux/iagentic (where it is dropped);
 # when only the tarball is there, extract it (this folder may be read-only: the tarball folder must be writable).
 find_installer() {
     local candidate tarball
@@ -94,7 +94,7 @@ find_installer() {
             [ -f "$(dirname "$tarball")/ia4d-installer-linux" ] &&
             { chmod +x "$(dirname "$tarball")/ia4d-installer-linux"; find_installer; return $?; }
     fi
-    warn "ia4d-installer-linux not found (set IA4D_INSTALLER, or put it or its tar.gz in ~/devbox/tools/iagentic)."
+    warn "ia4d-installer-linux not found (set IA4D_INSTALLER, or put it or its tar.gz in ~/devbox/tools/linux/iagentic)."
     return 1
 }
 
