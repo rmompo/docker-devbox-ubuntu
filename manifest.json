@@ -1,6 +1,6 @@
 {
   "name": "docker-devbox-ubuntu",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "image": "0.3.0",
   "files": {
     "install/dkdb-install.ps1": "0.3.1",
