@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.2.0
+# Version: 0.3.0
 # Show every version seen from inside the container: the image, the bash scripts against the manifest and the tools.
 # Same layout as dkdb-version.ps1 on the host. It only reads; it works even when the host has not written the state.
 set -u
@@ -12,7 +12,7 @@ usage() {
         'Prints all the versions.' \
         'The project and manifest versions come from the state file that the host scripts write (~/.devbox-state); run dkdb-container-connect on the host to refresh it.' \
         'An image older than the scripts is only reported; it keeps working.' \
-        'Files: the name is orange, the version of the manifest green, and the version of the file green when it matches and red when it does not. The columns line up whatever the length of the names.'
+        'Layout (same as dkdb-version on the host): SECTIONS in capitals, PROPERTIES in capitals followed by dots. Files: the name is orange, the version of the manifest green, and the version of the file green when it matches and red when it does not; the columns line up whatever the length of the names. COMPATIBLE (green) and NOT-COMPATIBLE (red) are shown in reverse video.'
 }
 MAN_PURPOSE='Shows every version seen from inside the container, in the same layout as dkdb-version on the host.'
 MAN_NEEDS=('Nothing. The project and manifest versions need the state file ~/.devbox-state, which the host scripts write (dkdb-container-connect refreshes it).')
@@ -34,20 +34,29 @@ package="$(state_get package)"
 expected="$(state_get image_expected)"
 updated="$(state_get updated)"
 
+# Reverse-video word (only on a terminal): COMPATIBLE green, NOT-COMPATIBLE red.
+compat_badge() {
+    local text token
+    if [ "$1" = yes ]; then text='COMPATIBLE'; else text='NOT-COMPATIBLE'; fi
+    token=" $text "
+    if [ -z "$c_off" ]; then printf '%s' "$token"
+    elif [ "$1" = yes ]; then printf '\033[30;42m%s\033[0m' "$token"
+    else printf '\033[30;41m%s\033[0m' "$token"; fi
+}
+
 # --- Project ---
-echo
-echo 'Project'
+info_section 'Project'
 if [ -n "$package" ]; then
-    echo "  docker-devbox-ubuntu $package (manifest.json, written by the host at $updated)"
+    info_field 'Version' 8 2 "t:green:$package" 't:none: (docker-devbox-ubuntu, manifest.json)'
 else
-    bad '  docker-devbox-ubuntu unknown: the host has not written the state yet (run dkdb-container-connect on the host)'
+    info_field 'Version' 8 2 't:red:unknown: the host has not written the state yet (run dkdb-container-connect on the host)'
     problems=$((problems + 1))
 fi
-echo "  image version that the scripts build and expect: ${expected:-unknown}"
+info_field 'Image' 8 2 "t:green:${expected:-unknown}" 't:none: (the image version that the scripts build and expect)'
+[ -z "$updated" ] || info_field 'Reported' 8 2 "t:none:as the host wrote it at $updated"
 
 # --- Files: the version in the manifest against the version in the file header ---
-echo
-printf '%sFiles%s (%smanifest%s / file)\n' "$c_prop" "$c_off" "$c_green" "$c_off"
+printf '\n%sFILES%s %s(%smanifest%s%s / file)%s\n' "$c_section" "$c_off" "$c_gray" "$c_green" "$c_off" "$c_gray" "$c_off"
 listed=0
 mismatches=0
 # The columns are as wide as the longest name and version, so that they always line up.
@@ -77,31 +86,31 @@ else
 fi
 
 # --- Tools ---
-echo
-echo 'Tools'
+info_section 'Tools'
 os="$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}")"
-printf '  %-16s%s\n' 'Ubuntu' "${os:-unknown}"
-printf '  %-16s%s\n' 'Bash' "${BASH_VERSION%%(*}"
-printf '  %-16s%s\n' 'Git' "$(git --version 2>/dev/null | awk '{print $3}')"
-printf '  %-16s%s\n' 'Python' "$(python3 --version 2>/dev/null | awk '{print $2}')"
+info_field 'Ubuntu' 9 2 "t:none:${os:-unknown}"
+info_field 'Bash' 9 2 "t:none:${BASH_VERSION%%(*}"
+info_field 'Git' 9 2 "t:none:$(git --version 2>/dev/null | awk '{print $3}')"
+info_field 'Python' 9 2 "t:none:$(python3 --version 2>/dev/null | awk '{print $2}')"
 if command -v claude >/dev/null 2>&1 || [ -e "$HOME/.local/bin/claude" ]; then
-    printf '  %-16s%s\n' 'AI client' "Claude Code $(timeout 5 claude --version 2>/dev/null | head -n 1)"
+    info_field 'AI client' 9 2 "t:none:Claude Code $(timeout 5 claude --version 2>/dev/null | head -n 1)"
 elif command -v copilot >/dev/null 2>&1 || [ -e "$HOME/.local/bin/copilot" ]; then
-    printf '  %-16s%s\n' 'AI client' "GitHub Copilot CLI $(timeout 5 copilot --version 2>/dev/null | head -n 1)"
+    info_field 'AI client' 9 2 "t:none:GitHub Copilot CLI $(timeout 5 copilot --version 2>/dev/null | head -n 1)"
 else
-    printf '  %-16s%s\n' 'AI client' 'none (bash ~/devbox/bash/dkdb-install-claudecode.sh or dkdb-install-ghcopilot-cli.sh)'
+    info_field 'AI client' 9 2 't:none:none (bash ~/devbox/bash/dkdb-install-claudecode.sh or dkdb-install-ghcopilot-cli.sh)'
 fi
 
 # --- This container ---
-echo
-echo 'Container (version of the image it was created from)'
+info_section 'Container' '(version of the image it was created from)'
 image_version="${DEVBOX_IMAGE_VERSION:-}"
 [ -n "$image_version" ] || image_version="$(cat /etc/devbox-image-version 2>/dev/null)"
 shown="${image_version:-unknown}"
 if [ -n "$expected" ] && version_compatible "$shown" "$expected"; then
-    printf '  %-30s %-9s compatible\n' "$(hostname)" "$shown"
+    printf '  %s%s%s %s%-9s%s ' "$c_prop" "$(hostname)" "$c_off" "$c_green" "$shown" "$c_off"
+    compat_badge yes; echo
 else
-    bad "$(printf '  %-30s %-9s not compatible (it keeps working; newer features may be missing)' "$(hostname)" "$shown")"
+    printf '  %s%s%s %s%-9s%s ' "$c_prop" "$(hostname)" "$c_off" "$c_red" "$shown" "$c_off"
+    compat_badge no; printf '%s (it keeps working; newer features may be missing)%s\n' "$c_red" "$c_off"
     problems=$((problems + 1))
 fi
 
