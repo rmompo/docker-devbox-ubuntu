@@ -1,5 +1,5 @@
 # Build a devbox image named <prefix>-<name>.
-# Version: 0.2.4
+# Version: 0.2.5
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -65,12 +65,23 @@ Write-Host "Building image '$imageRef' from $dockerDir (this can take a few minu
 # client reads that folder as it is, and a docker client inside WSL (a wsl.exe shim) gets the folder translated to
 # /mnt/<drive>/... by WSL itself, so it works with both without guessing where the client runs.
 # The output of docker is only shown when the build fails, so that the script prints just its own messages.
-$dockerExe = (Get-Command docker -CommandType Application | Select-Object -First 1).Source
-$run = Invoke-DevboxNative -Path $dockerExe -WorkingDirectory $dockerDir -Arguments @(
-    'build', '-t', $imageRef, '--build-arg', "DEVBOX_IMAGE_VERSION=$version", '-f', 'Dockerfile', '.')
-if ($run.ExitCode -ne 0) {
-    if ($run.Output) { Write-Host $run.Output.TrimEnd() }
-    if ($run.Error) { Write-Host $run.Error.TrimEnd() }
+# docker can be a PowerShell function (a wrapper that runs the docker of WSL), so it is called by name from the
+# folder of the Dockerfile (Invoke-DevboxNative needs a program on disk and cannot run a function). Its output is
+# captured with 2>&1 here, which is safe because ErrorActionPreference is Continue while it runs (Windows
+# PowerShell 5.1 would stop on the first error line otherwise).
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+Push-Location -LiteralPath $dockerDir
+try {
+    $buildOutput = & docker build -t $imageRef --build-arg "DEVBOX_IMAGE_VERSION=$version" -f Dockerfile . 2>&1 | ForEach-Object { "$_" }
+    $buildExit = $LASTEXITCODE
+}
+finally {
+    Pop-Location
+    $ErrorActionPreference = $previousPreference
+}
+if ($buildExit -ne 0) {
+    $buildOutput | ForEach-Object { Write-Host $_ }
     Write-DevboxWarning 'Error: the image build failed.'
     exit 1
 }
