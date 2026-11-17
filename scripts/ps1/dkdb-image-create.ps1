@@ -1,5 +1,5 @@
 # Build a devbox image named <prefix>-<name>.
-# Version: 0.2.2
+# Version: 0.2.3
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -60,11 +60,16 @@ $imageRef = "${imageName}:$version"
 
 $dockerDir = (Resolve-Path (Join-Path $PSScriptRoot '..\docker')).Path
 Write-Host "Building image '$imageRef' from $dockerDir ..."
-# The same conversion as the bind mounts: /mnt/<drive>/... for a docker client inside WSL (it cannot see C:/...),
-# forward slashes otherwise (nothing between this script and Docker can then eat a backslash).
-$buildContext = Convert-DevboxDockerMountPath -Path $dockerDir
-$buildFile = Convert-DevboxDockerMountPath -Path (Join-Path $dockerDir 'Dockerfile')
-docker build -t $imageRef --build-arg "DEVBOX_IMAGE_VERSION=$version" -f $buildFile $buildContext
+# No path is passed to docker: the build runs from the folder of the Dockerfile with "." as the context. A docker.exe
+# client reads that folder as it is, and a docker client inside WSL (a wsl.exe shim) gets the folder translated to
+# /mnt/<drive>/... by WSL itself, so it works with both without guessing where the client runs.
+Push-Location -LiteralPath $dockerDir
+try {
+    docker build -t $imageRef --build-arg "DEVBOX_IMAGE_VERSION=$version" -f Dockerfile .
+}
+finally {
+    Pop-Location
+}
 if ($LASTEXITCODE -ne 0) {
     Write-DevboxWarning 'Error: the image build failed.'
     exit 1
