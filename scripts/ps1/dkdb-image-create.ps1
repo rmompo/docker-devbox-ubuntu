@@ -1,5 +1,5 @@
 # Build a devbox image named <prefix>-<name>.
-# Version: 0.2.1
+# Version: 0.2.2
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -60,9 +60,10 @@ $imageRef = "${imageName}:$version"
 
 $dockerDir = (Resolve-Path (Join-Path $PSScriptRoot '..\docker')).Path
 Write-Host "Building image '$imageRef' from $dockerDir ..."
-# Forward slashes: nothing between this script and Docker can then eat a backslash (C:\shared becomes C:shared).
-$buildContext = ConvertTo-DevboxForwardSlashPath $dockerDir
-$buildFile = ConvertTo-DevboxForwardSlashPath (Join-Path $dockerDir 'Dockerfile')
+# The same conversion as the bind mounts: /mnt/<drive>/... for a docker client inside WSL (it cannot see C:/...),
+# forward slashes otherwise (nothing between this script and Docker can then eat a backslash).
+$buildContext = Convert-DevboxDockerMountPath -Path $dockerDir
+$buildFile = Convert-DevboxDockerMountPath -Path (Join-Path $dockerDir 'Dockerfile')
 docker build -t $imageRef --build-arg "DEVBOX_IMAGE_VERSION=$version" -f $buildFile $buildContext
 if ($LASTEXITCODE -ne 0) {
     Write-DevboxWarning 'Error: the image build failed.'
