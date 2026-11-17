@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.11.2
+# Version: 0.11.3
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -505,15 +505,24 @@ function Get-DevboxDockerEngineKind {
     return $kind
 }
 
-# The source of a bind mount for Docker, from a Windows path. Only an engine inside WSL changes it:
-# C:\a\b (or C:) -> /mnt/c/a/b; \\wsl$\Distro\x and \\wsl.localhost\Distro\x -> /x. Anything else stays as it is.
+# Paths given to docker always use forward slashes: a backslash is an escape character for the shells, wrappers and
+# parsers that may sit between the script and Docker (C:\shared\devbox can arrive as C:shareddevbox), and Windows
+# accepts C:/shared/devbox everywhere. For a path that docker.exe itself reads (the build context and the Dockerfile).
+function ConvertTo-DevboxForwardSlashPath {
+    param([Parameter(Mandatory)][string]$Path)
+    return ($Path -replace '\\', '/')
+}
+
+# The source of a bind mount for Docker, from a Windows path, always with forward slashes. Docker Desktop keeps the
+# drive: C:\a\b -> C:/a/b. An engine inside WSL needs C:\a\b (or C:) -> /mnt/c/a/b, and \\wsl$\Distro\x or
+# \\wsl.localhost\Distro\x -> /x.
 function Convert-DevboxDockerMountPath {
     param(
         [Parameter(Mandatory)][string]$Path,
         [string]$EngineKind
     )
     if (-not $EngineKind) { $EngineKind = Get-DevboxDockerEngineKind }
-    if ($EngineKind -ne 'LinuxEngine') { return $Path }
+    if ($EngineKind -ne 'LinuxEngine') { return (ConvertTo-DevboxForwardSlashPath $Path) }
     if ($Path -match '^([A-Za-z]):(?:[\\/](.*))?$') {
         $rest = ($Matches[2] -replace '\\', '/').TrimEnd('/')
         if ($rest) { return '/mnt/' + $Matches[1].ToLowerInvariant() + '/' + $rest }
@@ -523,17 +532,20 @@ function Convert-DevboxDockerMountPath {
         $rest = ($Matches[1] -replace '\\', '/').TrimEnd('/')
         return '/' + $rest
     }
-    return $Path
+    return (ConvertTo-DevboxForwardSlashPath $Path)
 }
 
-# The reverse, only to show a mount source as a Windows path: /mnt/c/a/b -> C:\a\b (other paths stay as they are).
+# The reverse, only to show a mount source as a Windows path: /mnt/c/a/b -> C:\a\b and C:/a/b -> C:\a\b (other paths stay as they are).
 function ConvertFrom-DevboxDockerMountPath {
     param(
         [Parameter(Mandatory)][string]$Path,
         [string]$EngineKind
     )
     if (-not $EngineKind) { $EngineKind = Get-DevboxDockerEngineKind }
-    if ($EngineKind -ne 'LinuxEngine') { return $Path }
+    if ($EngineKind -ne 'LinuxEngine') {
+        if ($Path -match '^[A-Za-z]:/') { return ($Path -replace '/', '\') }
+        return $Path
+    }
     if ($Path -match '^/mnt/([a-z])(?:/(.*))?$') {
         $drive = $Matches[1].ToUpperInvariant() + ':'
         if ($Matches[2]) { return $drive + '\' + ($Matches[2] -replace '/', '\') }

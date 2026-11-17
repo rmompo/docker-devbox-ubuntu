@@ -1,5 +1,5 @@
 # Build a devbox image named <prefix>-<name>.
-# Version: 0.2.0
+# Version: 0.2.1
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -60,7 +60,10 @@ $imageRef = "${imageName}:$version"
 
 $dockerDir = (Resolve-Path (Join-Path $PSScriptRoot '..\docker')).Path
 Write-Host "Building image '$imageRef' from $dockerDir ..."
-docker build -t $imageRef --build-arg "DEVBOX_IMAGE_VERSION=$version" -f (Join-Path $dockerDir 'Dockerfile') $dockerDir
+# Forward slashes: nothing between this script and Docker can then eat a backslash (C:\shared becomes C:shared).
+$buildContext = ConvertTo-DevboxForwardSlashPath $dockerDir
+$buildFile = ConvertTo-DevboxForwardSlashPath (Join-Path $dockerDir 'Dockerfile')
+docker build -t $imageRef --build-arg "DEVBOX_IMAGE_VERSION=$version" -f $buildFile $buildContext
 if ($LASTEXITCODE -ne 0) {
     Write-DevboxWarning 'Error: the image build failed.'
     exit 1
