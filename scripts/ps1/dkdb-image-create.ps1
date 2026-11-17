@@ -1,5 +1,5 @@
 # Build a devbox image named <prefix>-<name>.
-# Version: 0.2.3
+# Version: 0.2.4
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -16,6 +16,7 @@ if ($Help) {
         ) `
         -Notes @(
             'The tag is the image version (the ''image'' field of manifest.json), never latest.',
+            'The output of docker build is shown only when the build fails.',
             'After an update that changes the Dockerfile or the entrypoint, build the image again and recreate the containers.'
         )
     exit 0
@@ -31,7 +32,7 @@ if ($Man) {
             'Checks the package against manifest.json and checks Docker.',
             'Reads the image version (the image field of manifest.json).',
             'Asks for the image name (default devbox-ubuntu, so dkdb-devbox-ubuntu:<version>).',
-            'Runs docker build with the Dockerfile of scripts\docker, passing the version as a build argument.'
+            'Runs docker build with the Dockerfile of scripts\docker, passing the version as a build argument; its output is shown only if the build fails.'
         ) `
         -Changes @(
             'Adds the local Docker image dkdb-<name>:<version>.'
@@ -59,18 +60,17 @@ $imageName = Get-DevboxFullName $name
 $imageRef = "${imageName}:$version"
 
 $dockerDir = (Resolve-Path (Join-Path $PSScriptRoot '..\docker')).Path
-Write-Host "Building image '$imageRef' from $dockerDir ..."
+Write-Host "Building image '$imageRef' from $dockerDir (this can take a few minutes) ..."
 # No path is passed to docker: the build runs from the folder of the Dockerfile with "." as the context. A docker.exe
 # client reads that folder as it is, and a docker client inside WSL (a wsl.exe shim) gets the folder translated to
 # /mnt/<drive>/... by WSL itself, so it works with both without guessing where the client runs.
-Push-Location -LiteralPath $dockerDir
-try {
-    docker build -t $imageRef --build-arg "DEVBOX_IMAGE_VERSION=$version" -f Dockerfile .
-}
-finally {
-    Pop-Location
-}
-if ($LASTEXITCODE -ne 0) {
+# The output of docker is only shown when the build fails, so that the script prints just its own messages.
+$dockerExe = (Get-Command docker -CommandType Application | Select-Object -First 1).Source
+$run = Invoke-DevboxNative -Path $dockerExe -WorkingDirectory $dockerDir -Arguments @(
+    'build', '-t', $imageRef, '--build-arg', "DEVBOX_IMAGE_VERSION=$version", '-f', 'Dockerfile', '.')
+if ($run.ExitCode -ne 0) {
+    if ($run.Output) { Write-Host $run.Output.TrimEnd() }
+    if ($run.Error) { Write-Host $run.Error.TrimEnd() }
     Write-DevboxWarning 'Error: the image build failed.'
     exit 1
 }

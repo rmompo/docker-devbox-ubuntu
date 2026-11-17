@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.11.3
+# Version: 0.11.4
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -969,10 +969,12 @@ function ConvertTo-DevboxNativeArgument {
 function Invoke-DevboxNative {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [string[]]$Arguments = @()
+        [string[]]$Arguments = @(),
+        [string]$WorkingDirectory
     )
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
     $startInfo.FileName = $Path
+    if ($WorkingDirectory) { $startInfo.WorkingDirectory = $WorkingDirectory }
     $startInfo.Arguments = (@($Arguments | ForEach-Object { ConvertTo-DevboxNativeArgument -Argument $_ })) -join ' '
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
