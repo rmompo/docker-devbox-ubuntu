@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.5.2
+# Version: 0.5.3
 # ia4d (ntm GenAI Suite) for Claude Code in this container: keyring, login (credential renewal) and installer.
 # Exclusive to the ntm Claude Code containers. Repo: scripts/bash/ntm-ssologin/, seen in the container (read-only)
 # as ~/devbox/bash/ntm-ssologin/. Run with: bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh [all | status | setup | login | renew | install]
@@ -28,28 +28,28 @@ usage() {
     name="$(basename "$0")"
     printf '\n%sNAME%s\n    %s%s%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
     printf '\n%sDESCRIPTION%s\n' "$c_title" "$c_off"
-    printf '%s\n' "Prepares this container for ia4d (ntm GenAI Suite) in Claude Code: the GNOME keyring where ia4d keeps its session, the SSO login (also to renew the credentials) and the ia4d installer. Every step is idempotent." | fold -s -w 92 | sed 's/ *$//; s/^/    /'
+    wrap_text 92 "Prepares this container for ia4d (ntm GenAI Suite) in Claude Code: the GNOME keyring where ia4d keeps its session, the SSO login (also to renew the credentials) and the ia4d installer. Every step is idempotent." 4 | sed 's/ *$//; s/^/    /'
     printf '\n%sUSAGE%s\n    %s%s [all | status | setup | login | renew | install] [-h | man]%s\n' "$c_title" "$c_off" "$c_name" "$self_cmd" "$c_off"
     printf '\n%sCOMMANDS%s\n' "$c_title" "$c_off"
-    printf '    %s%-10s%s %s\n' "$c_name" all "$c_off" 'Default. setup, login if the installer session expired, install, then status.'
-    printf '    %s%-10s%s %s\n' "$c_name" status "$c_off" 'Only reads: tools, keyring, session, ia4d files and plugins. Exit code 1 if something is wrong.'
-    printf '    %s%-10s%s %s\n' "$c_name" setup "$c_off" 'Tools (installed with dkdb-install-tools.sh when missing) and dkdb-keyring-run in ~/.local/bin (the keyring the installer needs).'
-    printf '    %s%-10s%s %s\n' "$c_name" login "$c_off" 'SSO login when the installer session expired. One URL to open, one URL to paste.'
-    printf '    %s%-10s%s %s\n' "$c_name" renew "$c_off" 'Renew the credentials: logout, then login.'
-    printf '    %s%-10s%s %s\n' "$c_name" install "$c_off" 'Runs the ia4d installer inside the keyring session (logs in first when needed).'
-    printf '    %s%-10s%s %s\n' "$c_name" '-h, --help' "$c_off" 'Show this help and exit.'
-    printf '    %s%-10s%s %s\n' "$c_name" man "$c_off" 'Show the manual (what each command does, step by step) and exit.'
+    show_parameter all 'Default. setup, login if the installer session expired, install, then status.'
+    show_parameter status 'Only reads: tools, keyring, session, ia4d files and plugins. Exit code 1 if something is wrong.'
+    show_parameter setup 'Tools (installed with dkdb-install-tools.sh when missing) and dkdb-keyring-run in ~/.local/bin (the keyring the installer needs).'
+    show_parameter login 'SSO login when the installer session expired. One URL to open, one URL to paste.'
+    show_parameter renew 'Renew the credentials: logout, then login.'
+    show_parameter install 'Runs the ia4d installer inside the keyring session (logs in first when needed).'
+    show_parameter '-h, --help' 'Show this help and exit.'
+    show_parameter man 'Show the manual (what each command does, step by step) and exit.'
     printf '\n%sENVIRONMENT%s\n' "$c_title" "$c_off"
-    printf '    %s%-18s%s %s\n' "$c_name" IA4D_INSTALLER "$c_off" 'Path of ia4d-installer-linux (default: ~/devbox/tools/linux/iagentic, or next to this folder).'
-    printf '    %s%-18s%s %s\n' "$c_name" DKDB_KEYRING_PASS "$c_off" 'Keyring password (default: devbox). Never change it once the keyring exists.'
+    show_parameter IA4D_INSTALLER 'Path of ia4d-installer-linux (default: ~/devbox/tools/linux/iagentic, or next to this folder).' 18
+    show_parameter DKDB_KEYRING_PASS 'Keyring password (default: devbox). Never change it once the keyring exists.' 18
     printf '\n'
 }
 
 manual() {
-    item() { printf '%s\n' "$2" | fold -s -w 84 | sed "1s/^/    $c_name$1$c_off /;2,\$s/^/        /; s/ *\$//"; }
+    item() { local pad=$((${#1} + 5)); wrap_text 84 "$2" "$pad" | sed "1s/^/    $c_name$1$c_off /;2,\$s/^/$(printf '%*s' "$pad" '')/; s/ *\$//"; }
     printf '\n%sMANUAL%s\n    %s%s%s\n' "$c_title" "$c_off" "$c_name" "$(basename "$0")" "$c_off"
     printf '\n%sPURPOSE%s\n' "$c_title" "$c_off"
-    printf '%s\n' 'The ia4d installer keeps its session in the keyring (Secret Service over D-Bus), which a container does not have; the ia4d plugins use ~/.ia4d/.infra-token and .infra-refresh-token (5 days, renewed by the plugins). This script provides the keyring, logs in through the ia4d SSO bridge (it writes both) and runs the installer. README.md (same folder) explains why and how.' | fold -s -w 92 | sed 's/ *$//; s/^/    /'
+    wrap_text 92 'The ia4d installer keeps its session in the keyring (Secret Service over D-Bus), which a container does not have; the ia4d plugins use ~/.ia4d/.infra-token and .infra-refresh-token (5 days, renewed by the plugins). This script provides the keyring, logs in through the ia4d SSO bridge (it writes both) and runs the installer. README.md (same folder) explains why and how.' 4 | sed 's/ *$//; s/^/    /'
     printf '\n%sWHAT IT DOES%s\n' "$c_title" "$c_off"
     item 'setup 1.' 'Checks dbus-daemon, gnome-keyring-daemon, secret-tool, script and curl; installs the missing ones with dkdb-install-tools.sh (sudo apt-get). login, renew and install do this check first.'
     item 'setup 2.' 'Copies dkdb-ntm-ssologin-keyring-run.sh to ~/.local/bin/dkdb-keyring-run when it differs.'
@@ -66,7 +66,7 @@ manual() {
     item '  -' 'Prints or stores a token in a file, the history or the screen.'
     item '  -' 'Touches the host, Mutagen or other containers.'
     printf '\n%sNEXT STEP%s\n' "$c_title" "$c_off"
-    printf '%s\n' "Run claude as usual. Renew with: $self_cmd renew (at least every 5 days without using claude)." | fold -s -w 92 | sed "s/ *\$//; s/^/    $c_yellow/; s/\$/$c_off/"
+    wrap_text 92 "Run claude as usual. Renew with: $self_cmd renew (at least every 5 days without using claude)." 4 | sed "s/ *\$//; s/^/    $c_yellow/; s/\$/$c_off/"
     printf '\n'
 }
 

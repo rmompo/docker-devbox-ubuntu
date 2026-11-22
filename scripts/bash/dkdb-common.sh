@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.4.0
+# Version: 0.5.0
 # Common definitions of the devbox bash scripts that show information (dkdb-info.sh, dkdb-version.sh).
 # Source it, do not run it:  . "$(dirname "${BASH_SOURCE[0]}")/dkdb-common.sh"; the script defines usage() and, for the manual, MAN_*.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -28,12 +28,15 @@ else
     c_bold=''; c_unbold=''
     badge_readonly=''; badge_readwrite=''; badge_mutagen=''; badge_sync=''; badge_volume=''; badge_compatible=''; badge_incompatible=''
 fi
-ok() { printf '%s%s%s\n' "$c_green" "$*" "$c_off"; }
-bad() { printf '%s%s%s\n' "$c_red" "$*" "$c_off"; }
-warn() { printf '%s%s%s\n' "$c_red" "$*" "$c_off" >&2; }
+ok() { message_text 1 "$c_green" "$*"; }
+bad() { message_text 1 "$c_red" "$*"; }
+warn() { message_text 2 "$c_red" "$*" >&2; }
 # The natural next step in yellow; a script named in it (dkdb-<name>.ps1 or .sh) is written in bold.
 next() {
-    local rest="$*" out="" re='dkdb-[a-z0-9-]+\.(ps1|sh)'
+    local text="$*" rest out="" re='dkdb-[a-z0-9-]+\.(ps1|sh)'
+    # On a terminal the text is wrapped at the words first (the bold codes would count as characters).
+    if [ -t 1 ]; then info_width > /dev/null; text="$(wrap_text "$(info_width)" "$text")"; fi
+    rest="$text"
     while [[ "$rest" =~ $re ]]; do
         out+="${rest%%"${BASH_REMATCH[0]}"*}${c_bold}${BASH_REMATCH[0]}${c_unbold}"
         rest="${rest#*"${BASH_REMATCH[0]}"}"
@@ -47,17 +50,34 @@ next() {
 # terminal continues right under itself. Special words are badges (reverse video): MUTAGEN, MUTAGEN-SYNC,
 # VOLUME-P9, READ-ONLY, READ-WRITE, COMPATIBLE, NOT-COMPATIBLE.
 
+# The usable width of the terminal (one less than the window, 80 when it cannot be known). COLUMNS is only set in
+# some shells and tput answers 80 when its output is a pipe, so the size is asked to the terminal itself through
+# stderr, stdin or /dev/tty. Read once per run.
 info_width() {
-    local columns="${COLUMNS:-}"
-    [ -n "$columns" ] || columns="$(tput cols 2>/dev/null)"
-    [ "${columns:-0}" -ge 40 ] 2>/dev/null || columns=80
-    echo $((columns - 1))
+    if [ -z "${info_width_cache:-}" ]; then
+        local columns="${COLUMNS:-}"
+        [ -n "$columns" ] || columns="$(stty size <&2 2>/dev/null | awk '{print $2}')"
+        [ -n "$columns" ] || columns="$(stty size <&0 2>/dev/null | awk '{print $2}')"
+        [ -n "$columns" ] || columns="$(stty size </dev/tty 2>/dev/null | awk '{print $2}')"
+        [ -n "$columns" ] || columns="$(tput cols 2>/dev/null)"
+        [ "${columns:-0}" -ge 40 ] 2>/dev/null || columns=80
+        info_width_cache=$((columns - 1))
+    fi
+    echo "$info_width_cache"
 }
+info_width > /dev/null
 
 info_section() {
+    local line
     printf '\n%s%s%s' "$c_section" "${1^^}" "$c_off"
-    [ -z "${2:-}" ] || printf ' %s%s%s' "$c_gray" "$2" "$c_off"
+    if [ -z "${2:-}" ]; then echo; return; fi
+    if [ $((${#1} + 1 + ${#2})) -le "$(info_width)" ]; then
+        printf ' %s%s%s\n' "$c_gray" "$2" "$c_off"
+        return
+    fi
+    # The note does not fit next to the title: it goes below, indented and wrapped at the words.
     echo
+    while IFS= read -r line; do printf '  %s%s%s\n' "$c_gray" "$line" "$c_off"; done <<< "$(wrap_text 200 "$2" 2)"
 }
 
 # The pieces of a value are arguments 'kind:color:text': kind t (text) or b (badge); color host, container, red,
@@ -83,7 +103,7 @@ badge() {
 }
 
 info_field() {
-    local label="${1^^}" label_width="$2" indent="$3" dots column=0 value_column room piece rest color text count token
+    local label="${1^^}" label_width="$2" indent="$3" dots column=0 value_column room piece rest color text count token cut chunk shown i
     shift 3
     value_column=$((indent + label_width + 4))
     room=$(($(info_width) - value_column))
@@ -105,9 +125,27 @@ info_field() {
         fi
         while [ -n "$text" ]; do
             if [ "$column" -ge "$room" ]; then printf '\n%*s' "$value_column" ''; column=0; fi
-            count=$((room - column)); [ "$count" -le "${#text}" ] || count=${#text}
-            printf '%s%s%s' "$(info_color "$color")" "${text:0:count}" "$c_off"
-            column=$((column + count)); text="${text:count}"
+            [ "$column" -gt 0 ] || text="${text# }"
+            [ -n "$text" ] || break
+            count=$((room - column)); cut=$count
+            if [ "${#text}" -gt "$count" ]; then
+                # Too long for the line: break after the last space, / or \ that fits (not too early); without one,
+                # a text that fits on a line of its own goes down whole, and a longer one is cut at the edge.
+                cut=0
+                for ((i = count; i > count / 3 && i > 0; i--)); do
+                    case "${text:i-1:1}" in ' ' | '/' | '\') cut=$i; break ;; esac
+                done
+                if [ "$cut" -eq 0 ]; then
+                    if [ "$column" -gt 0 ] && [ "${#text}" -le "$room" ]; then printf '\n%*s' "$value_column" ''; column=0; continue; fi
+                    cut=$count
+                fi
+            fi
+            chunk="${text:0:cut}"; text="${text:cut}"
+            # Text left: the line ends here (without the space it broke at) and the rest starts on a new line.
+            if [ -n "$text" ]; then shown="${chunk%"${chunk##*[! ]}"}"; else shown="$chunk"; fi
+            printf '%s%s%s' "$(info_color "$color")" "$shown" "$c_off"
+            column=$((column + ${#chunk}))
+            if [ -n "$text" ]; then column=$room; fi
         done
     done
     echo
@@ -118,9 +156,11 @@ file_version() { sed -n 's/^# Version: *//p' "$1" 2>/dev/null | head -n 1; }
 
 # The first line of every script, like the PowerShell ones: name, own version, image version.
 banner() {
-    local own
+    local own text line
     own="$(file_version "$1")"
-    printf '%s%s %s (docker-devbox-ubuntu image %s)%s\n' "$c_gray" "$(basename "$1")" "${own:-unknown}" "${DEVBOX_IMAGE_VERSION:-unknown}" "$c_off"
+    text="$(basename "$1") ${own:-unknown} (docker-devbox-ubuntu image ${DEVBOX_IMAGE_VERSION:-unknown})"
+    if [ -t 1 ]; then text="$(wrap_text "$(info_width)" "$text")"; fi
+    while IFS= read -r line; do printf '%s%s%s\n' "$c_gray" "$line" "$c_off"; done <<< "$text"
 }
 
 # A value of the state file: key=value (empty when there is no file or no key).
@@ -139,8 +179,29 @@ version_compatible() {
     [ "$left_major" != 0 ] || [ "$left_minor" = "$right_minor" ]
 }
 
-# Print a text wrapped and indented.
-wrap_text() { printf '%s\n' "$2" | fold -s -w "$1" | sed 's/ *$//'; }
+# Print a text wrapped at WIDTH columns, or less when the screen is narrower: wrap_text WIDTH TEXT [INDENT], where
+# INDENT is what the caller adds in front of every line afterwards.
+wrap_text() {
+    local width="$1" room=$(($(info_width) - ${3:-0}))
+    [ "$room" -ge 20 ] || room=20
+    [ "$width" -le "$room" ] || width="$room"
+    printf '%s\n' "$2" | fold -s -w "$width" | sed 's/ *$//'
+}
+
+# One parameter of a help: show_parameter NAME TEXT [WIDTH]. The name takes WIDTH characters (10 by default) and the
+# text, wrapped at the words, continues under itself.
+show_parameter() {
+    local width="${3:-10}"
+    wrap_text 80 "$2" $((width + 5)) | sed "1s/^/    $c_name$(printf '%-*s' "$width" "$1")$c_off /;2,\$s/^/$(printf '%*s' $((width + 5)) '')/"
+}
+
+# A message of ok, bad or warn in a color: message_text FD COLOR TEXT. When the output (file descriptor FD) is a
+# terminal it is wrapped at the words to its width; otherwise it is printed as it is.
+message_text() {
+    local color="$2" text="$3" line
+    if [ -t "$1" ]; then text="$(wrap_text "$(info_width)" "$text")"; fi
+    while IFS= read -r line; do printf '%s%s%s\n' "$color" "$line" "$c_off"; done <<< "$text"
+}
 
 # The help of a script (-h, --help), same layout as the PowerShell ones: NAME, DESCRIPTION, USAGE, PARAMETERS,
 # EXAMPLES and NOTES. Arguments: description, example description, then the notes.
@@ -151,16 +212,16 @@ show_help() {
     banner "$0"
     printf '\n%sNAME%s\n    %s%s%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
     printf '\n%sDESCRIPTION%s\n' "$c_title" "$c_off"
-    wrap_text 92 "$description" | sed 's/^/    /'
+    wrap_text 92 "$description" 4 | sed 's/^/    /'
     printf '\n%sUSAGE%s\n    %sbash ~/devbox/bash/%s [-h | man]%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
     printf '\n%sPARAMETERS%s\n' "$c_title" "$c_off"
-    printf '    %s%-10s%s Show this help and exit.\n' "$c_name" "-h, --help" "$c_off"
-    printf '    %s%-10s%s Show the manual (what the script does, step by step) and exit.\n' "$c_name" "man" "$c_off"
+    show_parameter '-h, --help' 'Show this help and exit.'
+    show_parameter man 'Show the manual (what the script does, step by step) and exit.'
     printf '\n%sEXAMPLES%s\n    %sbash ~/devbox/bash/%s%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
-    wrap_text 88 "$example" | sed 's/^/        /'
+    wrap_text 88 "$example" 8 | sed 's/^/        /'
     if [ "$#" -gt 0 ]; then
         printf '\n%sNOTES%s\n' "$c_title" "$c_off"
-        for note in "$@"; do wrap_text 90 "$note" | sed '1s/^/    - /;2,$s/^/      /'; done
+        for note in "$@"; do wrap_text 90 "$note" 6 | sed '1s/^/    - /;2,$s/^/      /'; done
     fi
     printf '\n'
 }
@@ -173,7 +234,7 @@ show_manual() {
     banner "$0"
     printf '\n%sMANUAL%s\n    %s%s%s\n' "$c_title" "$c_off" "$c_name" "$(basename "$0")" "$c_off"
     printf '\n%sPURPOSE%s\n' "$c_title" "$c_off"
-    wrap_text 92 "$MAN_PURPOSE" | sed 's/^/    /'
+    wrap_text 92 "$MAN_PURPOSE" 4 | sed 's/^/    /'
     for title in REQUIREMENTS:MAN_NEEDS:0 'WHAT IT DOES:MAN_STEPS:1' 'WHAT IT CHANGES:MAN_CHANGES:0' 'WHAT IT NEVER DOES:MAN_NEVER:0'; do
         list="${title#*:}"; numbered="${list#*:}"; list="${list%%:*}"; title="${title%%:*}"
         local -n items="$list"
@@ -183,12 +244,12 @@ show_manual() {
         for item in "${items[@]}"; do
             number=$((number + 1))
             if [ "$numbered" = 1 ]; then mark="$(printf '%2d.' "$number")"; else mark='  -'; fi
-            wrap_text 84 "$item" | sed "1s/^/    $c_name$mark$c_off /;2,\$s/^/        /"
+            wrap_text 84 "$item" 8 | sed "1s/^/    $c_name$mark$c_off /;2,\$s/^/        /"
         done
         unset -n items
     done
     printf '\n%sNEXT STEP%s\n' "$c_title" "$c_off"
-    wrap_text 92 "$MAN_NEXT" | sed "s/^/    $c_yellow/; s/\$/$c_off/"
+    wrap_text 92 "$MAN_NEXT" 4 | sed "s/^/    $c_yellow/; s/\$/$c_off/"
     printf '\n'
 }
 

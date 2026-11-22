@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.4.0
+# Version: 0.4.1
 # Show every version seen from inside the container: the image, the bash scripts against the manifest and the tools.
 # Same layout as dkdb-version.ps1 on the host. It only reads; it works even when the host has not written the state.
 set -u
@@ -62,12 +62,24 @@ while IFS='|' read -r name wanted; do
     [ "${#name}" -le "$name_width" ] || name_width=${#name}
     [ "${#wanted}" -le "$version_width" ] || version_width=${#wanted}
 done < <(state_each file)
+# On a narrow terminal the folder of the names is left out (scripts/bash/dkdb-info.sh -> dkdb-info.sh).
+short_names=0
+if [ $((2 + name_width + 1 + version_width + 1 + 9)) -gt "$(info_width)" ]; then
+    short_names=1
+    name_width=0
+    while IFS='|' read -r name wanted; do
+        [ -n "$name" ] || continue
+        [ "${#name}" -le "$name_width" ] || name_width=${#name}
+    done < <(state_each file | sed 's#^[^|]*/##')
+fi
 while IFS='|' read -r name wanted; do
     [ -n "$name" ] || continue
     listed=$((listed + 1))
     actual="$(file_version "$dir/${name#scripts/bash/}")"
     # Name in orange, version of the manifest in green, version of the file green when it matches and red when not.
-    printf '  %s%-*s%s %s%-*s%s ' "$c_name" "$name_width" "$name" "$c_off" "$c_green" "$version_width" "$wanted" "$c_off"
+    shown_name="$name"
+    [ "$short_names" -eq 0 ] || shown_name="${name##*/}"
+    printf '  %s%-*s%s %s%-*s%s ' "$c_name" "$name_width" "$shown_name" "$c_off" "$c_green" "$version_width" "$wanted" "$c_off"
     if [ "$actual" = "$wanted" ]; then printf '%s%s%s\n' "$c_green" "$actual" "$c_off"; else printf '%s%s%s\n' "$c_red" "${actual:-missing}" "$c_off"; mismatches=$((mismatches + 1)); fi
 done < <(state_each file)
 if [ "$listed" -eq 0 ]; then
@@ -106,7 +118,11 @@ if [ -n "$expected" ] && version_compatible "$shown" "$expected"; then
     compat_badge yes; echo
 else
     printf '  %s%s%s %s %s%-9s%s ' "$c_name" "$(hostname)" "$c_off" "$volume_badge" "$c_red" "$shown" "$c_off"
-    compat_badge no; printf '%s (it keeps working; newer features may be missing)%s\n' "$c_red" "$c_off"
+    compat_badge no
+    # The explanation stays on the line when it fits and goes to the next one, indented, when it does not.
+    line_width=$((2 + ${#HOSTNAME} + 1 + 12 + 1 + 9 + 1 + 16))
+    if [ $((line_width + 49)) -gt "$(info_width)" ]; then printf '\n  %s(it keeps working; newer features may be missing)%s\n' "$c_red" "$c_off"
+    else printf '%s (it keeps working; newer features may be missing)%s\n' "$c_red" "$c_off"; fi
     problems=$((problems + 1))
 fi
 

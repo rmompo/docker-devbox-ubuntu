@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.3.0
+# Version: 0.3.1
 # Install GitHub Copilot CLI (latest) in this container (no Node needed).
 # Rule: one AI client per container. Run with: bash dkdb-install-ghcopilot-cli.sh
 set -euo pipefail
@@ -13,25 +13,25 @@ usage() {
     heading="$c_title"; name="$c_name"; off="$c_off"
     printf '\n%sNAME%s\n    %s%s%s\n' "$heading" "$off" "$name" "$(basename "$0")" "$off"
     printf '\n%sDESCRIPTION%s\n' "$heading" "$off"
-    printf '%s\n' "Installs GitHub Copilot CLI (latest) in this container with its standalone installer (no Node needed), and puts ~/.local/bin on the PATH." | fold -s -w 92 | sed 's/ *$//; s/^/    /'
+    wrap_text 92 "Installs GitHub Copilot CLI (latest) in this container with its standalone installer (no Node needed), and puts ~/.local/bin on the PATH." 4 | sed 's/ *$//; s/^/    /'
     printf '\n%sUSAGE%s\n    %sbash ~/devbox/bash/%s [-h | man]%s\n' "$heading" "$off" "$name" "$(basename "$0")" "$off"
     printf '\n%sPARAMETERS%s\n' "$heading" "$off"
-    printf '    %s%-10s%s Show this help and exit.\n' "$name" "-h, --help" "$off"
-    printf '    %s%-10s%s Show the manual (what the script does, step by step) and exit.\n' "$name" "man" "$off"
+    show_parameter '-h, --help' 'Show this help and exit.'
+    show_parameter 'man' 'Show the manual (what the script does, step by step) and exit.'
     printf '\n%sEXAMPLES%s\n    %sbash ~/devbox/bash/%s%s\n        Installs GitHub Copilot CLI.\n' "$heading" "$off" "$name" "$(basename "$0")" "$off"
     printf '\n%sNOTES%s\n' "$heading" "$off"
-    printf '%s\n' "One AI client per container: it refuses to install if Claude Code is already here." | fold -s -w 90 | sed '1s/^/    - /;2,$s/^/      /'
-    printf '%s\n' "Run it inside the container (dkdb-container-connect opens a shell)." | fold -s -w 90 | sed '1s/^/    - /;2,$s/^/      /'
+    wrap_text 90 "One AI client per container: it refuses to install if Claude Code is already here." 6 | sed '1s/^/    - /;2,$s/^/      /'
+    wrap_text 90 "Run it inside the container (dkdb-container-connect opens a shell)." 6 | sed '1s/^/    - /;2,$s/^/      /'
     printf '\n'
 }
 # Manual (man): what the script does, in colors (same layout as the dkdb-* scripts, spec 01).
 manual() {
     local heading name yellow off
     heading="$c_title"; name="$c_name"; yellow="$c_yellow"; off="$c_off"
-    item() { printf '%s\n' "$2" | fold -s -w 84 | sed "1s/^/    $name$1$off /;2,\$s/^/        /; s/ *\$//"; }
+    item() { wrap_text 84 "$2" 8 | sed "1s/^/    $name$1$off /;2,\$s/^/        /; s/ *\$//"; }
     printf '\n%sMANUAL%s\n    %s%s%s\n' "$heading" "$off" "$name" "$(basename "$0")" "$off"
     printf '\n%sPURPOSE%s\n' "$heading" "$off"
-    printf '%s\n' 'Installs GitHub Copilot CLI (latest) in this container with its standalone installer (no Node needed). One AI client per container.' | fold -s -w 92 | sed 's/ *$//; s/^/    /'
+    wrap_text 92 'Installs GitHub Copilot CLI (latest) in this container with its standalone installer (no Node needed). One AI client per container.' 4 | sed 's/ *$//; s/^/    /'
     printf '\n%sREQUIREMENTS%s\n' "$heading" "$off"
     item '  -' 'Run it inside the container (dkdb-container-connect opens a shell).'
     item '  -' 'Internet access.'
@@ -46,7 +46,7 @@ manual() {
     item '  -' 'Installs a second AI client.'
     item '  -' 'Touches the host or other containers.'
     printf '\n%sNEXT STEP%s\n' "$heading" "$off"
-    printf '%s\n' 'Open a new shell (or run: source ~/.bashrc) and run: copilot' | fold -s -w 92 | sed "s/ *\$//; s/^/    $yellow/; s/\$/$off/"
+    wrap_text 92 'Open a new shell (or run: source ~/.bashrc) and run: copilot' 4 | sed "s/ *\$//; s/^/    $yellow/; s/\$/$off/"
     printf '\n'
 }
 for argument in "$@"; do
