@@ -1,5 +1,5 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.3.5
+# Version: 0.3.6
 # It downloads manifest.json and every file it lists (scripts and dkdb-uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -158,10 +158,38 @@ function Stop-Install {
     exit 1
 }
 
+# Like Read-Host, but Esc cancels: returns $null on Esc, the typed text (maybe empty) on Enter. The same helper as
+# Read-DevboxLine of dkdb-common.ps1 (spec 01); without a keyboard (redirected input) it is Read-Host.
+function Read-InstallLine {
+    param([Parameter(Mandatory)][string]$Prompt)
+    if ([Console]::IsInputRedirected) { return (Read-Host $Prompt) }
+    Write-Host "${Prompt}: " -NoNewline
+    $buffer = New-Object System.Text.StringBuilder
+    while ($true) {
+        $key = [Console]::ReadKey($true)
+        switch ($key.Key) {
+            'Enter' { Write-Host ''; return $buffer.ToString() }
+            'Escape' { Write-Host ''; return $null }
+            'Backspace' {
+                if ($buffer.Length -gt 0) {
+                    $null = $buffer.Remove($buffer.Length - 1, 1)
+                    Write-Host "`b `b" -NoNewline
+                }
+            }
+            default {
+                if ($key.KeyChar -and -not [char]::IsControl($key.KeyChar)) {
+                    $null = $buffer.Append($key.KeyChar)
+                    Write-Host $key.KeyChar -NoNewline
+                }
+            }
+        }
+    }
+}
+
 function Confirm-Install {
     param([Parameter(Mandatory)][string]$Question)
-    $answer = Read-Host "$Question [y/N]"
-    return ($answer.Trim() -match '^(y|yes)$')
+    $answer = Read-InstallLine "$Question [y/N] (Esc cancels)"
+    return ($null -ne $answer -and $answer.Trim() -match '^(y|yes)$')
 }
 
 # Add a folder to the user PATH (registry) and to this session, without duplicates.
@@ -375,7 +403,8 @@ if ($RepoUrl.TrimEnd('/') -match '^https://github\.com/([^/]+/[^/]+)$') {
 }
 
 # --- Ask for the shared root and check it ---
-$rootPath = Read-Host "Shared root path [$DefaultRootPath]"
+$rootPath = Read-InstallLine "Shared root path [$DefaultRootPath] (Esc cancels)"
+if ($null -eq $rootPath) { Stop-Install 'Cancelled by the user.' }
 if ([string]::IsNullOrWhiteSpace($rootPath)) { $rootPath = $DefaultRootPath }
 $rootPath = $rootPath.Trim().Replace('/', '\').TrimEnd('\')
 
@@ -405,7 +434,8 @@ if (Test-Path -LiteralPath $scriptsPath) {
 }
 
 # --- Branch or tag ---
-$Branch = Read-Host "Branch or tag to download [$DefaultBranch]"
+$Branch = Read-InstallLine "Branch or tag to download [$DefaultBranch] (Esc cancels)"
+if ($null -eq $Branch) { Stop-Install 'Cancelled by the user.' }
 if ([string]::IsNullOrWhiteSpace($Branch)) { $Branch = $DefaultBranch }
 $Branch = $Branch.Trim()
 if ($Branch -notmatch '^[A-Za-z0-9._/-]+$') { Stop-Install "Invalid branch or tag name: $Branch" }

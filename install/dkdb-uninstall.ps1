@@ -1,5 +1,5 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
-# Version: 0.2.6
+# Version: 0.2.7
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -162,10 +162,38 @@ function Stop-Uninstall {
     exit 1
 }
 
+# Like Read-Host, but Esc cancels: returns $null on Esc, the typed text (maybe empty) on Enter. The same helper as
+# Read-DevboxLine of dkdb-common.ps1 (spec 01); without a keyboard (redirected input) it is Read-Host.
+function Read-UninstallLine {
+    param([Parameter(Mandatory)][string]$Prompt)
+    if ([Console]::IsInputRedirected) { return (Read-Host $Prompt) }
+    Write-Host "${Prompt}: " -NoNewline
+    $buffer = New-Object System.Text.StringBuilder
+    while ($true) {
+        $key = [Console]::ReadKey($true)
+        switch ($key.Key) {
+            'Enter' { Write-Host ''; return $buffer.ToString() }
+            'Escape' { Write-Host ''; return $null }
+            'Backspace' {
+                if ($buffer.Length -gt 0) {
+                    $null = $buffer.Remove($buffer.Length - 1, 1)
+                    Write-Host "`b `b" -NoNewline
+                }
+            }
+            default {
+                if ($key.KeyChar -and -not [char]::IsControl($key.KeyChar)) {
+                    $null = $buffer.Append($key.KeyChar)
+                    Write-Host $key.KeyChar -NoNewline
+                }
+            }
+        }
+    }
+}
+
 function Confirm-Uninstall {
     param([Parameter(Mandatory)][string]$Question)
-    $answer = Read-Host "$Question [y/N]"
-    return ($answer.Trim() -match '^(y|yes)$')
+    $answer = Read-UninstallLine "$Question [y/N] (Esc cancels)"
+    return ($null -ne $answer -and $answer.Trim() -match '^(y|yes)$')
 }
 
 # Remove a folder from the user PATH (registry) and from this session.

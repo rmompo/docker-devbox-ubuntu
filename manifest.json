@@ -1,10 +1,10 @@
 {
   "name": "docker-devbox-ubuntu",
-  "version": "0.19.5",
+  "version": "0.19.6",
   "image": "0.4.0",
   "files": {
-    "install/dkdb-install.ps1": "0.3.5",
-    "install/dkdb-uninstall.ps1": "0.2.6",
+    "install/dkdb-install.ps1": "0.3.6",
+    "install/dkdb-uninstall.ps1": "0.2.7",
     "scripts/bash/dkdb-common.sh": "0.7.0",
     "scripts/bash/dkdb-info.sh": "0.4.1",
     "scripts/bash/dkdb-install-claudecode.sh": "0.3.2",
