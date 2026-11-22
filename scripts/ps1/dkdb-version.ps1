@@ -1,5 +1,5 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.5.0
+# Version: 0.5.1
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -85,13 +85,18 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         # The columns are as wide as the longest name and version, so that they always line up.
         $nameWidth = ($entries | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum
         $versionWidth = ($entries | ForEach-Object { ([string]$_.Value).Length } | Measure-Object -Maximum).Maximum
+        # On a narrow console the folder of the names is left out (scripts/ps1/dkdb-info.ps1 -> dkdb-info.ps1).
+        $shortNames = (2 + $nameWidth + 1 + $versionWidth + 1 + 9) -gt (Get-DevboxConsoleWidth)
+        if ($shortNames) { $nameWidth = ($entries | ForEach-Object { ($_.Name -replace '^.*/', '').Length } | Measure-Object -Maximum).Maximum }
         foreach ($entry in $entries) {
             $listed++
             $path = Join-Path $base ($entry.Name -replace '/', [System.IO.Path]::DirectorySeparatorChar)
             $actual = Get-DevboxFileVersion -Path $path
             $shownActual = $actual
             if (-not $actual) { $shownActual = 'missing' }
-            Write-Host ('  {0} ' -f $entry.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor $DevboxNameColor
+            $shownName = $entry.Name
+            if ($shortNames) { $shownName = $entry.Name -replace '^.*/', '' }
+            Write-Host ('  {0} ' -f $shownName.PadRight($nameWidth)) -NoNewline -ForegroundColor $DevboxNameColor
             Write-Host ('{0} ' -f ([string]$entry.Value).PadRight($versionWidth)) -NoNewline -ForegroundColor $DevboxSuccessColor
             if ($actual -eq [string]$entry.Value) { Write-Host $shownActual -ForegroundColor $DevboxSuccessColor }
             elseif ($entry.Name -eq 'install/dkdb-install.ps1' -and -not $actual) { Write-Host "$shownActual (not found: dkdb-update downloads it)" }
@@ -178,7 +183,13 @@ if ($dockerReachable) {
         Write-Host ' ' -NoNewline
         Write-Host ('{0,-9} ' -f $shown) -NoNewline -ForegroundColor $versionColor
         Write-InfoCompatible -Compatible $compatible
-        if (-not $compatible) { Write-Host ' (it keeps working; newer features may be missing)' -ForegroundColor $DevboxErrorColor; $problems++ } else { Write-Host '' }
+        if (-not $compatible) {
+            # The explanation stays on the line when it fits and goes to the next one, indented, when it does not.
+            $explanation = '(it keeps working; newer features may be missing)'
+            if ((2 + $containerWidth + 1 + 14 + 1 + 9 + 1 + 16 + 1 + $explanation.Length) -gt (Get-DevboxConsoleWidth)) { Write-Host ''; Write-Host "  $explanation" -ForegroundColor $DevboxErrorColor }
+            else { Write-Host " $explanation" -ForegroundColor $DevboxErrorColor }
+            $problems++
+        } else { Write-Host '' }
     }
 }
 

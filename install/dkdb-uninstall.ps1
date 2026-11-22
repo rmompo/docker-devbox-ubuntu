@@ -1,5 +1,5 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
-# Version: 0.2.5
+# Version: 0.2.6
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -23,6 +23,91 @@ $ColorTitle = 'White'
 $ColorName = 'DarkYellow'
 $ColorNote = 'DarkGray'
 $ColorScript = 'White'
+# --- Width of the console (the same rules as dkdb-common.ps1, spec 01) ---
+# Width usable on a line (one less than the window; 80 when it cannot be known).
+function Get-UninstallConsoleWidth {
+    $width = 0
+    try { $width = [int]$Host.UI.RawUI.WindowSize.Width } catch { $width = 0 }
+    if ($width -lt 40) { $width = 80 }
+    return ($width - 1)
+}
+
+# A text cut into lines of at most $Room characters, after a space, / or \ when it can.
+function Get-UninstallValueLines {
+    param([string]$Text, [int]$Room)
+    $lines = @()
+    $rest = $Text
+    while ($rest.Length -gt $Room) {
+        $cut = 0
+        for ($i = $Room; ($i -gt [math]::Floor($Room / 3)) -and ($i -gt 0); $i--) {
+            if (' /\'.IndexOf($rest[$i - 1]) -ge 0) { $cut = $i; break }
+        }
+        if ($cut -eq 0) { $cut = $Room }
+        $lines += $rest.Substring(0, $cut).TrimEnd(' ')
+        $rest = $rest.Substring($cut).TrimStart(' ')
+    }
+    $lines += $rest
+    return $lines
+}
+
+# A text wrapped at the words; a word longer than the line (a path) is cut after a / or \.
+function Get-UninstallWrappedLines {
+    param([string]$Text, [int]$Width)
+    $lines = @()
+    $line = ''
+    foreach ($word in ($Text -split '\s+' | Where-Object { $_ })) {
+        if ($word.Length -gt $Width -and $Width -ge 10) {
+            $pieces = @(Get-UninstallValueLines -Text $word -Room $Width)
+            if ($line) { $lines += $line; $line = '' }
+            for ($k = 0; $k -lt ($pieces.Count - 1); $k++) { $lines += $pieces[$k] }
+            $word = $pieces[$pieces.Count - 1]
+        }
+        if ($line -and (($line.Length + 1 + $word.Length) -gt $Width)) { $lines += $line; $line = $word }
+        elseif ($line) { $line = "$line $word" }
+        else { $line = $word }
+    }
+    if ($line) { $lines += $line }
+    return $lines
+}
+
+# The width of the help and the manual: the console, up to 110 (never fewer than 30).
+function Get-UninstallTextWidth {
+    return [math]::Max(30, [math]::Min((Get-UninstallConsoleWidth), 110))
+}
+
+# Write-Host that wraps a long line at the words to the width of the console, keeping its indentation (a line written
+# in pieces, a short one and any output that is not a console go through as they are).
+function Write-Host {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0, ValueFromRemainingArguments = $true)][object[]]$Object,
+        [switch]$NoNewline,
+        [object]$Separator = ' ',
+        [System.ConsoleColor]$ForegroundColor,
+        [System.ConsoleColor]$BackgroundColor
+    )
+    $text = ''
+    if ($null -ne $Object) { $text = (@($Object | ForEach-Object { [string]$_ }) -join [string]$Separator) }
+    $redirected = $false
+    try { $redirected = [Console]::IsOutputRedirected } catch { $redirected = $false }
+    $width = Get-UninstallConsoleWidth
+    if ($NoNewline -or $redirected -or (($text.Length -le $width) -and ($text.IndexOf("`n") -lt 0))) {
+        Microsoft.PowerShell.Utility\Write-Host @PSBoundParameters
+        return
+    }
+    foreach ($raw in ($text -split "\r?\n")) {
+        $indent = [regex]::Match($raw, '^\s*').Value
+        $lines = @(Get-UninstallWrappedLines -Text $raw.Substring($indent.Length) -Width ([math]::Max(20, $width - $indent.Length)))
+        if ($lines.Count -eq 0) { $lines = @('') }
+        foreach ($line in $lines) {
+            $params = @{ Object = ($indent + $line) }
+            if ($PSBoundParameters.ContainsKey('ForegroundColor')) { $params.ForegroundColor = $ForegroundColor }
+            if ($PSBoundParameters.ContainsKey('BackgroundColor')) { $params.BackgroundColor = $BackgroundColor }
+            Microsoft.PowerShell.Utility\Write-Host @params
+        }
+    }
+}
+
 function Write-UninstallSuccess {
     param([string]$Text)
     Write-Host $Text -ForegroundColor $ColorSuccess
@@ -38,16 +123,26 @@ function Write-UninstallNext {
     $ansi = (-not $env:NO_COLOR) -and (($PSVersionTable.PSVersion.Major -ge 7) -or [bool]$env:WT_SESSION -or ($env:TERM_PROGRAM -eq 'vscode'))
     try { if ([Console]::IsOutputRedirected) { $ansi = $false } } catch { $ansi = $false }
     $esc = [char]27
-    foreach ($part in [regex]::Split($Text, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
-        if (-not $part) { continue }
-        $color = $ColorNext
-        if ($part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') {
-            $color = $ColorScript
-            if ($ansi) { $part = "$esc[1m$part$esc[22m" }
-        }
-        Write-Host $part -NoNewline -ForegroundColor $color
+    # On a console the text is wrapped at the words first (the bold codes would count as characters).
+    $lines = @($Text)
+    $redirected = $false
+    try { $redirected = [Console]::IsOutputRedirected } catch { $redirected = $false }
+    if (-not $redirected) {
+        $lines = @(Get-UninstallWrappedLines -Text $Text -Width (Get-UninstallConsoleWidth))
+        if ($lines.Count -eq 0) { $lines = @('') }
     }
-    Write-Host ''
+    foreach ($lineText in $lines) {
+        foreach ($part in [regex]::Split($lineText, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
+            if (-not $part) { continue }
+            $color = $ColorNext
+            if ($part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') {
+                $color = $ColorScript
+                if ($ansi) { $part = "$esc[1m$part$esc[22m" }
+            }
+            Write-Host $part -NoNewline -ForegroundColor $color
+        }
+        Write-Host ''
+    }
 }
 
 # Project version from <root>\devbox\manifest.json ('unknown' when it cannot be read).
@@ -89,18 +184,6 @@ function Remove-UninstallUserPath {
 }
 
 # --- Help (-Help): same layout as the dkdb-* scripts (spec 01) ---
-function Get-UninstallWrappedLines {
-    param([string]$Text, [int]$Width)
-    $lines = @()
-    $line = ''
-    foreach ($word in ($Text -split '\s+' | Where-Object { $_ })) {
-        if ($line -and (($line.Length + 1 + $word.Length) -gt $Width)) { $lines += $line; $line = $word }
-        elseif ($line) { $line = "$line $word" }
-        else { $line = $word }
-    }
-    if ($line) { $lines += $line }
-    return $lines
-}
 
 function Show-UninstallHelp {
     param(
@@ -111,11 +194,7 @@ function Show-UninstallHelp {
         [string[]]$Notes = @(),
         [string]$VersionLine = ''
     )
-    $width = 100
-    try {
-        $window = $Host.UI.RawUI.WindowSize.Width
-        if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
-    } catch { $width = 100 }
+    $width = Get-UninstallTextWidth
     $parameters = @(@{ Name = '-Help'; Description = 'Show this help and exit.' }, @{ Name = '-Man'; Description = 'Show the manual (what the script does, step by step) and exit.' })
     if ($VersionLine) { Write-Host $VersionLine -ForegroundColor $ColorNote }
     Write-Host ''
@@ -126,19 +205,25 @@ function Show-UninstallHelp {
     foreach ($line in (Get-UninstallWrappedLines -Text $Description -Width ($width - 4))) { Write-Host "    $line" }
     Write-Host ''
     Write-Host 'USAGE' -ForegroundColor $ColorTitle
-    Write-Host "    $Usage" -ForegroundColor $ColorName
+    $usageLines = @(Get-UninstallWrappedLines -Text $Usage -Width ($width - 4))
+    Write-Host "    $($usageLines[0])" -ForegroundColor $ColorName
+    foreach ($line in ($usageLines | Select-Object -Skip 1)) { Write-Host "        $line" -ForegroundColor $ColorName }
     Write-Host ''
     Write-Host 'PARAMETERS' -ForegroundColor $ColorTitle
     $nameWidth = ($parameters | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum + 3
     foreach ($parameter in $parameters) {
+        $lines = @(Get-UninstallWrappedLines -Text $parameter.Description -Width ([math]::Max(15, $width - 4 - $nameWidth)))
         Write-Host ('    ' + $parameter.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor $ColorName
-        Write-Host $parameter.Description
+        Write-Host $lines[0]
+        foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host ((' ' * (4 + $nameWidth)) + $line) }
     }
     if ($Examples.Count -gt 0) {
         Write-Host ''
         Write-Host 'EXAMPLES' -ForegroundColor $ColorTitle
         foreach ($example in $Examples) {
-            Write-Host "    $($example.Command)" -ForegroundColor $ColorName
+            $commandLines = @(Get-UninstallWrappedLines -Text $example.Command -Width ($width - 4))
+            Write-Host "    $($commandLines[0])" -ForegroundColor $ColorName
+            foreach ($line in ($commandLines | Select-Object -Skip 1)) { Write-Host "        $line" -ForegroundColor $ColorName }
             foreach ($line in (Get-UninstallWrappedLines -Text $example.Description -Width ($width - 8))) { Write-Host "        $line" }
         }
     }
@@ -165,11 +250,7 @@ function Show-UninstallMan {
         [string[]]$Never = @(),
         [string]$Next = ''
     )
-    $width = 100
-    try {
-        $window = $Host.UI.RawUI.WindowSize.Width
-        if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
-    } catch { $width = 100 }
+    $width = Get-UninstallTextWidth
     Write-Host ''
     Write-Host 'MANUAL' -ForegroundColor $ColorTitle
     Write-Host "    $Name" -ForegroundColor $ColorName

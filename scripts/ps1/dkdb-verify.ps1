@@ -1,5 +1,5 @@
 # Check the installed package against manifest.json: every listed file must exist and carry
-# Version: 0.2.4
+# Version: 0.2.5
 # the version that the manifest says. Exit code 1 when something is inconsistent.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -43,8 +43,15 @@ Show-DevboxVersion -Script $PSCommandPath
 
 $base = Get-DevboxBase
 $result = Get-DevboxIntegrity -Base $base
-Write-Host "Checked $($result.Checked) files in " -NoNewline
-Write-Host $base -ForegroundColor $DevboxHostColor
+$checkedText = "Checked $($result.Checked) files in "
+if (($checkedText.Length + $base.Length) -le (Get-DevboxConsoleWidth)) {
+    Write-Host $checkedText -NoNewline
+    Write-Host $base -ForegroundColor $DevboxHostColor
+} else {
+    # The path does not fit after the text: it goes below, wrapped at its separators.
+    Write-Host $checkedText.TrimEnd()
+    foreach ($line in @(Get-DevboxValueLines -Text $base -Room ((Get-DevboxConsoleWidth) - 2))) { Write-Host "  $line" -ForegroundColor $DevboxHostColor }
+}
 foreach ($problem in $result.Errors) { Write-DevboxWarning "  ERROR: $problem" }
 foreach ($note in $result.Notes) { Write-DevboxWarning "  note: $note" }
 if ($result.Errors.Count -gt 0) {

@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.15.1
+# Version: 0.16.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -62,6 +62,13 @@ function Get-DevboxWrappedLines {
     $lines = @()
     $line = ''
     foreach ($word in ($Text -split '\s+' | Where-Object { $_ })) {
+        # A word longer than the line (a path) is cut after a / or \ when it can, instead of overflowing.
+        if ($word.Length -gt $Width -and $Width -ge 10) {
+            $pieces = @(Get-DevboxValueLines -Text $word -Room $Width)
+            if ($line) { $lines += $line; $line = '' }
+            for ($k = 0; $k -lt ($pieces.Count - 1); $k++) { $lines += $pieces[$k] }
+            $word = $pieces[$pieces.Count - 1]
+        }
         if ($line -and (($line.Length + 1 + $word.Length) -gt $Width)) { $lines += $line; $line = $word }
         elseif ($line) { $line = "$line $word" }
         else { $line = $word }
@@ -83,11 +90,7 @@ function Show-DevboxHelp {
         [string[]]$Notes = @(),
         [string]$Script = ''
     )
-    $width = 100
-    try {
-        $window = $Host.UI.RawUI.WindowSize.Width
-        if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
-    } catch { $width = 100 }
+    $width = Get-DevboxTextWidth
     if (-not $Name -and $Script) { $Name = [System.IO.Path]::GetFileNameWithoutExtension($Script) }
     $Parameters = @($Parameters) + @(@{ Name = '-Help'; Description = 'Show this help and exit.' }, @{ Name = '-Man'; Description = 'Show the manual (what the script does, step by step) and exit.' })
     if ($Script) { Show-DevboxVersion -Script $Script }
@@ -99,12 +102,20 @@ function Show-DevboxHelp {
     foreach ($line in (Get-DevboxWrappedLines -Text $Description -Width ($width - 4))) { Write-Host "    $line" }
     Write-Host ''
     Write-Host 'USAGE' -ForegroundColor $DevboxTitleColor
-    Write-Host "    $Usage" -ForegroundColor $DevboxNameColor
+    $usageLines = @(Get-DevboxWrappedLines -Text $Usage -Width ($width - 4))
+    Write-Host "    $($usageLines[0])" -ForegroundColor $DevboxNameColor
+    foreach ($line in ($usageLines | Select-Object -Skip 1)) { Write-Host "        $line" -ForegroundColor $DevboxNameColor }
     Write-Host ''
     Write-Host 'PARAMETERS' -ForegroundColor $DevboxTitleColor
-    $nameWidth = ($Parameters | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum + 3
+    $nameWidth = [math]::Min((($Parameters | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum + 3), [math]::Max(8, [math]::Floor(($width - 4) / 2)))
     foreach ($parameter in $Parameters) {
         $lines = @(Get-DevboxWrappedLines -Text $parameter.Description -Width ($width - 4 - $nameWidth))
+        if ($parameter.Name.Length -ge $nameWidth) {
+            Write-Host ('    ' + $parameter.Name) -ForegroundColor $DevboxNameColor
+            $lines = @(Get-DevboxWrappedLines -Text $parameter.Description -Width ($width - 8))
+            foreach ($line in $lines) { Write-Host ('        ' + $line) }
+            continue
+        }
         Write-Host ('    ' + $parameter.Name.PadRight($nameWidth)) -NoNewline -ForegroundColor $DevboxNameColor
         Write-Host $lines[0]
         foreach ($line in ($lines | Select-Object -Skip 1)) { Write-Host ((' ' * (4 + $nameWidth)) + $line) }
@@ -113,7 +124,9 @@ function Show-DevboxHelp {
         Write-Host ''
         Write-Host 'EXAMPLES' -ForegroundColor $DevboxTitleColor
         foreach ($example in $Examples) {
-            Write-Host "    $($example.Command)" -ForegroundColor $DevboxNameColor
+            $commandLines = @(Get-DevboxWrappedLines -Text $example.Command -Width ($width - 4))
+            Write-Host "    $($commandLines[0])" -ForegroundColor $DevboxNameColor
+            foreach ($line in ($commandLines | Select-Object -Skip 1)) { Write-Host "        $line" -ForegroundColor $DevboxNameColor }
             foreach ($line in (Get-DevboxWrappedLines -Text $example.Description -Width ($width - 8))) { Write-Host "        $line" }
         }
     }
@@ -144,11 +157,7 @@ function Show-DevboxMan {
         [string]$Name = '',
         [string]$Script = ''
     )
-    $width = 100
-    try {
-        $window = $Host.UI.RawUI.WindowSize.Width
-        if ($window -ge 60) { $width = [math]::Min($window - 1, 110) }
-    } catch { $width = 100 }
+    $width = Get-DevboxTextWidth
     if (-not $Name -and $Script) { $Name = [System.IO.Path]::GetFileNameWithoutExtension($Script) }
     if ($Script) { Show-DevboxVersion -Script $Script }
     Write-Host ''
@@ -395,16 +404,26 @@ function Write-DevboxNext {
     param([string]$Text)
     $ansi = Test-DevboxAnsi
     $esc = [char]27
-    foreach ($part in [regex]::Split($Text, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
-        if (-not $part) { continue }
-        $color = $DevboxNextColor
-        if ($part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') {
-            $color = $DevboxScriptColor
-            if ($ansi) { $part = "$esc[1m$part$esc[22m" }
-        }
-        Write-Host $part -NoNewline -ForegroundColor $color
+    # On a console the text is wrapped at the words first (the bold codes would count as characters).
+    $lines = @($Text)
+    $redirected = $false
+    try { $redirected = [Console]::IsOutputRedirected } catch { $redirected = $false }
+    if (-not $redirected) {
+        $lines = @(Get-DevboxWrappedLines -Text $Text -Width (Get-DevboxConsoleWidth))
+        if ($lines.Count -eq 0) { $lines = @('') }
     }
-    Write-Host ''
+    foreach ($lineText in $lines) {
+        foreach ($part in [regex]::Split($lineText, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
+            if (-not $part) { continue }
+            $color = $DevboxNextColor
+            if ($part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') {
+                $color = $DevboxScriptColor
+                if ($ansi) { $part = "$esc[1m$part$esc[22m" }
+            }
+            Write-Host $part -NoNewline -ForegroundColor $color
+        }
+        Write-Host ''
+    }
 }
 
 # One line of the list of registered syncs: [active] in green, [paused] in red, then the label.
@@ -663,10 +682,13 @@ function Select-DevboxItem {
         while ($true) {
             for ($i = 0; $i -lt $Items.Count; $i++) {
                 [Console]::SetCursorPosition(0, $top + $i)
+                # An item longer than the line is cut with "..." (it would wrap and break the redraw).
+                $label = $Items[$i]
+                if ($label.Length + 2 -gt $width) { $label = $label.Substring(0, [math]::Max(1, $width - 5)) + '...' }
                 if ($i -eq $index) {
-                    Write-Host ('> ' + $Items[$i]).PadRight($width) -NoNewline -ForegroundColor $DevboxSelectedColor
+                    Write-Host ('> ' + $label).PadRight($width) -NoNewline -ForegroundColor $DevboxSelectedColor
                 } else {
-                    Write-Host ('  ' + $Items[$i]).PadRight($width) -NoNewline
+                    Write-Host ('  ' + $label).PadRight($width) -NoNewline
                 }
             }
             $key = [Console]::ReadKey($true)
@@ -778,6 +800,9 @@ function Select-DevboxItems {
                 $badge = if ($i -lt $Badges.Count) { $Badges[$i] } else { '' }
                 $badgeColor = if ($i -lt $BadgeColors.Count -and $BadgeColors[$i]) { $BadgeColors[$i] } else { $mainColor }
                 $label = $Items[$i]
+                # A label longer than the line is cut with "..." (it would wrap and break the redraw).
+                $fixed = $pointer.Length + $box.Length + 1 + $(if ($badge) { $badge.Length + 1 } else { 0 })
+                if ($fixed + $label.Length -gt $width) { $label = $label.Substring(0, [math]::Max(1, $width - $fixed - 3)) + '...' }
                 $used = $pointer.Length + $box.Length + 1 + $(if ($badge) { $badge.Length + 1 } else { 0 }) + $label.Length
                 $pad = ' ' * [Math]::Max(0, $width - $used)
                 $pointerColor = if ($i -eq $index) { $DevboxSelectedColor } else { $null }
@@ -1391,6 +1416,66 @@ function Get-DevboxConsoleWidth {
     return ($width - 1)
 }
 
+# The width that the texts of the help and the manual use: the console, up to 110 (never fewer than 30).
+function Get-DevboxTextWidth {
+    return [math]::Max(30, [math]::Min((Get-DevboxConsoleWidth), 110))
+}
+
+# A value cut into lines of at most $Room characters: after the last space, / or \ that fits (not too early); without
+# one, at the edge. The same rule as info_field of dkdb-common.sh.
+function Get-DevboxValueLines {
+    param([string]$Text, [int]$Room)
+    $lines = @()
+    $rest = $Text
+    while ($rest.Length -gt $Room) {
+        $cut = 0
+        for ($i = $Room; ($i -gt [math]::Floor($Room / 3)) -and ($i -gt 0); $i--) {
+            if (' /\'.IndexOf($rest[$i - 1]) -ge 0) { $cut = $i; break }
+        }
+        if ($cut -eq 0) { $cut = $Room }
+        $lines += $rest.Substring(0, $cut).TrimEnd(' ')
+        $rest = $rest.Substring($cut).TrimStart(' ')
+    }
+    $lines += $rest
+    return $lines
+}
+
+# Write-Host that wraps a long line at the words to the width of the console (spec 01), so that every message of every
+# script fits without each one calling a helper: the text keeps its indentation and a line that is too long continues
+# under it. A line written in pieces (-NoNewline), a short one and any output that is not a console go through as they
+# are.
+function Write-Host {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0, ValueFromRemainingArguments = $true)][object[]]$Object,
+        [switch]$NoNewline,
+        [object]$Separator = ' ',
+        [System.ConsoleColor]$ForegroundColor,
+        [System.ConsoleColor]$BackgroundColor
+    )
+    $text = ''
+    if ($null -ne $Object) { $text = (@($Object | ForEach-Object { [string]$_ }) -join [string]$Separator) }
+    $redirected = $false
+    try { $redirected = [Console]::IsOutputRedirected } catch { $redirected = $false }
+    $width = Get-DevboxConsoleWidth
+    if ($NoNewline -or $redirected -or (($text.Length -le $width) -and ($text.IndexOf("`n") -lt 0))) {
+        Microsoft.PowerShell.Utility\Write-Host @PSBoundParameters
+        return
+    }
+    foreach ($raw in ($text -split "\r?\n")) {
+        $indent = [regex]::Match($raw, '^\s*').Value
+        $body = $raw.Substring($indent.Length)
+        $lines = @(Get-DevboxWrappedLines -Text $body -Width ([math]::Max(20, $width - $indent.Length)))
+        if ($lines.Count -eq 0) { $lines = @('') }
+        foreach ($line in $lines) {
+            $params = @{ Object = ($indent + $line) }
+            if ($PSBoundParameters.ContainsKey('ForegroundColor')) { $params.ForegroundColor = $ForegroundColor }
+            if ($PSBoundParameters.ContainsKey('BackgroundColor')) { $params.BackgroundColor = $BackgroundColor }
+            Microsoft.PowerShell.Utility\Write-Host @params
+        }
+    }
+}
+
 # One line of a card: the label, a leader of dots and the value, which always starts in the same
 # column. A value longer than the line continues on the next lines, aligned with the first
 # character of the value.
@@ -1409,8 +1494,7 @@ function Write-DevboxCardField {
     if ($Color -and $Badge) { $colorArgs.ForegroundColor = 'Black'; $colorArgs.BackgroundColor = $Color }
     elseif ($Color) { $colorArgs.ForegroundColor = $Color }
     $first = $true
-    for ($i = 0; $first -or $i -lt $Value.Length; $i += $room) {
-        $chunk = $Value.Substring($i, [math]::Min($room, $Value.Length - $i))
+    foreach ($chunk in @(Get-DevboxValueLines -Text $Value -Room $room)) {
         if ($first) { $prefix = "$Label " + ('.' * [math]::Max(2, $valueColumn - 2 - $Label.Length)) + ' ' } else { $prefix = ' ' * $valueColumn }
         Write-Host $prefix -NoNewline
         Write-Host $chunk @colorArgs
@@ -1433,8 +1517,7 @@ function Write-DevboxBadgeField {
     $room = [math]::Max(10, $Width - $ValueColumn)
     if (-not $Value) { $Value = '-' }
     $first = $true
-    for ($i = 0; $first -or $i -lt $Value.Length; $i += $room) {
-        $chunk = $Value.Substring($i, [math]::Min($room, $Value.Length - $i))
+    foreach ($chunk in @(Get-DevboxValueLines -Text $Value -Room $room)) {
         if ($first) {
             Write-DevboxSideBadge -Text $Badge -Color $Color
             Write-Host (('.' * [math]::Max(2, $ValueColumn - $Badge.Length - 3)) + ' ') -NoNewline
@@ -1466,8 +1549,14 @@ function Write-DevboxInfoSection {
     param([Parameter(Mandatory)][string]$Title, [string]$Note)
     Write-Host ''
     Write-Host $Title.ToUpperInvariant() -NoNewline -ForegroundColor $DevboxSectionColor
-    if ($Note) { Write-Host " $Note" -NoNewline -ForegroundColor $DevboxNoteColor }
+    if (-not $Note) { Write-Host ''; return }
+    if (($Title.Length + 1 + $Note.Length) -le (Get-DevboxConsoleWidth)) {
+        Write-Host " $Note" -ForegroundColor $DevboxNoteColor
+        return
+    }
+    # The note does not fit next to the title: it goes below, indented and wrapped at the words.
     Write-Host ''
+    foreach ($line in @(Get-DevboxWrappedLines -Text $Note -Width ((Get-DevboxConsoleWidth) - 2))) { Write-Host "  $line" -ForegroundColor $DevboxNoteColor }
 }
 
 # One property: INDENT LABEL ...... values. LabelWidth is the length of the longest label of the block, so that
@@ -1508,10 +1597,34 @@ function Write-DevboxInfoField {
                 Write-Host (' ' * $valueColumn) -NoNewline
                 $column = 0
             }
-            $count = [math]::Min($room - $column, $text.Length)
-            Write-DevboxColored -Text $text.Substring(0, $count) -Color $piece.Color
-            $column += $count
-            $text = $text.Substring($count)
+            if ($column -eq 0) { $text = $text.TrimStart(' ') }
+            if ($text.Length -eq 0) { break }
+            $count = $room - $column
+            $cut = [math]::Min($count, $text.Length)
+            if ($text.Length -gt $count) {
+                # Too long for the line: break after the last space, / or \ that fits (not too early); without one, a
+                # text that fits on a line of its own goes down whole, and a longer one is cut at the edge.
+                $cut = 0
+                for ($i = $count; ($i -gt [math]::Floor($count / 3)) -and ($i -gt 0); $i--) {
+                    if (' /\'.IndexOf($text[$i - 1]) -ge 0) { $cut = $i; break }
+                }
+                if ($cut -eq 0) {
+                    if ($column -gt 0 -and $text.Length -le $room) {
+                        Write-Host ''
+                        Write-Host (' ' * $valueColumn) -NoNewline
+                        $column = 0
+                        continue
+                    }
+                    $cut = $count
+                }
+            }
+            $chunk = $text.Substring(0, $cut)
+            $text = $text.Substring($cut)
+            $shown = $chunk
+            if ($text.Length -gt 0) { $shown = $chunk.TrimEnd(' ') }
+            Write-DevboxColored -Text $shown -Color $piece.Color
+            $column += $chunk.Length
+            if ($text.Length -gt 0) { $column = $room }
         }
     }
     Write-Host ''
