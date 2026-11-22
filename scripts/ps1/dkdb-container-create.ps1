@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.5.3
+# Version: 0.6.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -68,20 +68,30 @@ $defaultImageRef = Get-DevboxCompatibleImage -ImageName $defaultImageName
 if (-not $defaultImageRef) { $defaultImageRef = Get-DevboxCompatibleImage -ImageName $defaultImageName -AnyVersion }
 $defaultImageSuffix = ''
 if ($defaultImageRef) { $defaultImageSuffix = $defaultImageRef.Substring($defaultImageName.Length) }
+# Esc at any question cancels the creation (nothing has been created yet).
+function Stop-CreateCancelled {
+    Write-Host 'Cancelled. Nothing was created.'
+    exit 0
+}
 $imageInput = Read-DevboxName -Prompt 'Image name' -Default $DevboxDefaultName -DefaultSuffix $defaultImageSuffix
+if ($null -eq $imageInput) { Stop-CreateCancelled }
 $imageName = Get-DevboxFullName $imageInput
 
 $containerInput = Read-DevboxName -Prompt 'Container name' -Default $DevboxDefaultName
+if ($null -eq $containerInput) { Stop-CreateCancelled }
 $containerName = Get-DevboxFullName $containerInput
 
 # The default user is the same as the container (full name, prefix included).
 $userInput = Read-DevboxName -Prompt 'User name' -Default $containerInput
+if ($null -eq $userInput) { Stop-CreateCancelled }
 $userName = Get-DevboxFullName $userInput
 
-$projectsPath = Read-Host "Host projects path [$DevboxDefaultProjectsPath]"
+$projectsPath = Read-DevboxLine "Host projects path [$DevboxDefaultProjectsPath] (Esc cancels)"
+if ($null -eq $projectsPath) { Stop-CreateCancelled }
 if ([string]::IsNullOrWhiteSpace($projectsPath)) { $projectsPath = $DevboxDefaultProjectsPath }
 $defaultToolsPath = Get-DevboxDefaultToolsPath
-$toolsPath = Read-Host "Host tools path [$defaultToolsPath]"
+$toolsPath = Read-DevboxLine "Host tools path [$defaultToolsPath] (Esc cancels)"
+if ($null -eq $toolsPath) { Stop-CreateCancelled }
 if ([string]::IsNullOrWhiteSpace($toolsPath)) { $toolsPath = $defaultToolsPath }
 
 # Volume type for the projects folder (Mutagen is downloaded later if needed).
@@ -105,7 +115,8 @@ if ($PSBoundParameters.ContainsKey('Ports')) {
     Write-Host '  Example: 8080:8080,3100:3000   opens http://localhost:8080, and http://localhost:3100 which reaches port 3000 inside.'
     Write-Host '  The ip is 127.0.0.1 (only this computer) unless you type another one; 0.0.0.0 exposes the port to your network.'
     Write-Host '  The host port must be free on Windows. They cannot be changed later: you would create a new container.'
-    $portText = Read-Host 'Ports [none]'
+    $portText = Read-DevboxLine 'Ports [none] (Esc cancels)'
+    if ($null -eq $portText) { Stop-CreateCancelled }
     $portInput = @($portText)
 }
 

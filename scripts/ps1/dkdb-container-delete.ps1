@@ -1,5 +1,5 @@
 # Delete one stopped devbox container, given with -Container or chosen from a menu.
-# Version: 0.4.1
+# Version: 0.4.2
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # With a Mutagen container, only its Mutagen sessions (the whole projects folder and its
@@ -61,8 +61,8 @@ $DevboxMenuScript = $PSCommandPath
 
 function Invoke-DeleteAction {
     param([Parameter(Mandatory)][string]$Selected)
-    $answer = Read-Host "Delete '$Selected'? Its home and installed AI client are lost (with Mutagen, the container copy of the projects too). [y/N]"
-    if ($answer -notmatch '^[yY]$') {
+    $answer = Read-DevboxLine "Delete '$Selected'? Its home and installed AI client are lost (with Mutagen, the container copy of the projects too). [y/N] (Esc cancels)"
+    if ($null -eq $answer -or $answer -notmatch '^[yY]$') {
         Write-Host 'Cancelled.'
         return
     }

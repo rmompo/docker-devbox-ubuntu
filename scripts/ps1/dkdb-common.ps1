@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.16.0
+# Version: 0.17.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -604,7 +604,7 @@ function Get-DevboxFullName {
     return "$DevboxPrefix-$Name"
 }
 
-# Ask for a name, using a default; returns the validated text (without prefix).
+# Ask for a name, using a default; returns the validated text (without prefix), or $null when Esc is pressed.
 function Read-DevboxName {
     param(
         [Parameter(Mandatory)][string]$Prompt,
@@ -614,7 +614,8 @@ function Read-DevboxName {
     while ($true) {
         # The default is shown with the prefix (and, for images, with its version, for example
         # ':0.1.0'); the typed text never includes either of them.
-        $value = Read-Host "$Prompt [$DevboxPrefix-$Default$DefaultSuffix]"
+        $value = Read-DevboxLine "$Prompt [$DevboxPrefix-$Default$DefaultSuffix] (Esc cancels)"
+        if ($null -eq $value) { return $null }
         if ([string]::IsNullOrWhiteSpace($value)) { $value = $Default }
         $value = $value.Trim()
         if ($value -cnotmatch '^[a-z][a-z0-9_-]*$') {
@@ -1174,8 +1175,8 @@ function Install-DevboxMutagen {
     Write-Host 'It synchronizes the projects folder with a copy inside the container, avoiding the slow'
     Write-Host 'Docker Desktop mounts. Download: about 100 MB from github.com/mutagen-io/mutagen.'
     Write-Host 'License: MIT, plus SSPL for part of the official builds; it is a separate third-party tool (spec 08).'
-    $answer = Read-Host 'Download and install it? [y/N]'
-    if ($answer.Trim() -notmatch '^(y|yes)$') { return $false }
+    $answer = Read-DevboxLine 'Download and install it? [y/N] (Esc cancels)'
+    if ($null -eq $answer -or $answer.Trim() -notmatch '^(y|yes)$') { return $false }
 
     $tag = "v$DevboxMutagenVersion"
     $asset = "mutagen_windows_amd64_$tag.zip"

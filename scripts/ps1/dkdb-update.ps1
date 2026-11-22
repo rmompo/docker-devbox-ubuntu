@@ -1,5 +1,5 @@
 # Update the installed scripts from the repository (optionally from another branch or tag).
-# Version: 0.3.0
+# Version: 0.3.1
 # It downloads manifest.json and the files whose version changed into a temporary folder, checks them
 # and only then copies them over the installation. Nothing is changed if anything fails.
 # PositionalBinding is off so that a stray argument is an error.
@@ -150,8 +150,8 @@ try {
         foreach ($file in $stale) { Write-Host "  $($file.Relative)" }
     }
     Write-DevboxWarning 'The files to update are overwritten (manual edits are lost) and the files to delete are removed.'
-    $answer = Read-Host 'Continue? [y/N]'
-    if ($answer -notmatch '^\s*(y|yes)\s*$') {
+    $answer = Read-DevboxLine 'Continue? [y/N] (Esc cancels)'
+    if ($null -eq $answer -or $answer -notmatch '^\s*(y|yes)\s*$') {
         Write-Host 'Cancelled: nothing was changed.'
         exit 0
     }

@@ -1,5 +1,5 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.5.1
+# Version: 0.5.2
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -54,8 +54,8 @@ function Show-InfoText {
 # Reverse-video word that says whether a version is compatible.
 function Write-InfoCompatible {
     param([bool]$Compatible)
-    if ($Compatible) { Write-Host ' COMPATIBLE ' -NoNewline -ForegroundColor Black -BackgroundColor $DevboxBadgeCompatibleColor }
-    else { Write-Host ' NOT-COMPATIBLE ' -NoNewline -ForegroundColor Black -BackgroundColor $DevboxBadgeIncompatibleColor }
+    if ($Compatible) { Write-DevboxSideBadge -Text 'COMPATIBLE' -Color $DevboxBadgeCompatibleColor }
+    else { Write-DevboxSideBadge -Text 'NOT-COMPATIBLE' -Color $DevboxBadgeIncompatibleColor }
 }
 
 $scripts = Get-DevboxVersion

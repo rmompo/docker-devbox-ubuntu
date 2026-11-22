@@ -1,5 +1,5 @@
 # Control the Mutagen service: start or stop the daemon, see its state, clean the orphan sessions.
-# Version: 0.2.0
+# Version: 0.2.1
 # One menu of actions. It acts on Mutagen as a whole (one daemon per user), not on a container: the sessions of a
 # container are managed with dkdb-mutagen-manage. dkdb-container-start and dkdb-container-connect already start
 # the daemon for a Mutagen container.
@@ -169,8 +169,8 @@ function Invoke-ServiceClean {
 
     Write-Host 'Sessions to terminate:'
     $targets | ForEach-Object { Write-Host "  $_" }
-    $answer = Read-Host 'Terminate them? The host folders are not touched. [y/N]'
-    if ($answer -notmatch '^[yY]$') {
+    $answer = Read-DevboxLine 'Terminate them? The host folders are not touched. [y/N] (Esc cancels)'
+    if ($null -eq $answer -or $answer -notmatch '^[yY]$') {
         Write-Host 'Cancelled.'
         return
     }
