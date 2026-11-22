@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.17.0
+# Version: 0.17.1
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -440,8 +440,14 @@ function Write-DevboxSyncLine {
 function Read-DevboxLine {
     param([Parameter(Mandatory)][string]$Prompt, [string]$Badge, [string]$BadgeColor)
     if ([Console]::IsInputRedirected) { return (Read-Host $Prompt) }
+    # A long prompt is wrapped at the words (the proxy of Write-Host does not touch a line written in pieces): all its
+    # lines but the last one end the line, and the last one waits for the answer on the same line.
+    $badgeLength = 0
+    if ($Badge) { $badgeLength = $Badge.Length + 3 }
+    $promptLines = @(Get-DevboxWrappedLines -Text "${Prompt}:" -Width ([math]::Max(20, (Get-DevboxConsoleWidth) - $badgeLength - 1)))
     if ($Badge) { Write-DevboxSideBadge -Text $Badge -Color $BadgeColor; Write-Host ' ' -NoNewline }
-    Write-Host "${Prompt}: " -NoNewline
+    for ($i = 0; $i -lt ($promptLines.Count - 1); $i++) { Write-Host $promptLines[$i] }
+    Write-Host "$($promptLines[$promptLines.Count - 1]) " -NoNewline
     $buffer = New-Object System.Text.StringBuilder
     while ($true) {
         $key = [Console]::ReadKey($true)

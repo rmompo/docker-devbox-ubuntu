@@ -1,5 +1,5 @@
 # Control the Mutagen service: start or stop the daemon, see its state, clean the orphan sessions.
-# Version: 0.2.1
+# Version: 0.2.2
 # One menu of actions. It acts on Mutagen as a whole (one daemon per user), not on a container: the sessions of a
 # container are managed with dkdb-mutagen-manage. dkdb-container-start and dkdb-container-connect already start
 # the daemon for a Mutagen container.
@@ -115,18 +115,20 @@ function Invoke-ServiceStop {
 
 function Invoke-ServiceState {
     $version = Get-DevboxMutagenVersion
-    if ($version) { Write-Host "Mutagen $version" } else { Write-Host 'Mutagen (version unknown)' }
-    Write-Host 'Executable: ' -NoNewline
-    Write-Host (Get-DevboxMutagenExe) -ForegroundColor $DevboxHostColor
+    if (-not $version) { $version = 'unknown' }
+    # The same layout as the Mutagen section of dkdb-info (labels, dots, values wrapped to the console).
+    Write-DevboxInfoSection -Title 'Mutagen'
+    Write-DevboxInfoField -Label 'Version' -LabelWidth 10 -Value @((New-DevboxInfoText $version $null))
+    Write-DevboxInfoField -Label 'Executable' -LabelWidth 10 -Value @((New-DevboxInfoText (Get-DevboxMutagenExe) $DevboxHostColor))
     if (Test-DevboxMutagenDaemon) {
-        Write-Host 'Daemon: ' -NoNewline
-        Write-Host 'running' -ForegroundColor $DevboxRunningColor
         $count = @(Get-DevboxMutagenSessions).Count
-        Write-Host "Sessions: $count (every Mutagen session of your user, not only the dkdb- ones)"
+        Write-DevboxInfoField -Label 'Daemon' -LabelWidth 10 -Value @((New-DevboxInfoText 'running' $DevboxRunningColor))
+        Write-DevboxInfoField -Label 'Sessions' -LabelWidth 10 -Value @((New-DevboxInfoText "$count (every Mutagen session of your user, not only the dkdb- ones)" $null))
+        Write-Host ''
         Write-DevboxNext 'Next: dkdb-mutagen-manage.ps1 shows and changes the sessions of a container.'
     } else {
-        Write-Host 'Daemon: ' -NoNewline
-        Write-Host 'stopped' -ForegroundColor $DevboxStoppedColor
+        Write-DevboxInfoField -Label 'Daemon' -LabelWidth 10 -Value @((New-DevboxInfoText 'stopped' $DevboxStoppedColor))
+        Write-Host ''
         Write-DevboxNext 'Next: start it with this script (Start), or with dkdb-container-start.ps1 or dkdb-container-connect.ps1 for a Mutagen container.'
     }
 }

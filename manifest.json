@@ -1,10 +1,10 @@
 {
   "name": "docker-devbox-ubuntu",
-  "version": "0.19.6",
+  "version": "0.19.7",
   "image": "0.4.0",
   "files": {
-    "install/dkdb-install.ps1": "0.3.6",
-    "install/dkdb-uninstall.ps1": "0.2.7",
+    "install/dkdb-install.ps1": "0.3.7",
+    "install/dkdb-uninstall.ps1": "0.2.8",
     "scripts/bash/dkdb-common.sh": "0.7.0",
     "scripts/bash/dkdb-info.sh": "0.4.1",
     "scripts/bash/dkdb-install-claudecode.sh": "0.3.2",
@@ -16,7 +16,7 @@
     "scripts/bash/ntm-ssologin/dkdb-ntm-ssologin-keyring-run.sh": "0.1.2",
     "scripts/docker/Dockerfile": "0.1.1",
     "scripts/docker/entrypoint.sh": "0.4.0",
-    "scripts/ps1/dkdb-common.ps1": "0.17.0",
+    "scripts/ps1/dkdb-common.ps1": "0.17.1",
     "scripts/ps1/dkdb-container-connect.ps1": "0.8.1",
     "scripts/ps1/dkdb-container-create.ps1": "0.6.0",
     "scripts/ps1/dkdb-container-delete.ps1": "0.4.2",
@@ -26,7 +26,7 @@
     "scripts/ps1/dkdb-image-delete.ps1": "0.3.1",
     "scripts/ps1/dkdb-info.ps1": "0.5.1",
     "scripts/ps1/dkdb-mutagen-manage.ps1": "0.3.0",
-    "scripts/ps1/dkdb-mutagen-service.ps1": "0.2.1",
+    "scripts/ps1/dkdb-mutagen-service.ps1": "0.2.2",
     "scripts/ps1/dkdb-update.ps1": "0.3.1",
     "scripts/ps1/dkdb-verify.ps1": "0.2.5",
     "scripts/ps1/dkdb-version.ps1": "0.5.2"

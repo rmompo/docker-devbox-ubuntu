@@ -1,5 +1,5 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
-# Version: 0.2.7
+# Version: 0.2.8
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -167,7 +167,10 @@ function Stop-Uninstall {
 function Read-UninstallLine {
     param([Parameter(Mandatory)][string]$Prompt)
     if ([Console]::IsInputRedirected) { return (Read-Host $Prompt) }
-    Write-Host "${Prompt}: " -NoNewline
+    # A long prompt is wrapped at the words; the last line waits for the answer on the same line.
+    $promptLines = @(Get-UninstallWrappedLines -Text "${Prompt}:" -Width ([math]::Max(20, (Get-UninstallConsoleWidth) - 1)))
+    for ($i = 0; $i -lt ($promptLines.Count - 1); $i++) { Write-Host $promptLines[$i] }
+    Write-Host "$($promptLines[$promptLines.Count - 1]) " -NoNewline
     $buffer = New-Object System.Text.StringBuilder
     while ($true) {
         $key = [Console]::ReadKey($true)

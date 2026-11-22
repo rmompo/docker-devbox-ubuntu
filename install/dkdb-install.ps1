@@ -1,5 +1,5 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.3.6
+# Version: 0.3.7
 # It downloads manifest.json and every file it lists (scripts and dkdb-uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -163,7 +163,10 @@ function Stop-Install {
 function Read-InstallLine {
     param([Parameter(Mandatory)][string]$Prompt)
     if ([Console]::IsInputRedirected) { return (Read-Host $Prompt) }
-    Write-Host "${Prompt}: " -NoNewline
+    # A long prompt is wrapped at the words; the last line waits for the answer on the same line.
+    $promptLines = @(Get-InstallWrappedLines -Text "${Prompt}:" -Width ([math]::Max(20, (Get-InstallConsoleWidth) - 1)))
+    for ($i = 0; $i -lt ($promptLines.Count - 1); $i++) { Write-Host $promptLines[$i] }
+    Write-Host "$($promptLines[$promptLines.Count - 1]) " -NoNewline
     $buffer = New-Object System.Text.StringBuilder
     while ($true) {
         $key = [Console]::ReadKey($true)
