@@ -1,5 +1,5 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.5.0
+# Version: 0.5.1
 # volumes, published ports and Mutagen. For the versions, see dkdb-version.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -30,7 +30,7 @@ if ($Man) {
         -Steps @(
             'Prints the shared root and its folders and the PATH.',
             'Prints Docker.',
-            'Lists images and containers with their state, user, volume type, mounts and published ports (host ip:port -> container port).',
+            'Lists images and containers with their state, user, volume type, mounts and published ports (host ip:port -> container port, each side labelled and in its color).',
             'Only when a container uses Mutagen (or the daemon has sessions), prints the Mutagen daemon and, per container, its sessions with their progress, the overlaps of active sessions and the host folders shared by several containers.'
         ) `
         -Changes @(
@@ -138,7 +138,7 @@ if ($dockerReachable) {
         if ($published.Count -eq 0) { Show-InfoText -Label 'Ports' -Text 'none published' -LabelWidth 8 -Indent 4 }
         foreach ($port in $published) {
             Write-DevboxInfoField -Label 'Port' -LabelWidth 8 -Indent 4 -Value @(
-                (Get-InfoHost ('{0}:{1}' -f $port.BindIp, $port.HostPort)), (Get-InfoPlain ' -> '), (Get-InfoContainer ('{0}/{1}' -f $port.ContainerPort, $port.Protocol)))
+                (Get-InfoHost ('host {0}:{1}' -f $port.BindIp, $port.HostPort)), (Get-InfoPlain ' -> '), (Get-InfoContainer ('container {0}/{1}' -f $port.ContainerPort, $port.Protocol)))
         }
     }
 }
@@ -158,14 +158,14 @@ if ($showMutagen) {
     } else {
         Write-DevboxInfoField -Label 'Executable' -Value @((Get-InfoHost (Get-DevboxMutagenExe))) -LabelWidth 10
         if (-not $daemonUp) {
-            Show-InfoText -Label 'Daemon' -Text 'stopped (dkdb-mutagen-start, dkdb-mutagen-sync, or starting or connecting a Mutagen container, start it)' -Color $DevboxErrorColor -LabelWidth 10
+            Show-InfoText -Label 'Daemon' -Text 'stopped (dkdb-mutagen-service, dkdb-mutagen-manage, or starting or connecting a Mutagen container, start it)' -Color $DevboxErrorColor -LabelWidth 10
         } else {
             Show-InfoText -Label 'Daemon' -Text 'running' -Color $DevboxSuccessColor -LabelWidth 10
             $byHostFolder = @{}
             foreach ($container in $mutagenContainers) {
                 $mine = @(Get-DevboxContainerSyncSessions -Container $container)
                 Write-Host "  $container"
-                if ($mine.Count -eq 0) { Show-InfoText -Label 'Session' -Text 'none yet (dkdb-mutagen-sync creates it)' -LabelWidth 10 -Indent 4 }
+                if ($mine.Count -eq 0) { Show-InfoText -Label 'Session' -Text 'none yet (dkdb-mutagen-manage creates it)' -LabelWidth 10 -Indent 4 }
                 foreach ($session in $mine) {
                     $counts = ''
                     if ($null -ne $session.Total -and $session.Total -gt 0) { $counts = ", $($session.Done) of $($session.Total) files" }
@@ -194,7 +194,7 @@ if ($showMutagen) {
 
 Write-Host ''
 if ($showMutagen) {
-    Write-DevboxNext 'Next: dkdb-version.ps1 shows every version; dkdb-mutagen-status.ps1 shows the details of a session.'
+    Write-DevboxNext 'Next: dkdb-version.ps1 shows every version; dkdb-mutagen-manage.ps1 (Status) shows the details of a session.'
 } else {
     Write-DevboxNext 'Next: dkdb-version.ps1 shows every version.'
 }

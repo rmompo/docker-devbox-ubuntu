@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.4.0
+# Version: 0.4.1
 # Show how this container is set up, seen from inside it: user, folders, mounts, AI client, published ports and the
 # Mutagen sessions.
 # Same layout as dkdb-info.ps1 on the host. It only reads. The ports and the Mutagen part come from the state file
@@ -14,7 +14,7 @@ usage() {
         'Prints the container, its folders, mounts, published ports and Mutagen sessions.' \
         'For the versions see dkdb-version.sh.' \
         'Layout (same as dkdb-info on the host): SECTIONS in capitals, PROPERTIES in capitals followed by dots up to the values, values wrapped to the width of the terminal. Host paths are cyan and container paths magenta. Special words are shown in reverse video: MUTAGEN (red), MUTAGEN-SYNC (yellow), VOLUME-P9 (red), READ-ONLY (green) and READ-WRITE (red).' \
-        'The published ports and the Mutagen sessions come from ~/.devbox-state, written by the host (dkdb-container-connect, dkdb-mutagen-sync, dkdb-mutagen-status and dkdb-mutagen-stop refresh it).'
+        'The published ports and the Mutagen sessions come from ~/.devbox-state, written by the host (dkdb-container-connect, dkdb-mutagen-manage and dkdb-mutagen-service refresh it).'
 }
 MAN_PURPOSE='Shows how this container is set up, in the same layout as dkdb-info on the host.'
 MAN_NEEDS=('Nothing. The ports and the Mutagen part need the state file ~/.devbox-state, which the host scripts write.')
@@ -27,7 +27,7 @@ MAN_STEPS=(
 )
 MAN_CHANGES=('Nothing: it only reads.')
 MAN_NEVER=('Synchronizes, pauses or changes any session (that is done from the host).' 'Touches the host or Docker.')
-MAN_NEXT='bash ~/devbox/bash/dkdb-version.sh shows every version; in a Mutagen container, dkdb-mutagen-status.ps1 on the host shows the details of a session.'
+MAN_NEXT='bash ~/devbox/bash/dkdb-version.sh shows every version; in a Mutagen container, dkdb-mutagen-manage.ps1 (Status) on the host shows the details of a session.'
 handle_arguments "$@"
 
 banner "${BASH_SOURCE[0]}"
@@ -117,7 +117,7 @@ else
     else
         while IFS='|' read -r bind_ip host_port target; do
             [ -n "$host_port" ] || continue
-            info_field 'Port' 5 2 "t:host:$bind_ip:$host_port" 't:none: -> ' "t:container:$target"
+            info_field 'Port' 5 2 "t:host:host $bind_ip:$host_port" 't:none: -> ' "t:container:container $target"
         done < <(state_each port)
     fi
 fi
@@ -126,14 +126,14 @@ fi
 if [ "$sync_kind" = mutagen ]; then
     info_section 'Mutagen'
     if [ ! -r "$DEVBOX_STATE_FILE" ]; then
-        info_field 'State' 10 2 't:red:no state yet: run dkdb-container-connect or dkdb-mutagen-sync on the host to write it'
+        info_field 'State' 10 2 't:red:no state yet: run dkdb-container-connect or dkdb-mutagen-manage on the host to write it'
     else
         daemon="$(state_get daemon)"
         updated="$(state_get updated)"
         info_field 'Reported' 10 2 "t:none:as the host reported at $updated"
         case "$daemon" in
             running) info_field 'Daemon' 10 2 't:green:running' ;;
-            stopped) info_field 'Daemon' 10 2 't:red:stopped (dkdb-mutagen-start, dkdb-mutagen-sync, or starting or connecting the container, start it)' ;;
+            stopped) info_field 'Daemon' 10 2 't:red:stopped (dkdb-mutagen-service, dkdb-mutagen-manage, or starting or connecting the container, start it)' ;;
             *) info_field 'Daemon' 10 2 "t:none:${daemon:-unknown}" ;;
         esac
         name="$(hostname)"
@@ -148,12 +148,12 @@ if [ "$sync_kind" = mutagen ]; then
             fi
             info_field 'Session' 10 4 "${pieces[@]}"
         done < <(state_each session)
-        if [ "$count" -eq 0 ] && [ "$daemon" = running ]; then info_field 'Session' 10 4 't:none:none yet (dkdb-mutagen-sync on the host creates it)'; fi
+        if [ "$count" -eq 0 ] && [ "$daemon" = running ]; then info_field 'Session' 10 4 't:none:none yet (dkdb-mutagen-manage on the host creates it)'; fi
         if [ "$count" -gt 0 ]; then
             if pgrep -f mutagen-agent >/dev/null 2>&1; then
                 info_field 'Agent' 10 2 't:none:a Mutagen agent is connected'
             else
-                info_field 'Agent' 10 2 't:red:no Mutagen agent is connected: the list may be out of date (dkdb-mutagen-status on the host shows the real state)'
+                info_field 'Agent' 10 2 't:red:no Mutagen agent is connected: the list may be out of date (the Status action of dkdb-mutagen-manage on the host shows the real state)'
             fi
         fi
     fi
@@ -161,7 +161,7 @@ fi
 
 echo
 if [ "$sync_kind" = mutagen ]; then
-    next 'Next: bash ~/devbox/bash/dkdb-version.sh shows every version; dkdb-mutagen-status.ps1 on the host shows the details of a session.'
+    next 'Next: bash ~/devbox/bash/dkdb-version.sh shows every version; dkdb-mutagen-manage.ps1 (Status) on the host shows the details of a session.'
 else
     next 'Next: bash ~/devbox/bash/dkdb-version.sh shows every version.'
 fi

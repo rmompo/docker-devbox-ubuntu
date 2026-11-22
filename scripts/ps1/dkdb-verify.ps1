@@ -1,5 +1,5 @@
 # Check the installed package against manifest.json: every listed file must exist and carry
-# Version: 0.2.3
+# Version: 0.2.4
 # the version that the manifest says. Exit code 1 when something is inconsistent.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -16,7 +16,7 @@ if ($Help) {
             @{ Command = 'dkdb-verify'; Description = 'Lists the files checked and reports every difference.' }
         ) `
         -Notes @(
-            'Exit code 1 when something is inconsistent; files that the manifest does not list are reported as notes.'
+            'Exit code 1 when something is inconsistent; files that the manifest does not list, or says were removed, are reported as notes.'
         )
     exit 0
 }
@@ -28,7 +28,7 @@ if ($Man) {
         ) `
         -Steps @(
             'Reads manifest.json and checks that every listed file exists and has the version of the manifest.',
-            'Reports files under scripts or install that the manifest does not list, as notes.'
+            'Reports files under scripts or install that the manifest does not list, or that it lists as removed (dkdb-update deletes them), as notes.'
         ) `
         -Changes @(
             'Nothing: it only reads.'

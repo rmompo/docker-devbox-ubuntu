@@ -1,6 +1,6 @@
 # Start one stopped devbox container, given with -Container or chosen from a menu.
-# Version: 0.6.1
-# For a Mutagen container a menu chooses what to synchronize (Keep (no changes) is the first option and the default).
+# Version: 0.7.0
+# For a Mutagen container it starts the daemon and leaves the sessions as they are (dkdb-mutagen-manage changes them).
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -11,17 +11,17 @@ param(
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Starts one stopped devbox container, given with -Container or chosen from a menu. For a container that uses Mutagen it starts the daemon too and then asks what to synchronize; by default (Keep (no changes)) the sessions stay as they are.' `
+        -Description 'Starts one stopped devbox container, given with -Container or chosen from a menu. For a container that uses Mutagen it starts the daemon too and leaves the sessions as they are; dkdb-mutagen-manage changes what is synchronized.' `
         -Usage 'dkdb-container-start [-Container <name>] [-Help] [-Man]' `
         -Parameters @(
             @{ Name = '-Container'; Description = 'Name of the container (with or without the dkdb- prefix); skips the container menu. It must be a stopped container.' }
         ) `
         -Examples @(
-            @{ Command = 'dkdb-container-start'; Description = 'Starts the container; for a Mutagen container it then shows the synchronization menu.' },
+            @{ Command = 'dkdb-container-start'; Description = 'Starts the container; for a Mutagen container it also makes sure the daemon runs.' },
             @{ Command = 'dkdb-container-start -Container dkdb-dev'; Description = 'Starts that container without the menu.' }
         ) `
         -Notes @(
-            'For a container that uses Mutagen a menu asks what to synchronize: Keep (no changes) (the first option, the default: continue with the sessions exactly as they are; nothing is created, resumed or paused), Custom (a checklist of the registered sessions: checked ones are active, the others paused), All (registered), None (pause all: the daemon is started and the existing sessions are paused), Add (relative) (a folder relative to the host projects folder), or Add (absolute) (a host folder and a folder of the container). Every Add and activation checks both folders: a missing host folder aborts the operation; a missing folder of the container is created after asking. A new folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). Custom refuses overlapping folders. Nothing is ever terminated.',
+            'For a container that uses Mutagen it starts the daemon and leaves the sessions exactly as they are: nothing is created, resumed, paused or terminated. To choose what is synchronized use dkdb-mutagen-manage.',
             'An image older than the scripts only produces a warning: the container keeps working.'
         )
     exit 0
@@ -32,13 +32,14 @@ if ($Man) {
         -Needs @(
             'Docker Engine running and a stopped dkdb- container.'
         ) `
-        -Steps (@(
+        -Steps @(
             'Warns, never stops, when the package or the image of the container have another version.',
-            'Uses the container given with -Container, or shows the menu of stopped containers, and runs docker start.'
-        ) + $DevboxSyncMenuMan) `
+            'Uses the container given with -Container, or shows the menu of stopped containers, and runs docker start.',
+            'If the container uses Mutagen, runs the checks (variables, mutagen, container ID, host path, container ready, active overlaps), starts the Mutagen daemon if needed and lists the registered sessions with their state; the sessions stay as they are (use dkdb-mutagen-manage to change them).'
+        ) `
         -Changes @(
             'The container is running.',
-            'With Mutagen, sessions may be created, resumed or paused according to the choice.'
+            'With Mutagen, the daemon may be started; no session is changed.'
         ) `
         -Never @(
             'Is blocked by versions.',
@@ -78,13 +79,14 @@ if ($LASTEXITCODE -ne 0) {
 Write-DevboxSuccess "Container '$selected' started."
 
 if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
-    # The menu decides what is synchronized; the first option, Keep (no changes), is the default.
-    $pick = Invoke-DevboxSyncPick -Container $selected -Flush
+    # The daemon is started and the sessions stay as they are (dkdb-mutagen-manage changes them).
+    $pick = Invoke-DevboxSyncPick -Container $selected -KeepOnly
     if (-not $pick.Ok) {
         Write-DevboxWarning 'The container is running, but the projects are NOT synchronized.'
         exit 1
     }
     if ($pick.Active) { Write-DevboxSuccess "Mutagen sync for '$selected' is active." }
+    else { Write-DevboxNext 'Next: dkdb-mutagen-manage.ps1 chooses what to synchronize (Add or Modify), then dkdb-container-connect.ps1.'; exit 0 }
 }
 
 Write-DevboxNext 'Next: dkdb-container-connect.ps1.'

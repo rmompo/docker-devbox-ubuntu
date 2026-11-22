@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.3.2
+# Version: 0.4.0
 # Show every version seen from inside the container: the image, the bash scripts against the manifest and the tools.
 # Same layout as dkdb-version.ps1 on the host. It only reads; it works even when the host has not written the state.
 set -u
@@ -20,7 +20,7 @@ MAN_STEPS=(
     'Prints the project version and the image version that the host scripts build and expect, from the state file.'
     'Compares each bash script of ~/devbox/bash (its Version header) with the version in the manifest.'
     'Prints the operating system, bash, git, python and the AI client installed.'
-    'Prints the version of the image this container was created from and whether it is compatible with the scripts (same major.minor in 0.x, same major from 1.0).'
+    'Prints the projects volume of this container (MUTAGEN-SYNC or VOLUME-P9, a Docker bind mount), the version of the image it was created from and whether it is compatible with the scripts (same major.minor in 0.x, same major from 1.0).'
 )
 MAN_CHANGES=('Nothing: it only reads.')
 MAN_NEVER=('Blocks anything: an older image is only reported.' 'Touches the host or Docker.')
@@ -96,15 +96,16 @@ else
 fi
 
 # --- This container ---
-info_section 'Container' '(version of the image it was created from)'
+info_section 'Container' '(projects volume and version of the image it was created from)'
 image_version="${DEVBOX_IMAGE_VERSION:-}"
 [ -n "$image_version" ] || image_version="$(cat /etc/devbox-image-version 2>/dev/null)"
 shown="${image_version:-unknown}"
+if [ "${DEVBOX_SYNC:-}" = mutagen ]; then volume_badge="$(badge sync ' MUTAGEN-SYNC ')"; else volume_badge="$(badge volume ' VOLUME-P9    ')"; fi
 if [ -n "$expected" ] && version_compatible "$shown" "$expected"; then
-    printf '  %s%s%s %s%-9s%s ' "$c_name" "$(hostname)" "$c_off" "$c_green" "$shown" "$c_off"
+    printf '  %s%s%s %s %s%-9s%s ' "$c_name" "$(hostname)" "$c_off" "$volume_badge" "$c_green" "$shown" "$c_off"
     compat_badge yes; echo
 else
-    printf '  %s%s%s %s%-9s%s ' "$c_name" "$(hostname)" "$c_off" "$c_red" "$shown" "$c_off"
+    printf '  %s%s%s %s %s%-9s%s ' "$c_name" "$(hostname)" "$c_off" "$volume_badge" "$c_red" "$shown" "$c_off"
     compat_badge no; printf '%s (it keeps working; newer features may be missing)%s\n' "$c_red" "$c_off"
     problems=$((problems + 1))
 fi

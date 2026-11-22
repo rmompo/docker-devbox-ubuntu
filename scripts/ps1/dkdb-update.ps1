@@ -1,5 +1,5 @@
 # Update the installed scripts from the repository (optionally from another branch or tag).
-# Version: 0.2.1
+# Version: 0.3.0
 # It downloads manifest.json and the files whose version changed into a temporary folder, checks them
 # and only then copies them over the installation. Nothing is changed if anything fails.
 # PositionalBinding is off so that a stray argument is an error.
@@ -23,7 +23,7 @@ if ($Help) {
         ) `
         -Notes @(
             'Only the files whose version differs from the manifest (or that are missing) are replaced; manual edits to those files are lost.',
-            'Files that are no longer in the repository are not deleted (dkdb-verify reports them as notes).',
+            'The files that the repository lists as removed (the "removed" list of manifest.json) are deleted from the installation after you confirm; any other file of yours in those folders is left alone. When an older dkdb-update runs the update, the removed files go away the next time you run it.',
             'dkdb-install.ps1 and dkdb-uninstall.ps1 are replaced like any other file; running dkdb-install.ps1 again is only needed to change the shared root or the PATH.',
             'It never touches images, containers, Mutagen sessions or your projects.'
         )
@@ -38,18 +38,18 @@ if ($Man) {
         ) `
         -Steps @(
             'Downloads manifest.json of the branch or tag (default main) into a temporary folder.',
-            'Compares the version of every listed file with the installed one and lists what is new or changed.',
-            'When there is nothing to update it says so and stops.',
+            'Compares the version of every listed file with the installed one and lists what is new or changed, and the installed files that manifest.json lists as removed.',
+            'When there is nothing to update or delete it says so and stops.',
             'Asks [y/N] before replacing anything.',
             'Downloads the files to update into the temporary folder and checks that the Version header of each one equals the manifest; otherwise it stops and nothing is changed.',
-            'Copies the files over the installation (manifest.json last), unblocks the .ps1 files and removes the temporary folder.',
+            'Copies the files over the installation (manifest.json last), deletes the removed ones, unblocks the .ps1 files and removes the temporary folder.',
             'Checks the installation against the new manifest and tells you if the image must be rebuilt (image version changed incompatibly).'
         ) `
         -Changes @(
-            'The files under <root>\devbox whose version changed, and manifest.json.'
+            'The files under <root>\devbox whose version changed, manifest.json and the files deleted because the manifest lists them as removed.'
         ) `
         -Never @(
-            'Deletes files, images, containers, Mutagen sessions or projects.',
+            'Deletes anything other than the files listed as removed in manifest.json, or images, containers, Mutagen sessions or projects.',
             'Changes the PATH or the shared root (run dkdb-install.ps1 for that).',
             'Changes anything when a download or a check fails.'
         ) `
@@ -109,6 +109,16 @@ try {
         Write-DevboxWarning 'Error: the downloaded manifest.json does not list any file. Nothing was changed.'
         exit 1
     }
+    # Files that the package no longer has (the "removed" list): deleted from the installation when present. Only paths
+    # inside scripts/ or install/ are accepted, and never one that the manifest lists as a file.
+    $stale = @()
+    foreach ($gone in @($manifest.removed)) {
+        $relative = [string]$gone
+        if (-not $relative -or $relative -notmatch '^(scripts|install)/' -or $relative -match '(^|/)\.\.(/|$)' -or $relative -match '[\\:]') { continue }
+        if (@($entries | Where-Object { $_.Name -eq $relative }).Count -gt 0) { continue }
+        $path = Join-Path $base ($relative -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+        if (Test-Path -LiteralPath $path -PathType Leaf) { $stale += [pscustomobject]@{ Relative = $relative; Path = $path } }
+    }
     $oldVersion = Get-DevboxVersion
     $oldImage = Get-DevboxImageVersion
     $newVersion = [string]$manifest.version
@@ -125,7 +135,7 @@ try {
             $changes += [pscustomobject]@{ Relative = $relative; Path = $path; Old = $current; New = [string]$entry.Value }
         }
     }
-    if ($changes.Count -eq 0 -and $oldVersion -eq $newVersion) {
+    if ($changes.Count -eq 0 -and $stale.Count -eq 0 -and $oldVersion -eq $newVersion) {
         Write-DevboxSuccess "Already up to date ($oldVersion)."
         Write-DevboxNext 'Next: nothing to do; dkdb-version.ps1 shows every version.'
         exit 0
@@ -135,7 +145,11 @@ try {
         $from = if ($change.Old) { $change.Old } else { 'missing' }
         Write-Host "  $($change.Relative): $from -> $($change.New)"
     }
-    Write-DevboxWarning 'These files are overwritten (manual edits are lost); files that no longer exist in the repository are not deleted.'
+    if ($stale.Count -gt 0) {
+        Write-Host 'Files to delete (no longer part of the package):'
+        foreach ($file in $stale) { Write-Host "  $($file.Relative)" }
+    }
+    Write-DevboxWarning 'The files to update are overwritten (manual edits are lost) and the files to delete are removed.'
     $answer = Read-Host 'Continue? [y/N]'
     if ($answer -notmatch '^\s*(y|yes)\s*$') {
         Write-Host 'Cancelled: nothing was changed.'
@@ -167,11 +181,14 @@ try {
             if ($change.Path -like '*.ps1') { try { Unblock-File -LiteralPath $change.Path } catch { Write-Verbose 'Unblock-File is not available' } }
         }
         Copy-Item -LiteralPath $manifestFile -Destination (Join-Path $base 'manifest.json') -Force
+        foreach ($file in $stale) { Remove-Item -LiteralPath $file.Path -Force }
     } catch {
         Write-DevboxWarning "Error: could not copy the files ($($_.Exception.Message)). The installation may be inconsistent: run dkdb-verify, or the installer again."
         exit 1
     }
-    Write-DevboxSuccess "Updated $($changes.Count) file(s): $oldVersion -> $newVersion."
+    $deleted = ''
+    if ($stale.Count -gt 0) { $deleted = ", deleted $($stale.Count)" }
+    Write-DevboxSuccess "Updated $($changes.Count) file(s)${deleted}: $oldVersion -> $newVersion."
 
     $integrity = Get-DevboxIntegrity -Base $base
     foreach ($problem in $integrity.Errors) { Write-DevboxWarning "  ERROR: $problem" }

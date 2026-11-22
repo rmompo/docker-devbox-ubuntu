@@ -1,5 +1,5 @@
 # Delete one stopped devbox container, given with -Container or chosen from a menu.
-# Version: 0.3.1
+# Version: 0.3.2
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # With a Mutagen container, only its Mutagen sessions (the whole projects folder and its
@@ -41,7 +41,7 @@ if ($Man) {
             'Asks [y/N]: its home and installed AI client are lost (with Mutagen, also the container copy of the projects).',
             'For a Mutagen container, reads the names of its sessions first (they depend on the container ID).',
             'Runs docker rm.',
-            'With Mutagen, terminates the sessions of that container (the whole projects folder and its folders) when the daemon is running; otherwise dkdb-mutagen-clean removes them later.'
+            'With Mutagen, terminates the sessions of that container (the whole projects folder and its folders) when the daemon is running; otherwise dkdb-mutagen-service (Clean) removes them later.'
         ) `
         -Changes @(
             'Removes the container and, with Mutagen, its sessions.'

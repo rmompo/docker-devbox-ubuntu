@@ -23,7 +23,7 @@
 
 | Item | Result | Source |
 |---|---|---|
-| `dkdb-mutagen-status` with several sessions | It failed with `System.Object[]` cannot be converted to `Int64`: `ConvertFrom-Json` emits a JSON array as one object in 5.1 (element by element in PowerShell 7, which was the one used for the tests). Fixed with `ConvertFrom-DevboxJsonList`; the tests now simulate the 5.1 behavior. | Report of the project owner, 2026-10-06 |
+| `dkdb-mutagen-manage` (Status) with several sessions | It failed with `System.Object[]` cannot be converted to `Int64`: `ConvertFrom-Json` emits a JSON array as one object in 5.1 (element by element in PowerShell 7, which was the one used for the tests). Fixed with `ConvertFrom-DevboxJsonList`; the tests now simulate the 5.1 behavior. | Report of the project owner, 2026-10-06 |
 
 ## Re-verified (2026-10-05)
 

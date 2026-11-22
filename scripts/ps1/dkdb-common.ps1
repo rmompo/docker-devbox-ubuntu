@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.13.0
+# Version: 0.14.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -127,18 +127,6 @@ function Show-DevboxHelp {
 }
 
 # --- Manual (-Man): what a script does, in colors (spec 01) ---
-# The synchronization menu, shared by the manuals of the scripts that show it.
-$DevboxSyncMenuMan = @(
-    'If the container uses Mutagen, the Mutagen daemon is started and a menu asks what to synchronize: Keep (no changes) (the first option and the default), Custom, All (registered), None (pause all), Add (relative) or Add (absolute).',
-    'None (pause all) pauses every session of the container: nothing is synchronized.',
-    'Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; %VAR% (for example %USERPROFILE%) and ~ are accepted for the host folder (your Windows user folder) and $HOME and ~ for the folder of the container (/home/<user>); they are stored resolved, not recalculated later.',
-    'Every Add and every activation checks both folders: if a folder does not exist on the host you are asked whether to create it (No aborts); if the folder of the container exists it is used (a warning on Add), and if it does not exist you are asked whether to create it.',
-    'A new folder is activated and added to what is already active, so several folders can be synchronized at once. Activating one that covers active sessions pauses them; choosing one that is inside an active session changes nothing (somebody may be using it).',
-    'All (registered) activates the registered sessions that are not inside another one. A session of the whole projects folder is never created by the menu.',
-    'Custom (shown when sessions are registered) is a checklist: Space checks or unchecks, Enter applies. The checked sessions are active and the unchecked ones paused. If two checked folders overlap, it warns and changes nothing.',
-    'Sessions are only paused, never terminated, and no file is touched.'
-)
-
 # Print the manual of a script: PURPOSE, REQUIREMENTS, WHAT IT DOES (numbered), WHAT IT CHANGES, WHAT IT
 # NEVER DOES and NEXT STEP. Headings in cyan, the name and the step numbers in green, the next step in
 # yellow; lines wrapped to the window.
@@ -258,7 +246,8 @@ function Show-DevboxVersion {
 
 # Compare the files under $Base with manifest.json: every listed file must exist and its
 # '# Version:' header must equal the manifest entry. Returns Errors (the package is
-# inconsistent) and Notes (files under scripts/ or install/ that the manifest does not list).
+# inconsistent) and Notes (files under scripts/ or install/ that the manifest does not list, and files that
+# it says were removed from the package, which dkdb-update deletes).
 function Get-DevboxIntegrity {
     param([Parameter(Mandatory)][string]$Base)
     $Base = [System.IO.Path]::GetFullPath($Base).TrimEnd('\', '/')
@@ -277,10 +266,14 @@ function Get-DevboxIntegrity {
         return [pscustomobject]@{ Errors = @('manifest.json has no files list'); Notes = @(); Checked = 0 }
     }
     if (-not $manifest.image) { $errors += "manifest.json has no 'image' version" }
+    # 'removed': the files that earlier versions of the package had and this one does not (dkdb-update deletes them).
+    $removed = @{}
+    foreach ($gone in @($manifest.removed)) { if ($gone) { $removed[[string]$gone] = $true } }
     $listed = @{}
     foreach ($entry in $manifest.files.PSObject.Properties) {
         $relative = $entry.Name
         $listed[$relative] = $true
+        if ($removed.ContainsKey($relative)) { $errors += "listed in files and in removed: $relative" }
         $path = Join-Path $Base ($relative -replace '/', [System.IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
             # The installer is only needed to install or move the package, and a missing one must not stop the use of
@@ -295,7 +288,8 @@ function Get-DevboxIntegrity {
     }
     foreach ($file in (Get-ChildItem -Path (Join-Path $Base 'scripts'), (Join-Path $Base 'install') -Recurse -File -ErrorAction SilentlyContinue)) {
         $relative = ($file.FullName.Substring($Base.Length).TrimStart('\', '/')) -replace '\\', '/'
-        if (-not $listed.ContainsKey($relative)) { $notes += "not listed in manifest.json: $relative" }
+        if ($removed.ContainsKey($relative)) { $notes += "removed from the package (dkdb-update deletes it): $relative" }
+        elseif (-not $listed.ContainsKey($relative)) { $notes += "not listed in manifest.json: $relative" }
     }
     return [pscustomobject]@{ Errors = @($errors); Notes = @($notes); Checked = $listed.Count }
 }
@@ -483,6 +477,14 @@ function Write-DevboxSymbolText {
 function Write-DevboxSideBadge {
     param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Color)
     Write-Host " $Text " -NoNewline -ForegroundColor Black -BackgroundColor $Color
+}
+
+# Badge of the projects volume of a container: MUTAGEN-SYNC (a copy kept in sync by Mutagen) or VOLUME-P9 (a Docker
+# bind mount of the host folder), both of the same width so that the columns line up. $Sync is the DEVBOX_SYNC value.
+function Write-DevboxVolumeBadge {
+    param([string]$Sync)
+    if ($Sync -eq 'mutagen') { Write-DevboxSideBadge -Text 'MUTAGEN-SYNC' -Color $DevboxBadgeSyncColor }
+    else { Write-DevboxSideBadge -Text 'VOLUME-P9   ' -Color $DevboxBadgeVolumeColor }
 }
 
 function Assert-DevboxDocker {
@@ -1158,7 +1160,7 @@ function Start-DevboxMutagenDaemon {
     }
     Write-DevboxWarning "Mutagen: 'daemon start' exited with code $startCode."
     Write-DevboxWarning "Mutagen: the daemon does not answer: $(Get-DevboxMutagenDaemonError)"
-    Write-DevboxNext 'If it mentions a version mismatch, another Mutagen daemon is running: stop it with dkdb-mutagen-stop.ps1 (or mutagen daemon stop) and try again.'
+    Write-DevboxNext 'If it mentions a version mismatch, another Mutagen daemon is running: stop it with dkdb-mutagen-service.ps1 (Stop) (or mutagen daemon stop) and try again.'
     return $false
 }
 
@@ -1298,7 +1300,7 @@ function Get-DevboxMutagenSessions {
     return @($sessions | Where-Object { $_ } | ForEach-Object { ConvertTo-DevboxSyncProgress -Session $_ })
 }
 
-# Width of the console for the cards of dkdb-mutagen-status (one less than the window, 80 when unknown).
+# Width of the console for the cards of the Status action of dkdb-mutagen-manage (one less than the window, 80 when unknown).
 function Get-DevboxConsoleWidth {
     $width = 0
     try { $width = [int]$Host.UI.RawUI.WindowSize.Width } catch { $width = 0 }
@@ -1544,13 +1546,13 @@ function Show-DevboxSyncFailure {
     $json = (Invoke-DevboxNative -Path $mutagen -Arguments @('sync', 'list', '--template', '{{json .}}', $Session)).Output
     $info = Get-DevboxSyncProgress -Json $json
     if (-not $info) {
-        Write-DevboxWarning "The session '$Session' could not be read. Check it with: dkdb-mutagen-status"
+        Write-DevboxWarning "The session '$Session' could not be read. Check it with the Status action of dkdb-mutagen-manage.ps1"
         return
     }
     Write-DevboxWarning "Mutagen status: $($info.Status)"
     if ($info.LastError) { Write-DevboxWarning "Mutagen last error: $($info.LastError)" }
     else { Write-Host 'Mutagen reports no error for the session (it may be reconnecting).' }
-    Write-DevboxNext 'Next: dkdb-mutagen-status.ps1 shows the details and the progress; run it again to see whether it moves.'
+    Write-DevboxNext 'Next: dkdb-mutagen-manage.ps1 (Status) shows the details and the progress; run it again to see whether it moves.'
 }
 
 # --- Incremental synchronization (menu of Invoke-DevboxSyncPick, spec 08) ---
@@ -1613,7 +1615,7 @@ function Invoke-DevboxSyncFlush {
     param([Parameter(Mandatory)][string]$Session)
     $mutagen = Get-DevboxMutagenExe
     Write-Host "Synchronizing $Session ..."
-    Write-DevboxNext 'A large folder can take a while: follow it from another terminal with dkdb-mutagen-status.ps1.'
+    Write-DevboxNext 'A large folder can take a while: follow it from another terminal with dkdb-mutagen-manage.ps1 (Status).'
     & $mutagen sync flush $Session | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-DevboxWarning 'Warning: the flush failed. Mutagen retries the connection by itself; the synchronization may still progress.'
@@ -2025,10 +2027,12 @@ function Register-DevboxSyncFolder {
 # Nothing is ever terminated and no file is touched. A session of the whole projects folder is never
 # created here, it only appears when it exists.
 # Keep (no changes) leaves every session in its current state (active stay active, paused stay paused).
-# AddOnly (dkdb-mutagen-add) shows only Add (relative) and Add (absolute).
+# AddOnly (the add action of dkdb-mutagen-manage) shows only Add (relative) and Add (absolute); NoAdd (its modify
+# action) shows everything except them: Keep, Custom, All and None. KeepOnly (dkdb-container-start and
+# dkdb-container-connect) shows no menu: it runs the checks, starts the daemon and leaves every session as it is.
 # Returns Ok ($false on failure; the reason is printed) and Active ($true when something is synchronized).
 function Invoke-DevboxSyncPickCore {
-    param([Parameter(Mandatory)][string]$Container, [switch]$Flush, [switch]$AddOnly)
+    param([Parameter(Mandatory)][string]$Container, [switch]$Flush, [switch]$AddOnly, [switch]$NoAdd, [switch]$KeepOnly)
     $result = [pscustomobject]@{ Ok = $true; Active = $false; Cancelled = $false }
     $fail = { $result.Ok = $false; return $result }
     $user = Get-DevboxContainerUser -Container $Container
@@ -2061,6 +2065,17 @@ function Invoke-DevboxSyncPickCore {
     $sessions = @(Get-DevboxPickSessions -Container $Container -User $user)
     # Two ACTIVE sessions that overlap must not exist (a paused one does no harm).
     if ((Show-DevboxSessionOverlaps -Container $Container -Sessions @(Get-DevboxContainerSyncSessions -Container $Container)) -gt 0) { return (& $fail) }
+    if ($KeepOnly) {
+        # No menu: the sessions stay exactly as they are (nothing is created, resumed, paused or flushed).
+        if ($sessions.Count -gt 0) {
+            Write-Host "Registered syncs in '$Container':"
+            foreach ($item in @($sessions | Sort-Object { $_.Label })) { Write-DevboxSyncLine -Session $item }
+        } else {
+            Write-Host "No syncs registered in '$Container' yet."
+        }
+        $result.Active = [bool]@($sessions | Where-Object { -not $_.Paused }).Count
+        return $result
+    }
     $rootBeta = "/home/$user/devbox/projects"
     # The base folders of Add (relative) are shown above the registered syncs.
     $hostBase = $hostPath.TrimEnd('\', '/')
@@ -2075,12 +2090,15 @@ function Invoke-DevboxSyncPickCore {
     } else {
         $labels = @($keepItem)
         if ($sessions.Count -gt 0) { $labels += @($customItem, $allItem) }
-        $labels += @($noneItem, $relativeItem, $absoluteItem)
+        $labels += @($noneItem)
+        if (-not $NoAdd) { $labels += @($relativeItem, $absoluteItem) }
     }
     # The base folders of Add (relative), then the registered syncs and their state, before the menu.
-    Write-Host 'Base folders (Add relative):'
-    Write-DevboxBadgeField -Badge 'HOST' -Value "$hostBase\" -Color $DevboxHostColor
-    Write-DevboxBadgeField -Badge 'CONTAINER' -Value "$rootBeta/" -Color $DevboxContainerColor
+    if (-not $NoAdd) {
+        Write-Host 'Base folders (Add relative):'
+        Write-DevboxBadgeField -Badge 'HOST' -Value "$hostBase\" -Color $DevboxHostColor
+        Write-DevboxBadgeField -Badge 'CONTAINER' -Value "$rootBeta/" -Color $DevboxContainerColor
+    }
     if ($sessions.Count -gt 0) {
         Write-Host "Registered syncs in '$Container':"
         foreach ($item in @($sessions | Sort-Object { $_.Label })) {
@@ -2090,7 +2108,7 @@ function Invoke-DevboxSyncPickCore {
     else {
         Write-Host "No syncs registered in '$Container' yet."
     }
-    $title = if ($AddOnly) { "Select how to add a folder to '$Container':" } else { "Select what to synchronize in '$Container':" }
+    $title = if ($AddOnly) { "Select how to add a folder to '$Container':" } elseif ($NoAdd) { "Select what to activate or pause in '$Container':" } else { "Select what to synchronize in '$Container':" }
     $choice = Select-DevboxItem -Title $title -Items $labels
     if (-not $choice) {
         Write-Host 'Cancelled: nothing was changed.'
@@ -2293,27 +2311,27 @@ function Update-DevboxContainerState {
 # The menu (Invoke-DevboxSyncPickCore) and, afterwards, the refresh of the state file of the container,
 # so that dkdb-info.sh and dkdb-version.sh inside it show the new situation.
 function Invoke-DevboxSyncPick {
-    param([Parameter(Mandatory)][string]$Container, [switch]$Flush, [switch]$AddOnly)
-    $result = Invoke-DevboxSyncPickCore -Container $Container -Flush:$Flush -AddOnly:$AddOnly
+    param([Parameter(Mandatory)][string]$Container, [switch]$Flush, [switch]$AddOnly, [switch]$NoAdd, [switch]$KeepOnly)
+    $result = Invoke-DevboxSyncPickCore -Container $Container -Flush:$Flush -AddOnly:$AddOnly -NoAdd:$NoAdd -KeepOnly:$KeepOnly
     $null = Update-DevboxContainerState -Container $Container
     return $result
 }
 
 # Terminate one Mutagen session (the host folder is not touched). It never starts the daemon:
-# when Mutagen or its daemon is not running, the session is left for dkdb-mutagen-clean.
+# when Mutagen or its daemon is not running, the session is left for the Clean action of dkdb-mutagen-service.
 function Remove-DevboxSyncSession {
     param([string]$SessionName)
     if (-not $SessionName) {
-        Write-DevboxWarning 'Warning: the Mutagen session name is unknown; run dkdb-mutagen-clean to look for leftover sessions.'
+        Write-DevboxWarning 'Warning: the Mutagen session name is unknown; run dkdb-mutagen-service.ps1 (Clean) to look for leftover sessions.'
         return
     }
     if (-not (Test-DevboxMutagen) -or -not (Test-DevboxMutagenDaemon)) {
-        Write-DevboxWarning "Warning: the Mutagen daemon is not running, so the session '$SessionName' was not terminated. Run dkdb-mutagen-clean later."
+        Write-DevboxWarning "Warning: the Mutagen daemon is not running, so the session '$SessionName' was not terminated. Run dkdb-mutagen-service.ps1 (Clean) later."
         return
     }
     & (Get-DevboxMutagenExe) sync terminate $SessionName *> $null
     if ($LASTEXITCODE -ne 0) {
-        Write-DevboxWarning "Warning: could not terminate the Mutagen session '$SessionName'. Run dkdb-mutagen-clean later."
+        Write-DevboxWarning "Warning: could not terminate the Mutagen session '$SessionName'. Run dkdb-mutagen-service.ps1 (Clean) later."
         return
     }
     Write-DevboxSuccess "Mutagen session terminated: $SessionName"

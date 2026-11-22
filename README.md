@@ -66,13 +66,13 @@ The scripts of `~/devbox/bash` run by name in a container created from image 0.2
 | Script | What it shows |
 |--------|---------------|
 | `dkdb-info.sh` | Container, user, image version, folders and mounts, AI client, published ports and, in a Mutagen container only, the Mutagen sessions. |
-| `dkdb-version.sh` | The package and image versions, each bash script against the manifest, the tools and whether the container image is compatible. |
+| `dkdb-version.sh` | The package and image versions, each bash script against the manifest, the tools, the projects volume of the container and whether its image is compatible. |
 
 The installer and `dkdb-update` also copy the subfolders of `scripts/bash` listed in the manifest (for example `ntm-ssologin/`, with its own `README.md`), which the container sees under `~/devbox/bash/`.
 
 If an image lacks tools that the scripts need (for example one older than the scripts), `dkdb-install-tools.sh` checks them by group (`base`: curl, git, jq; `keyring`: dbus, gnome-keyring, libsecret-tools) and installs the missing ones with apt (as root or with sudo). `dkdb-install-tools.sh check` only reports what is missing; the `keyring` group installs about 90 packages, which is why it is not part of the image.
 
-The published ports, the Mutagen sessions and the manifest versions come from `~/.devbox-state`, a file that the host scripts write (`dkdb-container-connect`, `dkdb-mutagen-sync`, `dkdb-mutagen-status` and `dkdb-mutagen-stop` refresh it); it carries the time it was written, so it can be out of date.
+The published ports, the Mutagen sessions and the manifest versions come from `~/.devbox-state`, a file that the host scripts write (`dkdb-container-connect`, `dkdb-mutagen-manage` and `dkdb-mutagen-service` refresh it); it carries the time it was written, so it can be out of date.
 
 ## Usage
 
@@ -82,26 +82,21 @@ From any folder, in a new terminal:
 |---|---------|--------------|
 | 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
 | 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path, the projects volume type: Mutagen (the first option and the default) or Docker bind mount, and the ports to publish; `-Ports <list>` skips that last question). |
-| 3 | `dkdb-container-start` | Starts a stopped container (menu, or `-Container <name>` to skip it). For a Mutagen container it then shows the synchronization menu; the first option, **Keep (no changes)**, is the default. |
-| 4 | `dkdb-container-connect` | Opens a shell in a running container (menu, or `-Container <name>`); for a Mutagen container it shows the same synchronization menu first. |
+| 3 | `dkdb-container-start` | Starts a stopped container (menu, or `-Container <name>` to skip it). For a Mutagen container it also starts the daemon and leaves the sessions as they are (`dkdb-mutagen-manage` changes them). |
+| 4 | `dkdb-container-connect` | Opens a shell in a running container (menu, or `-Container <name>`); for a Mutagen container it also starts the daemon and leaves the sessions as they are. |
 | 5 | `dkdb-container-stop` | Stops a running container (menu, or `-Container <name>`). |
 | 6 | `dkdb-container-delete` | Deletes a stopped container (menu, or `-Container <name>`; it always asks for confirmation). |
 | 7 | `dkdb-image-delete` | Deletes an image. |
-| 8 | `dkdb-mutagen-start` | Starts the Mutagen daemon if it is not running (optional Mutagen). |
-| 9 | `dkdb-mutagen-stop` | Stops the Mutagen daemon if it is running (stops all Mutagen sessions). |
-| 10 | `dkdb-mutagen-status` | Shows the sync state, conflicts and progress (`So far X of Y files`, and whether it moved since the previous query) of a Mutagen container (menu, or `-Container <name>` to skip it). |
-| 11 | `dkdb-mutagen-clean` | Terminates leftover Mutagen sessions (container deleted outside the scripts, or daemon stopped at that time; menu, asks first). |
-| 12 | `dkdb-mutagen-remove` | Removes one registered Mutagen session of a container: menu of the sessions with their state, then stops and terminates the chosen one after a `[y/N]` (`-Container <name>` skips the container menu). The folders are not touched. |
-| 13 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
-| 14 | `dkdb-mutagen-sync` | Chooses a running Mutagen container (menu, or `-Container <name>`) and shows the synchronization menu (the same one as start and connect). |
-| 15 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers. |
-| 16 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes, published ports and, when a container uses Mutagen (or the daemon has sessions), Mutagen. |
-| 17 | `dkdb-update` | Updates the installed scripts from the repository (`-Branch <name>` to use another branch or tag; default `main`). Only files whose version changed are replaced, after a `[y/N]`. |
-| 18 | `dkdb-mutagen-add` | Adds a folder (a new Mutagen session) to a running Mutagen container: Add (relative) or Add (absolute), with both folders checked (`-Container <name>` skips the container menu). The same Add flow as the synchronization menu, without the other options. |
+| 8 | `dkdb-mutagen-service` | Controls the Mutagen service from a menu (it acts on Mutagen as a whole, not on a container): start the daemon, stop it (stops all your Mutagen sessions), show its state, or terminate the orphan sessions (container deleted outside the scripts, or daemon stopped at that time; asks first). |
+| 9 | `dkdb-mutagen-manage` | Manages the Mutagen sessions of a container from a menu of actions: **Add** a folder (Add (relative) or Add (absolute), both folders checked), **Modify** (activate or pause sessions: Keep, Custom, All, None), **Remove** a session (after a `[y/N]`) and **Status** (state, conflicts and progress, `So far X of Y files`, and whether it moved since the previous query; also for all the containers). `-Container <name>` skips the container menu. The folders are never touched. |
+| 10 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
+| 11 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers (each with its projects volume: `MUTAGEN-SYNC` or `VOLUME-P9`, a Docker bind mount). |
+| 12 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes, published ports and, when a container uses Mutagen (or the daemon has sessions), Mutagen. |
+| 13 | `dkdb-update` | Updates the installed scripts from the repository (`-Branch <name>` to use another branch or tag; default `main`). Only files whose version changed are replaced, and the files that `manifest.json` lists as removed are deleted, after a `[y/N]`. |
 
 ### Synchronization with Mutagen
 
-There are no sync parameters: `dkdb-container-start`, `dkdb-container-connect` and `dkdb-mutagen-sync` show a menu for a Mutagen container:
+There are no sync parameters, and `dkdb-container-start` and `dkdb-container-connect` never change the sessions (for a Mutagen container they only start the daemon and list the sessions): what is synchronized is chosen only with `dkdb-mutagen-manage`. Its Modify action shows this menu (without the two Add options, which are its Add action, shown on their own):
 
 ```
 1  Keep (no changes)             <- the first option and the default (Enter): sessions stay as they are
@@ -136,7 +131,7 @@ Every script has two switches, with or without other parameters, and does nothin
 
 ```powershell
 dkdb-container-start -Help
-dkdb-mutagen-sync -Man
+dkdb-mutagen-manage -Man
 & "C:\shared\devbox\install\dkdb-install.ps1" -Man
 bash ~/devbox/bash/dkdb-install-claudecode.sh man   # inside the container
 ```
@@ -180,7 +175,7 @@ Inside the container:
 
 The `bash` path is not asked, and the default tools path is not stored anywhere: both are deduced from where the scripts are, so they follow the shared root you chose. The projects and tools paths must already exist (the installer creates the default tools folder); nothing else is created for you.
 
-**Mutagen (the default option):** `dkdb-container-create` asks whether the projects volume is a Mutagen sync (listed first, so Enter selects it) or a Docker bind mount. A bind mount from `C:\` goes through 9p, which is very slow with many small files. If you pick Mutagen and it is not installed, the script asks before downloading it (about 100 MB, checksum verified, into `<root>\devbox\mutagen`). With Mutagen, `~/devbox/projects` is a folder inside the container, kept in sync with the host projects path (everything, including `.git`; only symbolic links are ignored), and `dkdb-container-start` creates or resumes the session. Nothing else has to be run. `dkdb-mutagen-start` and `dkdb-mutagen-stop` check and start or stop the Mutagen daemon by hand (stopping it stops all your Mutagen sessions). `tools` is never synchronized: it stays a bind mount. Mutagen is third-party and is downloaded from its official release (MIT, with SSPL-licensed parts); see [spec 08](specs/08-mutagen.md).
+**Mutagen (the default option):** `dkdb-container-create` asks whether the projects volume is a Mutagen sync (listed first, so Enter selects it) or a Docker bind mount. A bind mount from `C:\` goes through 9p, which is very slow with many small files. If you pick Mutagen and it is not installed, the script asks before downloading it (about 100 MB, checksum verified, into `<root>\devbox\mutagen`). With Mutagen, `~/devbox/projects` is a folder inside the container, kept in sync with the host projects path (everything, including `.git`; only symbolic links are ignored), and `dkdb-container-start` creates or resumes the session. Nothing else has to be run. `dkdb-mutagen-service` starts or stops the Mutagen daemon by hand, shows its state and cleans leftover sessions (stopping it stops all your Mutagen sessions). `tools` is never synchronized: it stays a bind mount. Mutagen is third-party and is downloaded from its official release (MIT, with SSPL-licensed parts); see [spec 08](specs/08-mutagen.md).
 
 **Published ports (optional):** a server that runs inside the container can only be opened from Windows if its port is published, and Docker decides that when the container is created. `dkdb-container-create` asks for them last (the question explains the format) or takes `-Ports`:
 

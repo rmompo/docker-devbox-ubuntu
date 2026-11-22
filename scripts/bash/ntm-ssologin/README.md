@@ -1,4 +1,4 @@
-# Version: 0.1.4
+# Version: 0.1.5
 # ntm-ssologin: ia4d en el contenedor
 
 Prepara un contenedor devbox con Claude Code para usar **ia4d (ntm GenAI Suite)**: llavero para el instalador,
@@ -180,7 +180,7 @@ mutagen sync terminate <sesión-de-.ia4d>
 Remove-Item -Recurse -Force "$env:USERPROFILE\.claude", "$env:USERPROFILE\.ia4d"
 ```
 
-Si esas sesiones las crea la configuración de los scripts del host (`dkdb-mutagen-sync`, `dkdb-container-connect`),
+Si esas sesiones las crea la configuración de los scripts del host (`dkdb-mutagen-manage`, `dkdb-container-connect`),
 quítalas también de ahí para que no vuelvan a crearse.
 
 **Coste de no sincronizar:** si se **recrea** el contenedor se pierden el llavero, `~/.ia4d` y `~/.claude`. Basta con

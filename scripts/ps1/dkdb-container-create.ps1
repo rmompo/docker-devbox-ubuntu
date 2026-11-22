@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.5.2
+# Version: 0.5.3
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -200,10 +200,16 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-DevboxSuccess "Container '$containerName' created from image '$imageRef' (user '$userName', password equal to the user name)."
+Write-Host 'Projects volume: ' -NoNewline
+Write-DevboxVolumeBadge -Sync $(if ($useMutagen) { 'mutagen' } else { '' })
+Write-Host ''
 if ($portSpecs.Count -gt 0) {
     Write-Host 'Published ports (fixed for this container; they open when it is started):'
     foreach ($portSpec in $portSpecs) {
-        Write-Host ('  {0}:{1} -> {2}/{3}' -f $portSpec.BindIp, $portSpec.HostPort, $portSpec.ContainerPort, $portSpec.Protocol)
+        Write-Host '  ' -NoNewline
+        Write-Host ('host {0}:{1}' -f $portSpec.BindIp, $portSpec.HostPort) -NoNewline -ForegroundColor $DevboxHostColor
+        Write-Host ' -> ' -NoNewline
+        Write-Host ('container {0}/{1}' -f $portSpec.ContainerPort, $portSpec.Protocol) -ForegroundColor $DevboxContainerColor
     }
 } else {
     Write-Host 'Published ports: none (Docker cannot add them later; create a new container if you need them).'
@@ -211,10 +217,10 @@ if ($portSpecs.Count -gt 0) {
 if ($useMutagen) {
     Write-Host "Projects: with Mutagen, '" -NoNewline
     Write-Host $projectsPath -NoNewline -ForegroundColor $DevboxHostColor
-    Write-Host "' is synchronized only when you choose it in the menu of dkdb-container-start, dkdb-container-connect or dkdb-mutagen-sync."
+    Write-Host "' is synchronized only when you choose it with dkdb-mutagen-manage (Add or Modify)."
 }
 if ($useMutagen) {
-    Write-DevboxNext 'Next: dkdb-container-start.ps1 to start it (its menu lets you choose what to synchronize), then dkdb-container-connect.ps1.'
+    Write-DevboxNext 'Next: dkdb-container-start.ps1 to start it, dkdb-mutagen-manage.ps1 to choose what to synchronize, then dkdb-container-connect.ps1.'
 } else {
     Write-DevboxNext 'Next: dkdb-container-start.ps1, then dkdb-container-connect.ps1.'
 }

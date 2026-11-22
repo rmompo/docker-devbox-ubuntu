@@ -1,5 +1,5 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.4.3
+# Version: 0.5.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -30,7 +30,7 @@ if ($Man) {
             'Prints the project version and the image version of the manifest.',
             'Compares each file (manifest against its Version header).',
             'Prints PowerShell, Docker and Mutagen (against the minimum).',
-            'Lists each image and container with its compatibility.'
+            'Lists each image and container with its compatibility and, for each container, its projects volume: MUTAGEN-SYNC (kept in sync by Mutagen) or VOLUME-P9 (a Docker bind mount).'
         ) `
         -Changes @(
             'Nothing: it only reads.'
@@ -161,7 +161,7 @@ if ($dockerReachable) {
         if (-not $compatible) { Write-Host ' (or not a version tag)' -ForegroundColor $DevboxErrorColor; $problems++ } else { Write-Host '' }
     }
 
-    Write-DevboxInfoSection -Title 'Containers' -Note '(version of the image they were created from)'
+    Write-DevboxInfoSection -Title 'Containers' -Note '(projects volume and version of the image they were created from)'
     $containers = @(Get-DevboxContainers -Running $true) + @(Get-DevboxContainers -Running $false)
     if ($containers.Count -eq 0) { Write-Host '  none' }
     $containerWidth = 0
@@ -174,6 +174,8 @@ if ($dockerReachable) {
         $versionColor = $DevboxErrorColor
         if ($compatible) { $versionColor = $DevboxSuccessColor }
         Write-Host ('  {0} ' -f $container.PadRight($containerWidth)) -NoNewline -ForegroundColor $DevboxNameColor
+        Write-DevboxVolumeBadge -Sync (Get-DevboxContainerEnv -Container $container -Name 'DEVBOX_SYNC')
+        Write-Host ' ' -NoNewline
         Write-Host ('{0,-9} ' -f $shown) -NoNewline -ForegroundColor $versionColor
         Write-InfoCompatible -Compatible $compatible
         if (-not $compatible) { Write-Host ' (it keeps working; newer features may be missing)' -ForegroundColor $DevboxErrorColor; $problems++ } else { Write-Host '' }

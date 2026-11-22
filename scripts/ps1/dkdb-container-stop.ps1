@@ -1,6 +1,6 @@
 # Stop one running devbox container, given with -Container or chosen from a menu.
-# Version: 0.3.1
-# It never touches Mutagen (daemon or session): see dkdb-mutagen-stop for that.
+# Version: 0.3.2
+# It never touches Mutagen (daemon or session): see dkdb-mutagen-service for that.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
