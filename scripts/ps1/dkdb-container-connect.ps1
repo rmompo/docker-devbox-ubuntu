@@ -1,5 +1,5 @@
 # Open a bash shell, as the container's user, in a running devbox container.
-# Version: 0.8.0
+# Version: 0.8.1
 # For a Mutagen container it starts the daemon and leaves the sessions as they are (dkdb-mutagen-manage changes them).
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -64,7 +64,8 @@ function Invoke-ConnectAction {
     if (-not $userName) {
         Write-DevboxWarning "Error: '$Selected' has no DEVBOX_USER variable; it was not created by dkdb-container-create."
         Wait-DevboxKey
-        return 1
+        Set-DevboxActionResult 1
+        return
     }
 
     # Only warns when the image the container was created from is not compatible with the scripts.
@@ -94,7 +95,7 @@ function Invoke-ConnectAction {
     # the default Ubuntu .bashrc then shows no colored prompt.
     docker exec -it -u $userName -w "/home/$userName" -e TERM=xterm-256color -e COLORTERM=truecolor $Selected bash
     # Back from the shell: the menu is shown again (the exit code of the shell is not the one of the script).
-    return 0
+    return
 }
 
 # NoWait: the shell was the last thing on the screen, so the menu comes back at once.

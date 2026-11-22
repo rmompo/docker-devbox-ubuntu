@@ -1,5 +1,5 @@
 # Delete one devbox image chosen from a menu.
-# Version: 0.3.0
+# Version: 0.3.1
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -51,11 +51,12 @@ function Invoke-ImageDeleteAction {
     docker rmi $Selected
     if ($LASTEXITCODE -ne 0) {
         Write-DevboxWarning "Error: could not delete '$Selected' (is a container using it?)."
-        return 1
+        Set-DevboxActionResult 1
+        return
     }
     Write-DevboxSuccess "Image '$Selected' deleted."
     Write-DevboxNext 'Next: dkdb-image-create.ps1 builds a new image when you need one.'
-    return 0
+    return
 }
 
 Invoke-DevboxItemMenu -Path 'Images > Delete' -Title 'Select the image to delete:' `

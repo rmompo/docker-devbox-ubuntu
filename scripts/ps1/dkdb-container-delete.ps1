@@ -1,5 +1,5 @@
 # Delete one stopped devbox container, given with -Container or chosen from a menu.
-# Version: 0.4.0
+# Version: 0.4.1
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # With a Mutagen container, only its Mutagen sessions (the whole projects folder and its
@@ -64,7 +64,7 @@ function Invoke-DeleteAction {
     $answer = Read-Host "Delete '$Selected'? Its home and installed AI client are lost (with Mutagen, the container copy of the projects too). [y/N]"
     if ($answer -notmatch '^[yY]$') {
         Write-Host 'Cancelled.'
-        return 0
+        return
     }
     # The session names depend on the container ID: read them before the container is removed (the
     # session of the whole projects folder and those of its folders).
@@ -77,12 +77,13 @@ function Invoke-DeleteAction {
     docker rm $Selected | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-DevboxWarning "Error: could not delete '$Selected'."
-        return 1
+        Set-DevboxActionResult 1
+        return
     }
     Write-DevboxSuccess "Container '$Selected' deleted."
     if ($usesMutagen) { foreach ($sessionName in $sessionNames) { Remove-DevboxSyncSession -SessionName $sessionName } }
     Write-DevboxNext 'Next: dkdb-container-create.ps1 creates another one.'
-    return 0
+    return
 }
 
 Invoke-DevboxItemMenu -Path 'Containers > Delete' -Title 'Select the container to delete:' -Name $Container `

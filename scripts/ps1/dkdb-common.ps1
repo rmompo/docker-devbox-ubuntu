@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.15.0
+# Version: 0.15.1
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -693,7 +693,15 @@ function Write-DevboxColored {
 # The loop of the scripts that choose one thing and act on it (start, stop, connect, delete a container, delete an
 # image): the list is read again every time (GetItems), the chosen item goes to Action (it returns the exit code), the
 # script waits for a key and shows the list again until Esc. With -Name (a name given as a parameter) there is no menu:
-# it runs once. The exit code is left in $script:DevboxItemMenuCode. Empty message: nothing to choose.
+# it runs once. The Action is run as a plain statement, never inside $(...), @(...) or a pipeline: a program that needs the
+# console (docker exec -it) must not have its output captured. So the Action does not return the exit code: it leaves it
+# with Set-DevboxActionResult (0 when it does not). Empty message: nothing to choose.
+# The exit code of the script, set by the Action of Invoke-DevboxItemMenu (and of the script at the end).
+function Set-DevboxActionResult {
+    param([int]$Code)
+    $script:DevboxItemMenuCode = $Code
+}
+
 function Invoke-DevboxItemMenu {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -712,7 +720,7 @@ function Invoke-DevboxItemMenu {
         if ($items.Count -eq 0) { Write-Host $EmptyMessage; return }
         $selected = Resolve-DevboxContainerName -Name $Name -Candidates $items -Kind $Kind
         if (-not $selected) { $script:DevboxItemMenuCode = 1; return }
-        $script:DevboxItemMenuCode = [int]@(& $Action $selected)[-1]
+        & $Action $selected
         return
     }
     while ($true) {
@@ -723,7 +731,8 @@ function Invoke-DevboxItemMenu {
         if (-not $selected) { return }
         $script:DevboxMenuPath = "$Path > $selected"
         Show-DevboxMenuHeader
-        $script:DevboxItemMenuCode = [int]@(& $Action $selected)[-1]
+        $script:DevboxItemMenuCode = 0
+        & $Action $selected
         if (-not $NoWait) { Wait-DevboxKey }
     }
 }

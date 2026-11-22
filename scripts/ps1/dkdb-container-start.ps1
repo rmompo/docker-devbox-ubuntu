@@ -1,5 +1,5 @@
 # Start one stopped devbox container, given with -Container or chosen from a menu.
-# Version: 0.8.0
+# Version: 0.8.1
 # For a Mutagen container it starts the daemon and leaves the sessions as they are (dkdb-mutagen-manage changes them).
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -61,7 +61,8 @@ function Invoke-StartAction {
     docker start $Selected | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-DevboxWarning "Error: could not start '$Selected'."
-        return 1
+        Set-DevboxActionResult 1
+        return
     }
     Write-DevboxSuccess "Container '$Selected' started."
     if ((Get-DevboxContainerEnv -Container $Selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
@@ -69,16 +70,17 @@ function Invoke-StartAction {
         $pick = Invoke-DevboxSyncPick -Container $Selected -KeepOnly
         if (-not $pick.Ok) {
             Write-DevboxWarning 'The container is running, but the projects are NOT synchronized.'
-            return 1
+            Set-DevboxActionResult 1
+            return
         }
         if ($pick.Active) { Write-DevboxSuccess "Mutagen sync for '$Selected' is active." }
         else {
             Write-DevboxNext 'Next: dkdb-mutagen-manage.ps1 chooses what to synchronize (Add or Modify), then dkdb-container-connect.ps1.'
-            return 0
+            return
         }
     }
     Write-DevboxNext 'Next: dkdb-container-connect.ps1.'
-    return 0
+    return
 }
 
 Invoke-DevboxItemMenu -Path 'Containers > Start' -Title 'Select the container to start:' -Name $Container `

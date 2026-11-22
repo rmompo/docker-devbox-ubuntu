@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.6.0
+# Version: 0.6.1
 # Common definitions of the devbox bash scripts that show information (dkdb-info.sh, dkdb-version.sh).
 # Source it, do not run it:  . "$(dirname "${BASH_SOURCE[0]}")/dkdb-common.sh"; the script defines usage() and, for the manual, MAN_*.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -56,10 +56,12 @@ next() {
 info_width() {
     if [ -z "${info_width_cache:-}" ]; then
         local columns="${COLUMNS:-}"
-        [ -n "$columns" ] || columns="$(stty size <&2 2>/dev/null | awk '{print $2}')"
-        [ -n "$columns" ] || columns="$(stty size <&0 2>/dev/null | awk '{print $2}')"
-        [ -n "$columns" ] || columns="$(stty size </dev/tty 2>/dev/null | awk '{print $2}')"
-        [ -n "$columns" ] || columns="$(tput cols 2>/dev/null)"
+        # Each try may fail (no terminal): "|| columns=''" keeps set -e and pipefail of the scripts that source this file
+        # from ending them, and the redirection of /dev/tty goes after 2>/dev/null so that its error is not printed.
+        [ -n "$columns" ] || columns="$(stty size <&2 2>/dev/null | awk '{print $2}')" || columns=''
+        [ -n "$columns" ] || columns="$(stty size <&0 2>/dev/null | awk '{print $2}')" || columns=''
+        [ -n "$columns" ] || columns="$(stty size 2>/dev/null </dev/tty | awk '{print $2}')" || columns=''
+        [ -n "$columns" ] || columns="$(tput cols 2>/dev/null)" || columns=''
         [ "${columns:-0}" -ge 40 ] 2>/dev/null || columns=80
         info_width_cache=$((columns - 1))
     fi

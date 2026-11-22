@@ -1,5 +1,5 @@
 # Stop one running devbox container, given with -Container or chosen from a menu.
-# Version: 0.4.0
+# Version: 0.4.1
 # It never touches Mutagen (daemon or session): see dkdb-mutagen-service for that.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -56,11 +56,12 @@ function Invoke-StopAction {
     docker stop $Selected | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-DevboxWarning "Error: could not stop '$Selected'."
-        return 1
+        Set-DevboxActionResult 1
+        return
     }
     Write-DevboxSuccess "Container '$Selected' stopped."
     Write-DevboxNext 'Next: dkdb-container-start.ps1 starts it again, or dkdb-container-delete.ps1 removes it.'
-    return 0
+    return
 }
 
 Invoke-DevboxItemMenu -Path 'Containers > Stop' -Title 'Select the container to stop:' -Name $Container `
