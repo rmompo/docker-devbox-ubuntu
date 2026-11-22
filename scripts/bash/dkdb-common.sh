@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.7.0
+# Version: 0.8.0
 # Common definitions of the devbox bash scripts that show information (dkdb-info.sh, dkdb-version.sh).
 # Source it, do not run it:  . "$(dirname "${BASH_SOURCE[0]}")/dkdb-common.sh"; the script defines usage() and, for the manual, MAN_*.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -237,7 +237,25 @@ wrap_text() {
     local width="$1" room=$(($(info_width) - ${3:-0}))
     [ "$room" -ge 20 ] || room=20
     [ "$width" -le "$room" ] || width="$room"
-    printf '%s\n' "$2" | fold -s -w "$width" | sed 's/ *$//'
+    printf '%s\n' "$2" | awk -v w="$width" '
+        {
+            n = split($0, words, " "); line = ""
+            for (i = 1; i <= n; i++) {
+                word = words[i]
+                # A word longer than the line (a path) is cut after a / or \\ when it can, instead of at the edge.
+                while (length(word) > w) {
+                    cut = 0
+                    for (j = w; j > w / 3; j--) { c = substr(word, j, 1); if (c == "/" || c == "\\") { cut = j; break } }
+                    if (cut == 0) cut = w
+                    if (line != "") { print line; line = "" }
+                    print substr(word, 1, cut); word = substr(word, cut + 1)
+                }
+                if (line == "") line = word
+                else if (length(line) + 1 + length(word) <= w) line = line " " word
+                else { print line; line = word }
+            }
+            print line
+        }'
 }
 
 # The USAGE of a help: show_usage TEXT, wrapped at the spaces with the continuation lines indented.

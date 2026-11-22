@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.6.1
+# Version: 0.7.0
 # ia4d (ntm GenAI Suite) for Claude Code in this container: keyring, login (credential renewal) and installer.
 # Exclusive to the ntm Claude Code containers. Repo: scripts/bash/ntm-ssologin/, seen in the container (read-only)
 # as ~/devbox/bash/ntm-ssologin/. Run with: bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh [all | status | setup | login | renew | install]
@@ -21,7 +21,9 @@ required_tools=(dbus-daemon:dbus gnome-keyring-daemon:gnome-keyring secret-tool:
 # Colors and messages (ok, warn, next): the table of dkdb-common.sh, shared by every script (spec 01).
 # shellcheck source=../dkdb-common.sh
 . "$here/../dkdb-common.sh"
-title() { printf '\n%s== %s%s\n' "$c_section" "$*" "$c_off"; }
+title() { info_section "$*"; }
+# One row of the status: STATE LABEL TEXT (ok green, warn red, next yellow), in the layout of dkdb-info.
+status_row() { info_field "$2" 13 2 "t:$1:$3"; }
 
 usage() {
     local name
@@ -309,9 +311,9 @@ step_status() {
     local failed=0 missing count line refresh_exp left until_text
     title 'status'
     missing="$(missing_packages | tr '\n' ' ' | sed 's/ *$//')"
-    if [ -z "$missing" ]; then ok "  Tools          ok"; else warn "  Tools          missing: $missing ($self_cmd setup)"; failed=1; fi
-    if [ -x "$runner" ] && cmp -s "$here/dkdb-ntm-ssologin-keyring-run.sh" "$runner"; then ok "  Runner         $runner"
-    else warn "  Runner         missing or outdated ($self_cmd setup)"; failed=1; fi
+    if [ -z "$missing" ]; then status_row green Tools ok; else status_row red Tools "missing: $missing ($self_cmd setup)"; failed=1; fi
+    if [ -x "$runner" ] && cmp -s "$here/dkdb-ntm-ssologin-keyring-run.sh" "$runner"; then status_row green Runner "$runner"
+    else status_row red Runner "missing or outdated ($self_cmd setup)"; failed=1; fi
 
     # Decisive: what the ia4d plugins use. The access token lasts 1 hour and the plugins renew it with the
     # refresh token (5 days, rotated on each renewal); only when the refresh token expires a login is needed.
@@ -320,14 +322,14 @@ step_status() {
         left=$(( refresh_exp - $(date +%s) ))
         until_text="$(date -d "@$refresh_exp" '+%Y-%m-%d %H:%M %Z')"
         if [ "$left" -le 0 ]; then
-            warn "  Plugins        session expired on $until_text ($self_cmd renew)"; failed=1
+            status_row red Plugins "session expired on $until_text ($self_cmd renew)"; failed=1
         elif [ "$left" -lt 86400 ]; then
-            next "  Plugins        session valid until $until_text, less than 1 day ($self_cmd renew soon)"
+            status_row yellow Plugins "session valid until $until_text, less than 1 day ($self_cmd renew soon)"
         else
-            ok "  Plugins        session valid until $until_text (refresh token; the plugins renew the 1-hour token)"
+            status_row green Plugins "session valid until $until_text (refresh token; the plugins renew the 1-hour token)"
         fi
     else
-        warn "  Plugins        no session: ~/.ia4d/.infra-token or .infra-refresh-token missing ($self_cmd login)"; failed=1
+        status_row red Plugins "no session: ~/.ia4d/.infra-token or .infra-refresh-token missing ($self_cmd login)"; failed=1
     fi
 
     # Informative: the installer session in the keyring. It lasts 1 hour and is not renewed; expired is normal,
@@ -335,17 +337,17 @@ step_status() {
     if [ -z "$missing" ] && [ -x "$runner" ]; then
         count="$("$runner" secret-tool search --all service ia4d 2>/dev/null | grep -c '^label')"
         if check_session && [ "$session_ok" = 1 ]; then
-            ok "  Installer      session valid ($count keyring entries)"
+            status_row green Installer "session valid ($count keyring entries)"
         else
-            next "  Installer      session expired or absent ($count keyring entries); normal, install logs in when needed"
+            status_row yellow Installer "session expired or absent ($count keyring entries); normal, install logs in when needed"
         fi
-        printf '%s\n' "${session_text:-}" | while IFS= read -r line; do [ -n "$line" ] && printf '                 %s\n' "$line"; done
+        printf '%s\n' "${session_text:-}" | while IFS= read -r line; do [ -n "$line" ] && status_row none Session "$line"; done
     fi
 
     if [ -d "$marketplace_dir" ]; then
         count="$(grep -c '@ia4d-expert-agents-marketplace"' "$HOME/.claude/settings.json" 2>/dev/null)"
-        ok "  ia4d plugins   marketplace installed, ${count:-0} plugin entries in settings.json"
-    else warn "  ia4d plugins   not installed ($self_cmd install)"; failed=1; fi
+        status_row green "ia4d plugins" "marketplace installed, ${count:-0} plugin entries in settings.json"
+    else status_row red "ia4d plugins" "not installed ($self_cmd install)"; failed=1; fi
 
     if [ "$failed" = 0 ]; then next "Ready. Run claude as usual."
     else next "Next: fix the red lines (or run: $self_cmd all)."; fi
