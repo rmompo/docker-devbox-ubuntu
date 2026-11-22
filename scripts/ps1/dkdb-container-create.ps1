@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.6.0
+# Version: 0.6.1
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -226,9 +226,19 @@ if ($portSpecs.Count -gt 0) {
     Write-Host 'Published ports: none (Docker cannot add them later; create a new container if you need them).'
 }
 if ($useMutagen) {
-    Write-Host "Projects: with Mutagen, '" -NoNewline
-    Write-Host $projectsPath -NoNewline -ForegroundColor $DevboxHostColor
-    Write-Host "' is synchronized only when you choose it with dkdb-mutagen-manage (Add or Modify)."
+    # The folder of the host in its color; the sentence around it wraps with the console, and the folder, when it
+    # does not fit on the line, goes on its own lines.
+    $beforeText = "Projects: with Mutagen, '"
+    $afterText = "' is synchronized only when you choose it with dkdb-mutagen-manage.ps1 (Add or Modify)."
+    if (($beforeText.Length + $projectsPath.Length) -le (Get-DevboxConsoleWidth)) {
+        Write-Host $beforeText -NoNewline
+        Write-Host $projectsPath -NoNewline -ForegroundColor $DevboxHostColor
+        Write-Host $afterText
+    } else {
+        Write-Host 'Projects: with Mutagen, the folder'
+        foreach ($line in @(Get-DevboxValueLines -Text $projectsPath -Room ((Get-DevboxConsoleWidth) - 2))) { Write-Host "  $line" -ForegroundColor $DevboxHostColor }
+        Write-Host 'is synchronized only when you choose it with dkdb-mutagen-manage.ps1 (Add or Modify).'
+    }
 }
 if ($useMutagen) {
     Write-DevboxNext 'Next: dkdb-container-start.ps1 to start it, dkdb-mutagen-manage.ps1 to choose what to synchronize, then dkdb-container-connect.ps1.'

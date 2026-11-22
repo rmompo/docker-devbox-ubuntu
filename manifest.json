@@ -1,6 +1,6 @@
 {
   "name": "docker-devbox-ubuntu",
-  "version": "0.19.9",
+  "version": "0.19.10",
   "image": "0.4.0",
   "files": {
     "install/dkdb-install.ps1": "0.3.7",
@@ -13,12 +13,12 @@
     "scripts/bash/dkdb-version.sh": "0.4.1",
     "scripts/bash/ntm-ssologin/README.md": "0.1.5",
     "scripts/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh": "0.7.0",
-    "scripts/bash/ntm-ssologin/dkdb-ntm-ssologin-keyring-run.sh": "0.1.2",
+    "scripts/bash/ntm-ssologin/dkdb-ntm-ssologin-keyring-run.sh": "0.1.3",
     "scripts/docker/Dockerfile": "0.1.1",
     "scripts/docker/entrypoint.sh": "0.4.0",
-    "scripts/ps1/dkdb-common.ps1": "0.17.1",
+    "scripts/ps1/dkdb-common.ps1": "0.17.2",
     "scripts/ps1/dkdb-container-connect.ps1": "0.8.1",
-    "scripts/ps1/dkdb-container-create.ps1": "0.6.0",
+    "scripts/ps1/dkdb-container-create.ps1": "0.6.1",
     "scripts/ps1/dkdb-container-delete.ps1": "0.4.2",
     "scripts/ps1/dkdb-container-start.ps1": "0.8.1",
     "scripts/ps1/dkdb-container-stop.ps1": "0.4.1",

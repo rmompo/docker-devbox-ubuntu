@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.17.1
+# Version: 0.17.2
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -408,9 +408,11 @@ function Write-DevboxNext {
     $lines = @($Text)
     $redirected = $false
     try { $redirected = [Console]::IsOutputRedirected } catch { $redirected = $false }
+    $indent = [regex]::Match($Text, '^\s*').Value
     if (-not $redirected) {
-        $lines = @(Get-DevboxWrappedLines -Text $Text -Width (Get-DevboxConsoleWidth))
+        $lines = @(Get-DevboxWrappedLines -Text $Text -Width ([math]::Max(20, (Get-DevboxConsoleWidth) - $indent.Length)))
         if ($lines.Count -eq 0) { $lines = @('') }
+        $lines = @($lines | ForEach-Object { $indent + $_ })
     }
     foreach ($lineText in $lines) {
         foreach ($part in [regex]::Split($lineText, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
@@ -1698,17 +1700,18 @@ function Show-DevboxSyncProgress {
     $complete = ($null -ne $Progress.Total -and $Progress.Total -gt 0 -and $Progress.Done -ge $Progress.Total -and $Progress.Status -eq 'watching' -and -not $Progress.Paused)
     if ($null -ne $Progress.Total -and $Progress.Total -gt 0 -and $null -ne $Progress.Done) {
         $percent = [math]::Min(100, [int][math]::Floor(100 * $Progress.Done / $Progress.Total))
-        Write-Host "    So far $($Progress.Done) of $($Progress.Total) files ($percent%) - status: " -NoNewline
+        $prefix = "    So far $($Progress.Done) of $($Progress.Total) files ($percent%) - status:"
     } else {
-        Write-Host '    No file counts yet - status: ' -NoNewline
+        $prefix = '    No file counts yet - status:'
     }
+    # The state stays on the line when it fits and goes to the next one, indented, when it does not.
+    $stateLength = ([string]$Progress.Status).Length
+    if ($Progress.LastError) { $stateLength = [math]::Max($stateLength, 5) }
+    if (($prefix.Length + 1 + $stateLength) -gt (Get-DevboxConsoleWidth)) { Write-Host $prefix; Write-Host '    ' -NoNewline }
+    else { Write-Host "$prefix " -NoNewline }
     Write-DevboxStateBadge -Status $Progress.Status -LastError $Progress.LastError
     if ($Progress.Paused) {
-        Write-Host '    The session is paused: ' -ForegroundColor $DevboxErrorColor -NoNewline
-        Write-Host 'dkdb-container-start' -ForegroundColor $DevboxNameColor -NoNewline
-        Write-Host ' or ' -ForegroundColor $DevboxErrorColor -NoNewline
-        Write-Host 'dkdb-container-connect' -ForegroundColor $DevboxNameColor -NoNewline
-        Write-Host ' resume it.' -ForegroundColor $DevboxErrorColor
+        Write-DevboxNext '    The session is paused: dkdb-container-start.ps1 or dkdb-container-connect.ps1 resume it.'
     }
     if ($Progress.LastError) { Write-DevboxWarning "    Mutagen reports an error: $($Progress.LastError)" }
     if ($Progress.Conflicts -gt 0) { Write-DevboxWarning "    $($Progress.Conflicts) conflicts: see TROUBLESHOOTING.md." }
