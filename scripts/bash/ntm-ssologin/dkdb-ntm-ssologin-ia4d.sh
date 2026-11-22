@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.6.0
+# Version: 0.6.1
 # ia4d (ntm GenAI Suite) for Claude Code in this container: keyring, login (credential renewal) and installer.
 # Exclusive to the ntm Claude Code containers. Repo: scripts/bash/ntm-ssologin/, seen in the container (read-only)
 # as ~/devbox/bash/ntm-ssologin/. Run with: bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh [all | status | setup | login | renew | install]
@@ -29,7 +29,7 @@ usage() {
     printf '\n%sNAME%s\n    %s%s%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
     printf '\n%sDESCRIPTION%s\n' "$c_title" "$c_off"
     wrap_text 92 "Prepares this container for ia4d (ntm GenAI Suite) in Claude Code: the GNOME keyring where ia4d keeps its session, the SSO login (also to renew the credentials) and the ia4d installer. Every step is idempotent." 4 | sed 's/ *$//; s/^/    /'
-    printf '\n%sUSAGE%s\n    %s%s [all | status | setup | login | renew | install] [-h | man]%s\n' "$c_title" "$c_off" "$c_name" "$self_cmd" "$c_off"
+    show_usage "$self_cmd [all | status | setup | login | renew | install] [-h | man]"
     printf '\n%sCOMMANDS%s\n' "$c_title" "$c_off"
     show_parameter all 'Default. setup, login if the installer session expired, install, then status.'
     show_parameter status 'Only reads: tools, keyring, session, ia4d files and plugins. Exit code 1 if something is wrong.'

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.3.1
+# Version: 0.3.2
 # Install Claude Code (latest) in this container.
 # Rule: one AI client per container. Run with: bash dkdb-install-claudecode.sh
 set -euo pipefail
@@ -14,7 +14,7 @@ usage() {
     printf '\n%sNAME%s\n    %s%s%s\n' "$heading" "$off" "$name" "$(basename "$0")" "$off"
     printf '\n%sDESCRIPTION%s\n' "$heading" "$off"
     wrap_text 92 "Installs Claude Code (latest) in this container with its official installer, and puts ~/.local/bin on the PATH." 4 | sed 's/ *$//; s/^/    /'
-    printf '\n%sUSAGE%s\n    %sbash ~/devbox/bash/%s [-h | man]%s\n' "$heading" "$off" "$name" "$(basename "$0")" "$off"
+    show_usage "bash ~/devbox/bash/$(basename "$0") [-h | man]"
     printf '\n%sPARAMETERS%s\n' "$heading" "$off"
     show_parameter '-h, --help' 'Show this help and exit.'
     show_parameter 'man' 'Show the manual (what the script does, step by step) and exit.'
@@ -57,8 +57,7 @@ for argument in "$@"; do
         *) warn "Unknown argument: $argument (use -h or man)."; exit 1 ;;
     esac
 done
-script_version="$(sed -n 's/^# Version: *//p' "$0" | head -n 1)"
-echo "$(basename "$0") ${script_version:-unknown} (docker-devbox-ubuntu image ${DEVBOX_IMAGE_VERSION:-unknown})"
+banner "$0"
 
 # Refuse to install if the other client is already present.
 if command -v copilot >/dev/null 2>&1 || [ -e "$HOME/.local/bin/copilot" ]; then
@@ -67,7 +66,7 @@ if command -v copilot >/dev/null 2>&1 || [ -e "$HOME/.local/bin/copilot" ]; then
     exit 1
 fi
 
-echo "Downloading and installing Claude Code (about 240 MB, it can take a few minutes; no progress bar is shown)..."
+say "Downloading and installing Claude Code (about 240 MB, it can take a few minutes; no progress bar is shown)..."
 curl -fsSL https://claude.ai/install.sh | bash
 
 # Make sure ~/.local/bin is on the PATH (idempotent).

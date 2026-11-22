@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.6.1
+# Version: 0.7.0
 # Common definitions of the devbox bash scripts that show information (dkdb-info.sh, dkdb-version.sh).
 # Source it, do not run it:  . "$(dirname "${BASH_SOURCE[0]}")/dkdb-common.sh"; the script defines usage() and, for the manual, MAN_*.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -176,7 +176,7 @@ wait_key() {
 # select_item TITLE ESCAPE_ACTION ITEM...: ESCAPE_ACTION (back or exit) is what the hint says that Esc does. The index
 # of the chosen item is left in MENU_INDEX; the return status is 1 when Esc is pressed.
 select_item() {
-    local title="$1" escape_action="$2" index=0 count key rest i
+    local title="$1" escape_action="$2" index=0 count key rest i label
     shift 2
     local items=("$@")
     count=${#items[@]}
@@ -186,7 +186,10 @@ select_item() {
     while true; do
         for ((i = 0; i < count; i++)); do
             printf '\r\033[2K'
-            if [ "$i" -eq "$index" ]; then printf '%s> %s%s\n' "$c_selected" "${items[$i]}" "$c_off"; else printf '  %s\n' "${items[$i]}"; fi
+            label="${items[$i]}"
+            # An item longer than the line is cut with "..." (it would wrap and break the redraw).
+            [ $((${#label} + 2)) -le "$(info_width)" ] || label="${label:0:$(($(info_width) - 5))}..."
+            if [ "$i" -eq "$index" ]; then printf '%s> %s%s\n' "$c_selected" "$label" "$c_off"; else printf '  %s\n' "$label"; fi
         done
         printf '\033[%dA' "$count"
         IFS= read -rsn1 key || key=$'\033'
@@ -237,6 +240,12 @@ wrap_text() {
     printf '%s\n' "$2" | fold -s -w "$width" | sed 's/ *$//'
 }
 
+# The USAGE of a help: show_usage TEXT, wrapped at the spaces with the continuation lines indented.
+show_usage() {
+    printf '\n%sUSAGE%s\n' "$c_title" "$c_off"
+    wrap_text 200 "$1" 8 | sed "1s/^/    $c_name/;2,\$s/^/        $c_name/;s/\$/$c_off/"
+}
+
 # One parameter of a help: show_parameter NAME TEXT [WIDTH]. The name takes WIDTH characters (10 by default) and the
 # text, wrapped at the words, continues under itself.
 show_parameter() {
@@ -245,12 +254,19 @@ show_parameter() {
 }
 
 # A message of ok, bad or warn in a color: message_text FD COLOR TEXT. When the output (file descriptor FD) is a
-# terminal it is wrapped at the words to its width; otherwise it is printed as it is.
+# terminal it is wrapped at the words to its width, and the lines that follow keep the indentation of the first one;
+# otherwise it is printed as it is.
 message_text() {
-    local color="$2" text="$3" line
-    if [ -t "$1" ]; then text="$(wrap_text "$(info_width)" "$text")"; fi
+    local color="$2" text="$3" line indent
+    if [ -t "$1" ]; then
+        indent="${text%%[! ]*}"
+        text="$(wrap_text "$(info_width)" "${text#"$indent"}" "${#indent}" | sed "s/^/$indent/")"
+    fi
     while IFS= read -r line; do printf '%s%s%s\n' "$color" "$line" "$c_off"; done <<< "$text"
 }
+
+# A plain message (the default color), wrapped like the others.
+say() { message_text 1 '' "$*"; }
 
 # The help of a script (-h, --help), same layout as the PowerShell ones: NAME, DESCRIPTION, USAGE, PARAMETERS,
 # EXAMPLES and NOTES. Arguments: description, example description, then the notes.
@@ -262,7 +278,7 @@ show_help() {
     printf '\n%sNAME%s\n    %s%s%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
     printf '\n%sDESCRIPTION%s\n' "$c_title" "$c_off"
     wrap_text 92 "$description" 4 | sed 's/^/    /'
-    printf '\n%sUSAGE%s\n    %sbash ~/devbox/bash/%s [-h | man]%s\n' "$c_title" "$c_off" "$c_name" "$name" "$c_off"
+    show_usage "bash ~/devbox/bash/$name [-h | man]"
     printf '\n%sPARAMETERS%s\n' "$c_title" "$c_off"
     show_parameter '-h, --help' 'Show this help and exit.'
     show_parameter man 'Show the manual (what the script does, step by step) and exit.'

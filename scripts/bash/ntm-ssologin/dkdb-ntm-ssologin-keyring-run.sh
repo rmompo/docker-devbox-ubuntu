@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.1.1
+# Version: 0.1.2
 # Run a command inside a private D-Bus session with the GNOME keyring unlocked (default command: claude).
 # ia4d keeps its session (jwt_token, refresh_token...) in the keyring (Secret Service over D-Bus), so the
 # ia4d installer and Claude Code (its plugins and hooks) must run inside such a session to find it.
@@ -8,9 +8,12 @@ set -uo pipefail
 
 case "${1:-}" in
     -h|--help)
-        echo "usage: dkdb-keyring-run [command [args...]]   (default command: claude)"
-        echo "Runs the command inside a D-Bus session with the keyring ~/.local/share/keyrings unlocked."
-        echo "The keyring password is DKDB_KEYRING_PASS (default: devbox); it must never change."
+        # Wrapped at the words to the width of the terminal (80 when it cannot be known).
+        columns="$(stty size <&2 2>/dev/null | awk '{print $2}')" || columns=''
+        [ "${columns:-0}" -ge 40 ] 2>/dev/null || columns=80
+        printf '%s\n' "usage: dkdb-keyring-run [command [args...]]   (default command: claude)" \
+            "Runs the command inside a D-Bus session with the keyring ~/.local/share/keyrings unlocked." \
+            "The keyring password is DKDB_KEYRING_PASS (default: devbox); it must never change." | fold -s -w $((columns - 1))
         exit 0 ;;
 esac
 [ "$#" -gt 0 ] || set -- claude

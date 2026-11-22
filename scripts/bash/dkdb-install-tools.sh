@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.2.0
+# Version: 0.2.1
 # Install the tools that the devbox scripts need and that an image may not have (for example an image older
 # than the scripts). Run it inside the container: bash ~/devbox/bash/dkdb-install-tools.sh
 set -u
@@ -26,7 +26,7 @@ usage() {
     printf '\n%sNAME%s\n    %s%s%s\n' "$cyan" "$off" "$green" "$name" "$off"
     printf '\n%sDESCRIPTION%s\n' "$cyan" "$off"
     wrap_text 92 'Checks the tools that the devbox scripts need and installs the missing ones with apt (as root, or with sudo). It is for images that do not have them all, for example one older than the scripts. Without arguments it handles every group.' 4 | sed 's/^/    /'
-    printf '\n%sUSAGE%s\n    %sbash ~/devbox/bash/%s [check] [base] [keyring] [-h | man]%s\n' "$cyan" "$off" "$green" "$name" "$off"
+    show_usage "bash ~/devbox/bash/$name [check] [base] [keyring] [-h | man]"
     printf '\n%sPARAMETERS%s\n' "$cyan" "$off"
     show_parameter 'check' 'Only report what is missing; install nothing (exit code 1 if something is missing).'
     local group
@@ -36,9 +36,12 @@ usage() {
     show_parameter '-h, --help' 'Show this help and exit.'
     show_parameter 'man' 'Show the manual (what the script does, step by step) and exit.'
     printf '\n%sEXAMPLES%s\n' "$cyan" "$off"
-    printf '    %sbash ~/devbox/bash/%s%s\n        Installs whatever is missing, in every group.\n' "$green" "$name" "$off"
-    printf '    %sbash ~/devbox/bash/%s check%s\n        Lists what is missing and installs nothing.\n' "$green" "$name" "$off"
-    printf '    %sbash ~/devbox/bash/%s keyring%s\n        Installs only the keyring tools.\n' "$green" "$name" "$off"
+    printf '    %sbash ~/devbox/bash/%s%s\n' "$green" "$name" "$off"
+    wrap_text 88 'Installs whatever is missing, in every group.' 8 | sed 's/^/        /'
+    printf '    %sbash ~/devbox/bash/%s check%s\n' "$green" "$name" "$off"
+    wrap_text 88 'Lists what is missing and installs nothing.' 8 | sed 's/^/        /'
+    printf '    %sbash ~/devbox/bash/%s keyring%s\n' "$green" "$name" "$off"
+    wrap_text 88 'Installs only the keyring tools.' 8 | sed 's/^/        /'
     printf '\n%sNOTES%s\n' "$cyan" "$off"
     wrap_text 90 'Installing needs root or sudo; sudo asks for the password of the container user (the same as its name).' 6 | sed '1s/^/    - /;2,$s/^/      /'
     wrap_text 90 'The keyring group installs about 90 packages (it pulls the D-Bus session and the GNOME crypto libraries); that is why it is not part of the image.' 6 | sed '1s/^/    - /;2,$s/^/      /'
@@ -133,7 +136,7 @@ if [ "$(id -u)" -eq 0 ]; then apt_cmd=(apt-get)
 elif command -v sudo >/dev/null 2>&1; then apt_cmd=(sudo apt-get)
 else warn "Error: installing needs root or sudo, and sudo was not found."; exit 1; fi
 
-echo "Installing: ${missing[*]} (sudo may ask for the password of the container user) ..."
+say "Installing: ${missing[*]} (sudo may ask for the password of the container user) ..."
 "${apt_cmd[@]}" update -qq || { warn "Error: apt-get update failed."; exit 1; }
 "${apt_cmd[@]}" install -y --no-install-recommends "${missing[@]}" >/dev/null || { warn "Error: apt-get install failed."; exit 1; }
 
