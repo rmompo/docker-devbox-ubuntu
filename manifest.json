@@ -1,6 +1,6 @@
 {
   "name": "docker-devbox-ubuntu",
-  "version": "0.19.8",
+  "version": "0.19.9",
   "image": "0.4.0",
   "files": {
     "install/dkdb-install.ps1": "0.3.7",
@@ -22,7 +22,7 @@
     "scripts/ps1/dkdb-container-delete.ps1": "0.4.2",
     "scripts/ps1/dkdb-container-start.ps1": "0.8.1",
     "scripts/ps1/dkdb-container-stop.ps1": "0.4.1",
-    "scripts/ps1/dkdb-image-create.ps1": "0.2.6",
+    "scripts/ps1/dkdb-image-create.ps1": "0.2.7",
     "scripts/ps1/dkdb-image-delete.ps1": "0.3.1",
     "scripts/ps1/dkdb-info.ps1": "0.5.1",
     "scripts/ps1/dkdb-mutagen-manage.ps1": "0.3.0",

@@ -1,5 +1,5 @@
 # Build a devbox image named <prefix>-<name>.
-# Version: 0.2.6
+# Version: 0.2.7
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -56,6 +56,10 @@ if ($version -eq 'unknown') {
 }
 
 $name = Read-DevboxName -Prompt 'Image name' -Default $DevboxDefaultName -DefaultSuffix ":$version"
+if ($null -eq $name) {
+    Write-Host 'Cancelled. Nothing was built.'
+    exit 0
+}
 $imageName = Get-DevboxFullName $name
 $imageRef = "${imageName}:$version"
 
