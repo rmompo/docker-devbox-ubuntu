@@ -1,19 +1,24 @@
-# Start one stopped devbox container chosen from a menu.
-# Version: 0.5.4
+# Start one stopped devbox container, given with -Container or chosen from a menu.
+# Version: 0.6.1
 # For a Mutagen container a menu chooses what to synchronize (Keep (no changes) is the first option and the default).
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [string]$Container,
     [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Starts one stopped devbox container chosen from a menu. For a container that uses Mutagen it starts the daemon too and then asks what to synchronize; by default (Keep (no changes)) the sessions stay as they are.' `
-        -Usage 'dkdb-container-start [-Help]' `
+        -Description 'Starts one stopped devbox container, given with -Container or chosen from a menu. For a container that uses Mutagen it starts the daemon too and then asks what to synchronize; by default (Keep (no changes)) the sessions stay as they are.' `
+        -Usage 'dkdb-container-start [-Container <name>] [-Help] [-Man]' `
+        -Parameters @(
+            @{ Name = '-Container'; Description = 'Name of the container (with or without the dkdb- prefix); skips the container menu. It must be a stopped container.' }
+        ) `
         -Examples @(
-            @{ Command = 'dkdb-container-start'; Description = 'Starts the container; for a Mutagen container it then shows the synchronization menu.' }
+            @{ Command = 'dkdb-container-start'; Description = 'Starts the container; for a Mutagen container it then shows the synchronization menu.' },
+            @{ Command = 'dkdb-container-start -Container dkdb-dev'; Description = 'Starts that container without the menu.' }
         ) `
         -Notes @(
             'For a container that uses Mutagen a menu asks what to synchronize: Keep (no changes) (the first option, the default: continue with the sessions exactly as they are; nothing is created, resumed or paused), Custom (a checklist of the registered sessions: checked ones are active, the others paused), All (registered), None (pause all: the daemon is started and the existing sessions are paused), Add (relative) (a folder relative to the host projects folder), or Add (absolute) (a host folder and a folder of the container). Every Add and activation checks both folders: a missing host folder aborts the operation; a missing folder of the container is created after asking. A new folder is added to what is active; it pauses the active sessions it covers, and changes nothing when an active session already covers it (somebody may be using it). Custom refuses overlapping folders. Nothing is ever terminated.',
@@ -29,7 +34,7 @@ if ($Man) {
         ) `
         -Steps (@(
             'Warns, never stops, when the package or the image of the container have another version.',
-            'Shows the menu of stopped containers and runs docker start.'
+            'Uses the container given with -Container, or shows the menu of stopped containers, and runs docker start.'
         ) + $DevboxSyncMenuMan) `
         -Changes @(
             'The container is running.',
@@ -52,10 +57,15 @@ if ($containers.Count -eq 0) {
     exit 0
 }
 
-$selected = Select-DevboxItem -Title 'Select the container to start:' -Items $containers
-if (-not $selected) {
-    Write-Host 'Cancelled.'
-    exit 0
+if ($Container) {
+    $selected = Resolve-DevboxContainerName -Name $Container -Candidates $containers -Kind "a stopped '$DevboxPrefix-' container"
+    if (-not $selected) { exit 1 }
+} else {
+    $selected = Select-DevboxItem -Title 'Select the container to start:' -Items $containers
+    if (-not $selected) {
+        Write-Host 'Cancelled.'
+        exit 0
+    }
 }
 
 $null = Test-DevboxContainerVersion -Container $selected
@@ -77,4 +87,4 @@ if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutag
     if ($pick.Active) { Write-DevboxSuccess "Mutagen sync for '$selected' is active." }
 }
 
-Write-DevboxNext 'Next: dkdb-container-connect.'
+Write-DevboxNext 'Next: dkdb-container-connect.ps1.'

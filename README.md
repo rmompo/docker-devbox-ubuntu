@@ -65,7 +65,7 @@ The scripts of `~/devbox/bash` run by name in a container created from image 0.2
 
 | Script | What it shows |
 |--------|---------------|
-| `dkdb-info.sh` | Container, user, image version, folders and mounts, AI client, published ports and the Mutagen sessions. |
+| `dkdb-info.sh` | Container, user, image version, folders and mounts, AI client, published ports and, in a Mutagen container only, the Mutagen sessions. |
 | `dkdb-version.sh` | The package and image versions, each bash script against the manifest, the tools and whether the container image is compatible. |
 
 The installer and `dkdb-update` also copy the subfolders of `scripts/bash` listed in the manifest (for example `ntm-ssologin/`, with its own `README.md`), which the container sees under `~/devbox/bash/`.
@@ -82,10 +82,10 @@ From any folder, in a new terminal:
 |---|---------|--------------|
 | 1 | `dkdb-image-create` | Builds the image `dkdb-<name>`. |
 | 2 | `dkdb-container-create` | Creates a container (asks for image, container name, user, projects path, tools path, the projects volume type: Mutagen (the first option and the default) or Docker bind mount, and the ports to publish; `-Ports <list>` skips that last question). |
-| 3 | `dkdb-container-start` | Starts a stopped container. For a Mutagen container it then shows the synchronization menu; the first option, **Keep (no changes)**, is the default. |
-| 4 | `dkdb-container-connect` | Opens a shell in a running container; for a Mutagen container it shows the same synchronization menu first. |
-| 5 | `dkdb-container-stop` | Stops a running container. |
-| 6 | `dkdb-container-delete` | Deletes a stopped container (asks for confirmation). |
+| 3 | `dkdb-container-start` | Starts a stopped container (menu, or `-Container <name>` to skip it). For a Mutagen container it then shows the synchronization menu; the first option, **Keep (no changes)**, is the default. |
+| 4 | `dkdb-container-connect` | Opens a shell in a running container (menu, or `-Container <name>`); for a Mutagen container it shows the same synchronization menu first. |
+| 5 | `dkdb-container-stop` | Stops a running container (menu, or `-Container <name>`). |
+| 6 | `dkdb-container-delete` | Deletes a stopped container (menu, or `-Container <name>`; it always asks for confirmation). |
 | 7 | `dkdb-image-delete` | Deletes an image. |
 | 8 | `dkdb-mutagen-start` | Starts the Mutagen daemon if it is not running (optional Mutagen). |
 | 9 | `dkdb-mutagen-stop` | Stops the Mutagen daemon if it is running (stops all Mutagen sessions). |
@@ -93,9 +93,9 @@ From any folder, in a new terminal:
 | 11 | `dkdb-mutagen-clean` | Terminates leftover Mutagen sessions (container deleted outside the scripts, or daemon stopped at that time; menu, asks first). |
 | 12 | `dkdb-mutagen-remove` | Removes one registered Mutagen session of a container: menu of the sessions with their state, then stops and terminates the chosen one after a `[y/N]` (`-Container <name>` skips the container menu). The folders are not touched. |
 | 13 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
-| 14 | `dkdb-mutagen-sync` | Chooses a running Mutagen container and shows the synchronization menu (the same one as start and connect). |
+| 14 | `dkdb-mutagen-sync` | Chooses a running Mutagen container (menu, or `-Container <name>`) and shows the synchronization menu (the same one as start and connect). |
 | 15 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers. |
-| 16 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes, published ports and Mutagen. |
+| 16 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes, published ports and, when a container uses Mutagen (or the daemon has sessions), Mutagen. |
 | 17 | `dkdb-update` | Updates the installed scripts from the repository (`-Branch <name>` to use another branch or tag; default `main`). Only files whose version changed are replaced, after a `[y/N]`. |
 | 18 | `dkdb-mutagen-add` | Adds a folder (a new Mutagen session) to a running Mutagen container: Add (relative) or Add (absolute), with both folders checked (`-Container <name>` skips the container menu). The same Add flow as the synchronization menu, without the other options. |
 

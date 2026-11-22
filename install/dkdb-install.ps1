@@ -1,5 +1,5 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.3.2
+# Version: 0.3.3
 # It downloads manifest.json and every file it lists (scripts and dkdb-uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -36,9 +36,19 @@ function Write-InstallWarning {
     param([string]$Text)
     Write-Host $Text -ForegroundColor $ColorError
 }
+# The natural next step. A script named in it (dkdb-<name>.ps1 or .sh) is written in bold when the terminal
+# supports ANSI (Windows Terminal, PowerShell 7 or later, VS Code); the same helper as dkdb-common.ps1.
 function Write-InstallNext {
     param([string]$Text)
-    Write-Host $Text -ForegroundColor $ColorNext
+    $ansi = (-not $env:NO_COLOR) -and (($PSVersionTable.PSVersion.Major -ge 7) -or [bool]$env:WT_SESSION -or ($env:TERM_PROGRAM -eq 'vscode'))
+    try { if ([Console]::IsOutputRedirected) { $ansi = $false } } catch { $ansi = $false }
+    $esc = [char]27
+    foreach ($part in [regex]::Split($Text, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
+        if (-not $part) { continue }
+        if ($ansi -and $part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') { $part = "$esc[1m$part$esc[22m" }
+        Write-Host $part -NoNewline -ForegroundColor $ColorNext
+    }
+    Write-Host ''
 }
 
 function Stop-Install {
@@ -421,7 +431,7 @@ if ($policy -in @('Restricted', 'AllSigned')) {
 Write-Host ''
 Write-InstallSuccess "Installed in $devboxPath (shared tools folder: $toolsPath), version $version"
 if ($previousVersion -and -not (Test-InstallVersionCompatible -Left $previousVersion -Right $version)) {
-    Write-InstallNext "Updated from ${previousVersion} to ${version}: rebuild the images (dkdb-image-create) and recreate the containers."
+    Write-InstallNext "Updated from ${previousVersion} to ${version}: rebuild the images (dkdb-image-create.ps1) and recreate the containers."
 }
 Write-InstallWarning 'Make sure Docker Engine is running (start Docker Desktop and wait until it is ready).'
-Write-InstallNext 'Next: open a new terminal (so the PATH is refreshed) and run: dkdb-image-create'
+Write-InstallNext 'Next: open a new terminal (so the PATH is refreshed) and run: dkdb-image-create.ps1'

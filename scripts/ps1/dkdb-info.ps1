@@ -1,5 +1,5 @@
 # Show how everything is set up and in which state: folders, PATH, Docker, images, containers,
-# Version: 0.4.3
+# Version: 0.5.0
 # volumes, published ports and Mutagen. For the versions, see dkdb-version.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -31,7 +31,7 @@ if ($Man) {
             'Prints the shared root and its folders and the PATH.',
             'Prints Docker.',
             'Lists images and containers with their state, user, volume type, mounts and published ports (host ip:port -> container port).',
-            'Prints the Mutagen daemon and, per container, its sessions with their progress, the overlaps of active sessions and the host folders shared by several containers.'
+            'Only when a container uses Mutagen (or the daemon has sessions), prints the Mutagen daemon and, per container, its sessions with their progress, the overlaps of active sessions and the host folders shared by several containers.'
         ) `
         -Changes @(
             'Nothing: it only reads.'
@@ -144,46 +144,57 @@ if ($dockerReachable) {
 }
 
 # --- Mutagen ---
-Write-DevboxInfoSection -Title 'Mutagen'
-if (-not (Test-DevboxMutagen)) {
-    Write-Host '  not installed (optional; dkdb-container-create installs it on demand)'
-} else {
-    Write-DevboxInfoField -Label 'Executable' -Value @((Get-InfoHost (Get-DevboxMutagenExe))) -LabelWidth 10
-    if (-not (Test-DevboxMutagenDaemon)) {
-        Show-InfoText -Label 'Daemon' -Text 'stopped (dkdb-mutagen-start, dkdb-mutagen-sync, or starting or connecting a Mutagen container, start it)' -Color $DevboxErrorColor -LabelWidth 10
+# Only when it matters: a container uses Mutagen, or the daemon has sessions. Otherwise there is nothing about
+# synchronization to show.
+$mutagenInstalled = Test-DevboxMutagen
+$daemonUp = $mutagenInstalled -and (Test-DevboxMutagenDaemon)
+$allSessions = @()
+if ($daemonUp) { $allSessions = @(Get-DevboxMutagenSessions) }
+$showMutagen = ($mutagenContainers.Count -gt 0) -or ($allSessions.Count -gt 0)
+if ($showMutagen) {
+    Write-DevboxInfoSection -Title 'Mutagen'
+    if (-not $mutagenInstalled) {
+        Write-Host '  not installed (optional; dkdb-container-create.ps1 installs it on demand)'
     } else {
-        Show-InfoText -Label 'Daemon' -Text 'running' -Color $DevboxSuccessColor -LabelWidth 10
-        $sessions = @(Get-DevboxMutagenSessions)
-        if ($mutagenContainers.Count -eq 0 -and $sessions.Count -eq 0) { Show-InfoText -Label 'Sessions' -Text 'none' -LabelWidth 10 }
-        $byHostFolder = @{}
-        foreach ($container in $mutagenContainers) {
-            $mine = @(Get-DevboxContainerSyncSessions -Container $container)
-            Write-Host "  $container"
-            if ($mine.Count -eq 0) { Show-InfoText -Label 'Session' -Text 'none yet (dkdb-mutagen-sync creates it)' -LabelWidth 10 -Indent 4 }
-            foreach ($session in $mine) {
-                $counts = ''
-                if ($null -ne $session.Total -and $session.Total -gt 0) { $counts = ", $($session.Done) of $($session.Total) files" }
-                $state = $session.Status
-                if ($session.Paused) { $state = "$state (paused)" }
-                $value = @((Get-InfoHost $session.AlphaPath), (Get-InfoPlain ' <-> '), (Get-InfoContainer $session.BetaPath), (Get-InfoPlain " [$state$counts]"))
-                if ($session.LastError -or $session.Conflicts -gt 0) {
-                    $value += @((New-DevboxInfoText " [conflicts: $($session.Conflicts); last error: $($session.LastError)]" $DevboxErrorColor))
+        Write-DevboxInfoField -Label 'Executable' -Value @((Get-InfoHost (Get-DevboxMutagenExe))) -LabelWidth 10
+        if (-not $daemonUp) {
+            Show-InfoText -Label 'Daemon' -Text 'stopped (dkdb-mutagen-start, dkdb-mutagen-sync, or starting or connecting a Mutagen container, start it)' -Color $DevboxErrorColor -LabelWidth 10
+        } else {
+            Show-InfoText -Label 'Daemon' -Text 'running' -Color $DevboxSuccessColor -LabelWidth 10
+            $byHostFolder = @{}
+            foreach ($container in $mutagenContainers) {
+                $mine = @(Get-DevboxContainerSyncSessions -Container $container)
+                Write-Host "  $container"
+                if ($mine.Count -eq 0) { Show-InfoText -Label 'Session' -Text 'none yet (dkdb-mutagen-sync creates it)' -LabelWidth 10 -Indent 4 }
+                foreach ($session in $mine) {
+                    $counts = ''
+                    if ($null -ne $session.Total -and $session.Total -gt 0) { $counts = ", $($session.Done) of $($session.Total) files" }
+                    $state = $session.Status
+                    if ($session.Paused) { $state = "$state (paused)" }
+                    $value = @((Get-InfoHost $session.AlphaPath), (Get-InfoPlain ' <-> '), (Get-InfoContainer $session.BetaPath), (Get-InfoPlain " [$state$counts]"))
+                    if ($session.LastError -or $session.Conflicts -gt 0) {
+                        $value += @((New-DevboxInfoText " [conflicts: $($session.Conflicts); last error: $($session.LastError)]" $DevboxErrorColor))
+                    }
+                    Write-DevboxInfoField -Label 'Session' -Value $value -LabelWidth 10 -Indent 4
+                    $key = $session.AlphaPath.TrimEnd('\', '/').ToLowerInvariant()
+                    if (-not $byHostFolder.ContainsKey($key)) { $byHostFolder[$key] = @() }
+                    $byHostFolder[$key] += $container
                 }
-                Write-DevboxInfoField -Label 'Session' -Value $value -LabelWidth 10 -Indent 4
-                $key = $session.AlphaPath.TrimEnd('\', '/').ToLowerInvariant()
-                if (-not $byHostFolder.ContainsKey($key)) { $byHostFolder[$key] = @() }
-                $byHostFolder[$key] += $container
+                # The sessions of one container must never overlap.
+                $null = Show-DevboxSessionOverlaps -Container $container -Sessions $mine
             }
-            # The sessions of one container must never overlap.
-            $null = Show-DevboxSessionOverlaps -Container $container -Sessions $mine
-        }
-        # Host folders that several containers synchronize (allowed: the host is the common repository).
-        $shared = @($byHostFolder.GetEnumerator() | Where-Object { @($_.Value | Select-Object -Unique).Count -gt 1 })
-        foreach ($entry in $shared) {
-            Write-DevboxInfoField -Label 'Shared' -LabelWidth 10 -Value @((Get-InfoHost $entry.Key), (Get-InfoPlain ": $((@($entry.Value | Select-Object -Unique)) -join ', ')"))
+            # Host folders that several containers synchronize (allowed: the host is the common repository).
+            $shared = @($byHostFolder.GetEnumerator() | Where-Object { @($_.Value | Select-Object -Unique).Count -gt 1 })
+            foreach ($entry in $shared) {
+                Write-DevboxInfoField -Label 'Shared' -LabelWidth 10 -Value @((Get-InfoHost $entry.Key), (Get-InfoPlain ": $((@($entry.Value | Select-Object -Unique)) -join ', ')"))
+            }
         }
     }
 }
 
 Write-Host ''
-Write-DevboxNext 'Next: dkdb-version shows every version; dkdb-mutagen-status shows the details of a session.'
+if ($showMutagen) {
+    Write-DevboxNext 'Next: dkdb-version.ps1 shows every version; dkdb-mutagen-status.ps1 shows the details of a session.'
+} else {
+    Write-DevboxNext 'Next: dkdb-version.ps1 shows every version.'
+}

@@ -1,5 +1,5 @@
 # Stop the Mutagen daemon if it is running (it only checks when it is not).
-# Version: 0.2.0
+# Version: 0.2.1
 # It is one daemon per user: stopping it stops ALL Mutagen sessions, not only dkdb-* ones.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -83,4 +83,4 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
         }
     }
 }
-Write-DevboxNext 'Next: nothing is synchronized until you run dkdb-mutagen-sync or choose it in the menu of dkdb-container-start or dkdb-container-connect.'
+Write-DevboxNext 'Next: nothing is synchronized until you run dkdb-mutagen-sync.ps1 or choose it in the menu of dkdb-container-start.ps1 or dkdb-container-connect.ps1.'

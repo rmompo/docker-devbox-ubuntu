@@ -1,5 +1,5 @@
 # Terminate the orphan Mutagen sessions: dkdb- sessions whose container no longer exists
-# Version: 0.2.0
+# Version: 0.2.1
 # (left by containers deleted outside dkdb-container-delete, or while the Mutagen daemon was
 # stopped). The host folders are not touched.
 # PositionalBinding is off so that a stray argument is an error.
@@ -104,4 +104,4 @@ foreach ($target in $targets) {
     }
 }
 
-Write-DevboxNext 'Next: dkdb-mutagen-status checks the remaining sessions.'
+Write-DevboxNext 'Next: dkdb-mutagen-status.ps1 checks the remaining sessions.'

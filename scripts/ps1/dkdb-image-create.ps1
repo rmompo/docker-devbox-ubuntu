@@ -1,5 +1,5 @@
 # Build a devbox image named <prefix>-<name>.
-# Version: 0.2.5
+# Version: 0.2.6
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -86,4 +86,4 @@ if ($buildExit -ne 0) {
     exit 1
 }
 Write-DevboxSuccess "Image '$imageRef' created."
-Write-DevboxNext 'Next: dkdb-container-create.'
+Write-DevboxNext 'Next: dkdb-container-create.ps1.'

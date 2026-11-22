@@ -1,5 +1,5 @@
 # Start the Mutagen daemon if it is not running (it only checks when it is).
-# Version: 0.2.0
+# Version: 0.2.1
 # dkdb-container-start and dkdb-container-connect already do this for Mutagen containers.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -51,7 +51,7 @@ if (Test-DevboxMutagenDaemon) {
 }
 if (Start-DevboxMutagenDaemon) {
     Write-DevboxSuccess 'The Mutagen daemon is running.'
-    Write-DevboxNext 'Next: dkdb-mutagen-sync lets you choose what to synchronize.'
+    Write-DevboxNext 'Next: dkdb-mutagen-sync.ps1 lets you choose what to synchronize.'
 } else {
     Write-DevboxWarning 'Error: the Mutagen daemon could not be started.'
     exit 1

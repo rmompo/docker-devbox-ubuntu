@@ -1,5 +1,5 @@
 # Show the Mutagen sync status (state and conflicts) of a devbox container, given by name or chosen from a menu.
-# Version: 0.4.1
+# Version: 0.4.3
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -59,11 +59,8 @@ if ($containers.Count -eq 0) {
 }
 
 if ($Container) {
-    $selected = @($containers | Where-Object { $_ -eq $Container -or $_ -eq "$DevboxPrefix-$Container" }) | Select-Object -First 1
-    if (-not $selected) {
-        Write-DevboxWarning "Error: '$Container' is not a '$DevboxPrefix-' container that uses Mutagen. Available: $($containers -join ', ')"
-        exit 1
-    }
+    $selected = Resolve-DevboxContainerName -Name $Container -Candidates $containers -Kind "a '$DevboxPrefix-' container that uses Mutagen"
+    if (-not $selected) { exit 1 }
 } else {
     $selected = Select-DevboxItem -Title 'Select the container to check:' -Items $containers
     if (-not $selected) {
@@ -81,7 +78,7 @@ $main = Get-DevboxSyncSessionName -Container $selected
 $mutagen = Get-DevboxMutagenExe
 $sessions = @(Get-DevboxContainerSyncSessions -Container $selected)
 if ($sessions.Count -eq 0) {
-    Write-DevboxNext "There is no Mutagen session for '$selected' yet: dkdb-mutagen-sync (or the menu of dkdb-container-start or dkdb-container-connect) creates it."
+    Write-DevboxNext "There is no Mutagen session for '$selected' yet: dkdb-mutagen-sync.ps1 (or the menu of dkdb-container-start.ps1 or dkdb-container-connect.ps1) creates it."
     exit 1
 }
 
@@ -118,7 +115,7 @@ else { Write-Host 'No overlapping sessions in this container.' }
 
 Write-Host ''
 if ($allComplete) {
-    Write-DevboxNext 'Next: dkdb-container-connect to work in the container; change the synchronized folder with dkdb-mutagen-sync; if there are conflicts, see TROUBLESHOOTING.md.'
+    Write-DevboxNext 'Next: dkdb-container-connect.ps1 to work in the container; change the synchronized folder with dkdb-mutagen-sync.ps1; if there are conflicts, see TROUBLESHOOTING.md.'
 } else {
-    Write-DevboxNext 'Next: run dkdb-mutagen-status again to see the progress; dkdb-container-connect works meanwhile (the container may have only part of the files).'
+    Write-DevboxNext 'Next: run dkdb-mutagen-status.ps1 again to see the progress; dkdb-container-connect.ps1 works meanwhile (the container may have only part of the files).'
 }

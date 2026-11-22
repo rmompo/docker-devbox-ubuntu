@@ -1,5 +1,5 @@
 # Add a folder (a new Mutagen session) to a running Mutagen container.
-# Version: 0.1.1
+# Version: 0.1.3
 # Same Add (relative) / Add (absolute) flow as the synchronization menu, without the other options.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -69,11 +69,8 @@ if ($candidates.Count -eq 0) {
 }
 
 if ($Container) {
-    $selected = @($candidates | Where-Object { $_ -eq $Container -or $_ -eq "$DevboxPrefix-$Container" }) | Select-Object -First 1
-    if (-not $selected) {
-        Write-DevboxWarning "Error: '$Container' is not a running '$DevboxPrefix-' container that uses Mutagen. Available: $($candidates -join ', ')"
-        exit 1
-    }
+    $selected = Resolve-DevboxContainerName -Name $Container -Candidates $candidates -Kind "a running '$DevboxPrefix-' container that uses Mutagen"
+    if (-not $selected) { exit 1 }
 } else {
     $selected = Select-DevboxItem -Title 'Select the container to add a folder to:' -Items $candidates
     if (-not $selected) {
@@ -91,4 +88,4 @@ if (-not $pick.Ok) {
     exit 1
 }
 Write-DevboxSuccess "Folder added to '$selected'."
-Write-DevboxNext 'Next: dkdb-mutagen-status shows the progress; dkdb-mutagen-remove removes a session.'
+Write-DevboxNext 'Next: dkdb-mutagen-status.ps1 shows the progress; dkdb-mutagen-remove.ps1 removes a session.'

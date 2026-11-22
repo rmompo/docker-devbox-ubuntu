@@ -1,5 +1,5 @@
 # Uninstaller for docker-devbox-ubuntu. Run it from <root>\devbox\install\.
-# Version: 0.2.3
+# Version: 0.2.4
 # It removes <root>\devbox\scripts and <root>\devbox\mutagen and their user PATH entries.
 # It never touches <root>\tools, your projects, containers, images or Docker.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -30,9 +30,19 @@ function Write-UninstallWarning {
     param([string]$Text)
     Write-Host $Text -ForegroundColor $ColorError
 }
+# The natural next step. A script named in it (dkdb-<name>.ps1 or .sh) is written in bold when the terminal
+# supports ANSI (Windows Terminal, PowerShell 7 or later, VS Code); the same helper as dkdb-common.ps1.
 function Write-UninstallNext {
     param([string]$Text)
-    Write-Host $Text -ForegroundColor $ColorNext
+    $ansi = (-not $env:NO_COLOR) -and (($PSVersionTable.PSVersion.Major -ge 7) -or [bool]$env:WT_SESSION -or ($env:TERM_PROGRAM -eq 'vscode'))
+    try { if ([Console]::IsOutputRedirected) { $ansi = $false } } catch { $ansi = $false }
+    $esc = [char]27
+    foreach ($part in [regex]::Split($Text, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
+        if (-not $part) { continue }
+        if ($ansi -and $part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') { $part = "$esc[1m$part$esc[22m" }
+        Write-Host $part -NoNewline -ForegroundColor $ColorNext
+    }
+    Write-Host ''
 }
 
 # Project version from <root>\devbox\manifest.json ('unknown' when it cannot be read).

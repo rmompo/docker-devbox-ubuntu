@@ -1,5 +1,5 @@
 # Create a devbox container (it is not started; use dkdb-container-start).
-# Version: 0.5.1
+# Version: 0.5.2
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -214,10 +214,10 @@ if ($useMutagen) {
     Write-Host "' is synchronized only when you choose it in the menu of dkdb-container-start, dkdb-container-connect or dkdb-mutagen-sync."
 }
 if ($useMutagen) {
-    Write-DevboxNext 'Next: dkdb-container-start to start it (its menu lets you choose what to synchronize), then dkdb-container-connect.'
+    Write-DevboxNext 'Next: dkdb-container-start.ps1 to start it (its menu lets you choose what to synchronize), then dkdb-container-connect.ps1.'
 } else {
-    Write-DevboxNext 'Next: dkdb-container-start, then dkdb-container-connect.'
+    Write-DevboxNext 'Next: dkdb-container-start.ps1, then dkdb-container-connect.ps1.'
 }
 if ($imageIsOlder) {
-    Write-DevboxNext 'Next (optional): dkdb-image-create builds an image for the current scripts; recreate the container from it when you want the newer features.'
+    Write-DevboxNext 'Next (optional): dkdb-image-create.ps1 builds an image for the current scripts; recreate the container from it when you want the newer features.'
 }

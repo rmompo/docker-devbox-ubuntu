@@ -1,5 +1,5 @@
 # Update the installed scripts from the repository (optionally from another branch or tag).
-# Version: 0.2.0
+# Version: 0.2.1
 # It downloads manifest.json and the files whose version changed into a temporary folder, checks them
 # and only then copies them over the installation. Nothing is changed if anything fails.
 # PositionalBinding is off so that a stray argument is an error.
@@ -127,7 +127,7 @@ try {
     }
     if ($changes.Count -eq 0 -and $oldVersion -eq $newVersion) {
         Write-DevboxSuccess "Already up to date ($oldVersion)."
-        Write-DevboxNext 'Next: nothing to do; dkdb-version shows every version.'
+        Write-DevboxNext 'Next: nothing to do; dkdb-version.ps1 shows every version.'
         exit 0
     }
     Write-Host 'Files to update:'
@@ -181,9 +181,9 @@ try {
         exit 1
     }
     if (-not (Test-DevboxVersionCompatible -Left $oldImage -Right $newImage)) {
-        Write-DevboxNext "Next: the image version changed ($oldImage -> $newImage): rebuild the image (dkdb-image-create) and recreate the containers."
+        Write-DevboxNext "Next: the image version changed ($oldImage -> $newImage): rebuild the image (dkdb-image-create.ps1) and recreate the containers."
     } else {
-        Write-DevboxNext 'Next: dkdb-version shows every version; existing images and containers keep working.'
+        Write-DevboxNext 'Next: dkdb-version.ps1 shows every version; existing images and containers keep working.'
     }
 } finally {
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue }

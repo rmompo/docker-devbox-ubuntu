@@ -1,5 +1,5 @@
 # Check the installed package against manifest.json: every listed file must exist and carry
-# Version: 0.2.2
+# Version: 0.2.3
 # the version that the manifest says. Exit code 1 when something is inconsistent.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -52,4 +52,4 @@ if ($result.Errors.Count -gt 0) {
     exit 1
 }
 Write-DevboxSuccess 'The package is consistent with manifest.json.'
-Write-DevboxNext 'Next: dkdb-image-create builds the image, then dkdb-container-create.'
+Write-DevboxNext 'Next: dkdb-image-create.ps1 builds the image, then dkdb-container-create.ps1.'

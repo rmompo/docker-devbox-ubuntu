@@ -1,5 +1,5 @@
-# Delete one stopped devbox container chosen from a menu.
-# Version: 0.2.0
+# Delete one stopped devbox container, given with -Container or chosen from a menu.
+# Version: 0.3.1
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # With a Mutagen container, only its Mutagen sessions (the whole projects folder and its
@@ -7,20 +7,26 @@
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [string]$Container,
     [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Deletes one stopped devbox container chosen from a menu, after asking for confirmation.' `
-        -Usage 'dkdb-container-delete [-Help]' `
+        -Description 'Deletes one stopped devbox container, given with -Container or chosen from a menu, after asking for confirmation.' `
+        -Usage 'dkdb-container-delete [-Container <name>] [-Help] [-Man]' `
+        -Parameters @(
+            @{ Name = '-Container'; Description = 'Name of the container (with or without the dkdb- prefix); skips the container menu. It must be a stopped container.' }
+        ) `
         -Examples @(
-            @{ Command = 'dkdb-container-delete'; Description = 'Shows the stopped containers and deletes the one you pick.' }
+            @{ Command = 'dkdb-container-delete'; Description = 'Shows the stopped containers and deletes the one you pick.' },
+            @{ Command = 'dkdb-container-delete -Container dkdb-dev'; Description = 'Deletes that container (it still asks for confirmation).' }
         ) `
         -Notes @(
             'Its home, the installed AI client and (with Mutagen) its copy of the projects are lost; the host folders are not touched.',
-            'For a Mutagen container it also terminates its Mutagen sessions.'
+            'For a Mutagen container it also terminates its Mutagen sessions.',
+            'With -Container it still asks for confirmation.'
         )
     exit 0
 }
@@ -31,7 +37,7 @@ if ($Man) {
             'Docker Engine running and a stopped dkdb- container (stop a running one first).'
         ) `
         -Steps @(
-            'Shows the menu of stopped containers.',
+            'Uses the container given with -Container, or shows the menu of stopped containers.',
             'Asks [y/N]: its home and installed AI client are lost (with Mutagen, also the container copy of the projects).',
             'For a Mutagen container, reads the names of its sessions first (they depend on the container ID).',
             'Runs docker rm.',
@@ -56,10 +62,15 @@ if ($containers.Count -eq 0) {
     exit 0
 }
 
-$selected = Select-DevboxItem -Title 'Select the container to delete:' -Items $containers
-if (-not $selected) {
-    Write-Host 'Cancelled.'
-    exit 0
+if ($Container) {
+    $selected = Resolve-DevboxContainerName -Name $Container -Candidates $containers -Kind "a stopped '$DevboxPrefix-' container"
+    if (-not $selected) { exit 1 }
+} else {
+    $selected = Select-DevboxItem -Title 'Select the container to delete:' -Items $containers
+    if (-not $selected) {
+        Write-Host 'Cancelled.'
+        exit 0
+    }
 }
 
 $answer = Read-Host "Delete '$selected'? Its home and installed AI client are lost (with Mutagen, the container copy of the projects too). [y/N]"
@@ -84,4 +95,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-DevboxSuccess "Container '$selected' deleted."
 if ($usesMutagen) { foreach ($sessionName in $sessionNames) { Remove-DevboxSyncSession -SessionName $sessionName } }
-Write-DevboxNext 'Next: dkdb-container-create creates another one.'
+Write-DevboxNext 'Next: dkdb-container-create.ps1 creates another one.'

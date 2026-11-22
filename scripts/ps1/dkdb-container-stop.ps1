@@ -1,19 +1,24 @@
-# Stop one running devbox container chosen from a menu.
-# Version: 0.2.0
+# Stop one running devbox container, given with -Container or chosen from a menu.
+# Version: 0.3.1
 # It never touches Mutagen (daemon or session): see dkdb-mutagen-stop for that.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
+    [string]$Container,
     [switch]$Man,
     [switch]$Help
 )
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Stops one running devbox container chosen from a menu.' `
-        -Usage 'dkdb-container-stop [-Help]' `
+        -Description 'Stops one running devbox container, given with -Container or chosen from a menu.' `
+        -Usage 'dkdb-container-stop [-Container <name>] [-Help] [-Man]' `
+        -Parameters @(
+            @{ Name = '-Container'; Description = 'Name of the container (with or without the dkdb- prefix); skips the container menu. It must be a running container.' }
+        ) `
         -Examples @(
-            @{ Command = 'dkdb-container-stop'; Description = 'Shows the running containers and stops the one you pick.' }
+            @{ Command = 'dkdb-container-stop'; Description = 'Shows the running containers and stops the one you pick.' },
+            @{ Command = 'dkdb-container-stop -Container dkdb-dev'; Description = 'Stops that container without the menu.' }
         ) `
         -Notes @(
             'It never touches Mutagen.'
@@ -22,12 +27,12 @@ if ($Help) {
 }
 if ($Man) {
     Show-DevboxMan -Script $PSCommandPath `
-        -Purpose 'Stops one running devbox container chosen from a menu.' `
+        -Purpose 'Stops one running devbox container, given with -Container or chosen from a menu.' `
         -Needs @(
             'Docker Engine running and a running dkdb- container.'
         ) `
         -Steps @(
-            'Shows the menu of running containers.',
+            'Uses the container given with -Container, or shows the menu of running containers.',
             'Runs docker stop.'
         ) `
         -Changes @(
@@ -49,10 +54,15 @@ if ($containers.Count -eq 0) {
     exit 0
 }
 
-$selected = Select-DevboxItem -Title 'Select the container to stop:' -Items $containers
-if (-not $selected) {
-    Write-Host 'Cancelled.'
-    exit 0
+if ($Container) {
+    $selected = Resolve-DevboxContainerName -Name $Container -Candidates $containers -Kind "a running '$DevboxPrefix-' container"
+    if (-not $selected) { exit 1 }
+} else {
+    $selected = Select-DevboxItem -Title 'Select the container to stop:' -Items $containers
+    if (-not $selected) {
+        Write-Host 'Cancelled.'
+        exit 0
+    }
 }
 
 docker stop $selected | Out-Null
@@ -61,4 +71,4 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-DevboxSuccess "Container '$selected' stopped."
-Write-DevboxNext 'Next: dkdb-container-start starts it again, or dkdb-container-delete removes it.'
+Write-DevboxNext 'Next: dkdb-container-start.ps1 starts it again, or dkdb-container-delete.ps1 removes it.'

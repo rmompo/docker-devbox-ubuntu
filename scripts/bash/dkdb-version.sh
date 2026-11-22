@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.3.1
+# Version: 0.3.2
 # Show every version seen from inside the container: the image, the bash scripts against the manifest and the tools.
 # Same layout as dkdb-version.ps1 on the host. It only reads; it works even when the host has not written the state.
 set -u
@@ -111,7 +111,7 @@ fi
 
 echo
 if [ "$problems" -gt 0 ]; then
-    next 'Next: to update the container, rebuild the image (dkdb-image-create) and recreate it from the host; bash ~/devbox/bash/dkdb-info.sh shows how it is set up.'
+    next 'Next: to update the container, rebuild the image (dkdb-image-create.ps1) and recreate it from the host; bash ~/devbox/bash/dkdb-info.sh shows how it is set up.'
 else
     next 'Next: bash ~/devbox/bash/dkdb-info.sh shows how this container is set up.'
 fi

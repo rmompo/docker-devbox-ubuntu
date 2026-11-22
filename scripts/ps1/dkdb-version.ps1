@@ -1,5 +1,5 @@
 # Show every version: the project, each file, the tools, the images and the containers.
-# Version: 0.4.2
+# Version: 0.4.3
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -182,7 +182,7 @@ if ($dockerReachable) {
 
 Write-Host ''
 if ($problems -gt 0) {
-    Write-DevboxNext 'Next: to update a container, rebuild the image (dkdb-image-create) and recreate it; dkdb-info shows how everything is set up.'
+    Write-DevboxNext 'Next: to update a container, rebuild the image (dkdb-image-create.ps1) and recreate it; dkdb-info.ps1 shows how everything is set up.'
 } else {
-    Write-DevboxNext 'Next: dkdb-info shows how everything is set up.'
+    Write-DevboxNext 'Next: dkdb-info.ps1 shows how everything is set up.'
 }

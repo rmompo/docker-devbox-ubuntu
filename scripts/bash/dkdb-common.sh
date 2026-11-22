@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.3.1
+# Version: 0.4.0
 # Common definitions of the devbox bash scripts that show information (dkdb-info.sh, dkdb-version.sh).
 # Source it, do not run it:  . "$(dirname "${BASH_SOURCE[0]}")/dkdb-common.sh"; the script defines usage() and, for the manual, MAN_*.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -12,24 +12,34 @@ DEVBOX_STATE_FILE="${DEVBOX_STATE_FILE:-$HOME/.devbox-state}"
 # Messages: green success, red warnings and errors, yellow the next step. Sides: cyan a path of the host,
 # magenta a path of the container. Text roles: a title (headings of -h and man), a section (SECTIONS of dkdb-info
 # and dkdb-version), a label (a PROPERTY in capitals), a name (a script, command, parameter or file) and a note
-# (version line, hints). Off when the output is not a terminal or NO_COLOR is set. The scripts that are not part
+# (version line, hints) and a bold for the scripts named in a Next line. Off when the output is not a terminal or NO_COLOR is set. The scripts that are not part
 # of this file load it too (. dkdb-common.sh) instead of defining their own colors.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     c_green=$'\033[32m'; c_red=$'\033[31m'; c_yellow=$'\033[33m'; c_gray=$'\033[90m'; c_off=$'\033[0m'
     c_host=$'\033[36m'; c_container=$'\033[35m'
     c_title=$'\033[97m'; c_section=$'\033[97m'; c_label=$'\033[33m'; c_name=$'\033[33m'
+    c_bold=$'\033[1m'; c_unbold=$'\033[22m'
     # Badges (reverse video, black text): the number of the background color of each one.
     badge_readonly=42; badge_readwrite=41; badge_mutagen=41; badge_sync=43; badge_volume=41; badge_compatible=42; badge_incompatible=41
 else
     c_green=''; c_red=''; c_yellow=''; c_gray=''; c_off=''
     c_host=''; c_container=''
     c_title=''; c_section=''; c_label=''; c_name=''
+    c_bold=''; c_unbold=''
     badge_readonly=''; badge_readwrite=''; badge_mutagen=''; badge_sync=''; badge_volume=''; badge_compatible=''; badge_incompatible=''
 fi
 ok() { printf '%s%s%s\n' "$c_green" "$*" "$c_off"; }
 bad() { printf '%s%s%s\n' "$c_red" "$*" "$c_off"; }
 warn() { printf '%s%s%s\n' "$c_red" "$*" "$c_off" >&2; }
-next() { printf '%s%s%s\n' "$c_yellow" "$*" "$c_off"; }
+# The natural next step in yellow; a script named in it (dkdb-<name>.ps1 or .sh) is written in bold.
+next() {
+    local rest="$*" out="" re='dkdb-[a-z0-9-]+\.(ps1|sh)'
+    while [[ "$rest" =~ $re ]]; do
+        out+="${rest%%"${BASH_REMATCH[0]}"*}${c_bold}${BASH_REMATCH[0]}${c_unbold}"
+        rest="${rest#*"${BASH_REMATCH[0]}"}"
+    done
+    printf '%s%s%s%s\n' "$c_yellow" "$out" "$rest" "$c_off"
+}
 
 # The layout of dkdb-info and dkdb-version (same look as the host): SECTIONS in capitals and one color, PROPERTIES in
 # capitals and another color followed by dots (at least two) up to the column of the values, VALUES in the color of

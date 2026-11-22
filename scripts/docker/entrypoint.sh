@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.3.0
+# Version: 0.4.0
 # Container entrypoint (runs as root).
 # Creates the user given in DEVBOX_USER (password = user name, sudo with
 # password), then hands the main process over to that user.
@@ -10,12 +10,21 @@ set -euo pipefail
 # are always on; NO_COLOR disables them.
 if [ -z "${NO_COLOR:-}" ]; then
     c_green=$'\033[32m'; c_red=$'\033[31m'; c_yellow=$'\033[33m'; c_off=$'\033[0m'
+    c_bold=$'\033[1m'; c_unbold=$'\033[22m'
 else
     c_green=''; c_red=''; c_yellow=''; c_off=''
+    c_bold=''; c_unbold=''
 fi
 ok() { printf '%s%s%s\n' "$c_green" "$*" "$c_off"; }
 warn() { printf '%s%s%s\n' "$c_red" "$*" "$c_off" >&2; }
-next() { printf '%s%s%s\n' "$c_yellow" "$*" "$c_off"; }
+next() {
+    local rest="$*" out="" re='dkdb-[a-z0-9-]+\.(ps1|sh)'
+    while [[ "$rest" =~ $re ]]; do
+        out+="${rest%%"${BASH_REMATCH[0]}"*}${c_bold}${BASH_REMATCH[0]}${c_unbold}"
+        rest="${rest#*"${BASH_REMATCH[0]}"}"
+    done
+    printf '%s%s%s%s\n' "$c_yellow" "$out" "$rest" "$c_off"
+}
 
 script_version="$(sed -n 's/^# Version: *//p' "$0" | head -n 1)"
 echo "$(basename "$0") ${script_version:-unknown} (docker-devbox-ubuntu image ${DEVBOX_IMAGE_VERSION:-unknown})"
@@ -89,6 +98,6 @@ fi
 # Ready marker for the host scripts (/dev/shm is a tmpfs recreated at every start).
 touch /dev/shm/devbox-ready
 ok "Container ready (user ${DEVBOX_USER})."
-next "Next: dkdb-container-connect opens a shell in this container."
+next "Next: dkdb-container-connect.ps1 opens a shell in this container."
 
 exec gosu "$DEVBOX_USER" "$@"

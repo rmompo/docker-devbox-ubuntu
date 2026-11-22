@@ -1,5 +1,5 @@
 # Delete one devbox image chosen from a menu.
-# Version: 0.2.0
+# Version: 0.2.1
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -61,4 +61,4 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-DevboxSuccess "Image '$selected' deleted."
-Write-DevboxNext 'Next: dkdb-image-create builds a new image when you need one.'
+Write-DevboxNext 'Next: dkdb-image-create.ps1 builds a new image when you need one.'

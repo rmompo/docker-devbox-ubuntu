@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.3.1
+# Version: 0.4.0
 # Show how this container is set up, seen from inside it: user, folders, mounts, AI client, published ports and the
 # Mutagen sessions.
 # Same layout as dkdb-info.ps1 on the host. It only reads. The ports and the Mutagen part come from the state file
@@ -23,11 +23,11 @@ MAN_STEPS=(
     'Prints the folders ~/devbox/bash, ~/devbox/tools and ~/devbox/projects with their mount mode, in red when one does not exist.'
     'Lists the mounts under ~/devbox.'
     'Prints the published ports (host ip:port -> container port) as the host last reported them: they are fixed when the container is created, and the container cannot see them by itself.'
-    'With Mutagen, prints the daemon and the sessions (host folder <-> container folder, state, conflicts and last error) as the host last reported them, and says when; it warns in red when no Mutagen agent is connected, because the list may then be out of date.'
+    'Only in a container that uses Mutagen, prints the daemon and the sessions (host folder <-> container folder, state, conflicts and last error) as the host last reported them, and says when; it warns in red when no Mutagen agent is connected, because the list may then be out of date.'
 )
 MAN_CHANGES=('Nothing: it only reads.')
 MAN_NEVER=('Synchronizes, pauses or changes any session (that is done from the host).' 'Touches the host or Docker.')
-MAN_NEXT='bash ~/devbox/bash/dkdb-version.sh shows every version; dkdb-mutagen-status on the host shows the details of a session.'
+MAN_NEXT='bash ~/devbox/bash/dkdb-version.sh shows every version; in a Mutagen container, dkdb-mutagen-status.ps1 on the host shows the details of a session.'
 handle_arguments "$@"
 
 banner "${BASH_SOURCE[0]}"
@@ -122,42 +122,46 @@ else
     fi
 fi
 
-# --- Mutagen (from the state file written by the host) ---
-info_section 'Mutagen'
-if [ "$sync_kind" != mutagen ]; then
-    echo '  not used by this container (the projects folder is a Docker bind mount)'
-elif [ ! -r "$DEVBOX_STATE_FILE" ]; then
-    info_field 'State' 10 2 't:red:no state yet: run dkdb-container-connect or dkdb-mutagen-sync on the host to write it'
-else
-    daemon="$(state_get daemon)"
-    updated="$(state_get updated)"
-    info_field 'Reported' 10 2 "t:none:as the host reported at $updated"
-    case "$daemon" in
-        running) info_field 'Daemon' 10 2 't:green:running' ;;
-        stopped) info_field 'Daemon' 10 2 't:red:stopped (dkdb-mutagen-start, dkdb-mutagen-sync, or starting or connecting the container, start it)' ;;
-        *) info_field 'Daemon' 10 2 "t:none:${daemon:-unknown}" ;;
-    esac
-    name="$(hostname)"
-    count=0
-    echo "  $name"
-    while IFS='|' read -r alpha beta state conflicts last_error; do
-        [ -n "$alpha" ] || continue
-        count=$((count + 1))
-        pieces=("t:host:$alpha" 't:none: <-> ' "t:container:$beta" "t:none: [$state]")
-        if [ -n "$last_error" ] || [ "${conflicts:-0}" -gt 0 ] 2>/dev/null; then
-            pieces+=("t:red: [conflicts: ${conflicts:-0}; last error: $last_error]")
-        fi
-        info_field 'Session' 10 4 "${pieces[@]}"
-    done < <(state_each session)
-    if [ "$count" -eq 0 ] && [ "$daemon" = running ]; then info_field 'Session' 10 4 't:none:none yet (dkdb-mutagen-sync on the host creates it)'; fi
-    if [ "$count" -gt 0 ]; then
-        if pgrep -f mutagen-agent >/dev/null 2>&1; then
-            info_field 'Agent' 10 2 't:none:a Mutagen agent is connected'
-        else
-            info_field 'Agent' 10 2 't:red:no Mutagen agent is connected: the list may be out of date (dkdb-mutagen-status on the host shows the real state)'
+# --- Mutagen (from the state file written by the host) --- - only in a Mutagen container ---
+if [ "$sync_kind" = mutagen ]; then
+    info_section 'Mutagen'
+    if [ ! -r "$DEVBOX_STATE_FILE" ]; then
+        info_field 'State' 10 2 't:red:no state yet: run dkdb-container-connect or dkdb-mutagen-sync on the host to write it'
+    else
+        daemon="$(state_get daemon)"
+        updated="$(state_get updated)"
+        info_field 'Reported' 10 2 "t:none:as the host reported at $updated"
+        case "$daemon" in
+            running) info_field 'Daemon' 10 2 't:green:running' ;;
+            stopped) info_field 'Daemon' 10 2 't:red:stopped (dkdb-mutagen-start, dkdb-mutagen-sync, or starting or connecting the container, start it)' ;;
+            *) info_field 'Daemon' 10 2 "t:none:${daemon:-unknown}" ;;
+        esac
+        name="$(hostname)"
+        count=0
+        echo "  $name"
+        while IFS='|' read -r alpha beta state conflicts last_error; do
+            [ -n "$alpha" ] || continue
+            count=$((count + 1))
+            pieces=("t:host:$alpha" 't:none: <-> ' "t:container:$beta" "t:none: [$state]")
+            if [ -n "$last_error" ] || [ "${conflicts:-0}" -gt 0 ] 2>/dev/null; then
+                pieces+=("t:red: [conflicts: ${conflicts:-0}; last error: $last_error]")
+            fi
+            info_field 'Session' 10 4 "${pieces[@]}"
+        done < <(state_each session)
+        if [ "$count" -eq 0 ] && [ "$daemon" = running ]; then info_field 'Session' 10 4 't:none:none yet (dkdb-mutagen-sync on the host creates it)'; fi
+        if [ "$count" -gt 0 ]; then
+            if pgrep -f mutagen-agent >/dev/null 2>&1; then
+                info_field 'Agent' 10 2 't:none:a Mutagen agent is connected'
+            else
+                info_field 'Agent' 10 2 't:red:no Mutagen agent is connected: the list may be out of date (dkdb-mutagen-status on the host shows the real state)'
+            fi
         fi
     fi
 fi
 
 echo
-next 'Next: bash ~/devbox/bash/dkdb-version.sh shows every version; dkdb-mutagen-status on the host shows the details of a session.'
+if [ "$sync_kind" = mutagen ]; then
+    next 'Next: bash ~/devbox/bash/dkdb-version.sh shows every version; dkdb-mutagen-status.ps1 on the host shows the details of a session.'
+else
+    next 'Next: bash ~/devbox/bash/dkdb-version.sh shows every version.'
+fi

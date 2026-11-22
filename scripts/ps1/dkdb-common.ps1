@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.11.4
+# Version: 0.13.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -310,12 +310,12 @@ function Assert-DevboxIntegrity {
     if ($WarnOnly) {
         Write-DevboxWarning 'Warning: the installed package is inconsistent with manifest.json (continuing anyway):'
         foreach ($problem in $result.Errors) { Write-DevboxWarning "  - $problem" }
-        Write-DevboxNext 'Next: run dkdb-install.ps1 again (dkdb-verify shows the details).'
+        Write-DevboxNext 'Next: run dkdb-install.ps1 again (dkdb-verify.ps1 shows the details).'
         return
     }
     Write-DevboxWarning 'Error: the installed package is inconsistent with manifest.json:'
     foreach ($problem in $result.Errors) { Write-DevboxWarning "  - $problem" }
-    Write-DevboxNext 'Run dkdb-install.ps1 again (dkdb-verify shows the details).'
+    Write-DevboxNext 'Run dkdb-install.ps1 again (dkdb-verify.ps1 shows the details).'
     exit 1
 }
 
@@ -366,7 +366,7 @@ function Test-DevboxContainerVersion {
     Write-Host "Container image version: $shown"
     if ($imageVersion -and (Test-DevboxVersionCompatible -Left $imageVersion -Right $expected)) { return $true }
     Write-DevboxWarning "Warning: '$Container' was created from an image with version $shown, not compatible with the image version that the scripts expect ($expected). It keeps working, but newer features may be missing."
-    Write-DevboxNext 'Next: to update, rebuild the image (dkdb-image-create) and recreate the container (copy your data out first, for example with docker cp).'
+    Write-DevboxNext 'Next: to update, rebuild the image (dkdb-image-create.ps1) and recreate the container (copy your data out first, for example with docker cp).'
     return $false
 }
 
@@ -384,9 +384,26 @@ function Write-DevboxWarning {
     param([string]$Text)
     Write-Host $Text -ForegroundColor $DevboxErrorColor
 }
+# True when the terminal understands ANSI sequences (bold): Windows Terminal, PowerShell 7 or later and the VS Code
+# terminal. False when the output is redirected, NO_COLOR is set, or it is the classic console of Windows PowerShell 5.1.
+function Test-DevboxAnsi {
+    if ($env:NO_COLOR) { return $false }
+    try { if ([Console]::IsOutputRedirected) { return $false } } catch { return $false }
+    return (($PSVersionTable.PSVersion.Major -ge 7) -or [bool]$env:WT_SESSION -or ($env:TERM_PROGRAM -eq 'vscode'))
+}
+
+# The natural next step, in the Next color. A script named in it (dkdb-<name>.ps1 or .sh: always with its extension)
+# is written in bold when the terminal supports it.
 function Write-DevboxNext {
     param([string]$Text)
-    Write-Host $Text -ForegroundColor $DevboxNextColor
+    $ansi = Test-DevboxAnsi
+    $esc = [char]27
+    foreach ($part in [regex]::Split($Text, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
+        if (-not $part) { continue }
+        if ($ansi -and $part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') { $part = "$esc[1m$part$esc[22m" }
+        Write-Host $part -NoNewline -ForegroundColor $DevboxNextColor
+    }
+    Write-Host ''
 }
 
 # One line of the list of registered syncs: [active] in green, [paused] in red, then the label.
@@ -727,6 +744,23 @@ function Get-DevboxContainers {
         }
     }
     return @($names)
+}
+
+# Resolve the value of -Container among the candidate containers: the name with or without the dkdb-
+# prefix. Returns the full name, or $null after warning with the available ones (the caller exits).
+# Kind describes what the container must be, for the message ("a running 'dkdb-' container").
+function Resolve-DevboxContainerName {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [string[]]$Candidates,
+        [Parameter(Mandatory)][string]$Kind
+    )
+    $found = @($Candidates | Where-Object { $_ -eq $Name -or $_ -eq "$DevboxPrefix-$Name" }) | Select-Object -First 1
+    if (-not $found) {
+        Write-DevboxWarning "Error: '$Name' is not $Kind. Available: $(@($Candidates) -join ', ')"
+        return $null
+    }
+    return $found
 }
 
 # Read an environment variable stored in a container (DEVBOX_USER, DEVBOX_SYNC, ...).
@@ -1124,7 +1158,7 @@ function Start-DevboxMutagenDaemon {
     }
     Write-DevboxWarning "Mutagen: 'daemon start' exited with code $startCode."
     Write-DevboxWarning "Mutagen: the daemon does not answer: $(Get-DevboxMutagenDaemonError)"
-    Write-DevboxNext 'If it mentions a version mismatch, another Mutagen daemon is running: stop it with dkdb-mutagen-stop (or mutagen daemon stop) and try again.'
+    Write-DevboxNext 'If it mentions a version mismatch, another Mutagen daemon is running: stop it with dkdb-mutagen-stop.ps1 (or mutagen daemon stop) and try again.'
     return $false
 }
 
@@ -1516,7 +1550,7 @@ function Show-DevboxSyncFailure {
     Write-DevboxWarning "Mutagen status: $($info.Status)"
     if ($info.LastError) { Write-DevboxWarning "Mutagen last error: $($info.LastError)" }
     else { Write-Host 'Mutagen reports no error for the session (it may be reconnecting).' }
-    Write-DevboxNext 'Next: dkdb-mutagen-status shows the details and the progress; run it again to see whether it moves.'
+    Write-DevboxNext 'Next: dkdb-mutagen-status.ps1 shows the details and the progress; run it again to see whether it moves.'
 }
 
 # --- Incremental synchronization (menu of Invoke-DevboxSyncPick, spec 08) ---
@@ -1579,7 +1613,7 @@ function Invoke-DevboxSyncFlush {
     param([Parameter(Mandatory)][string]$Session)
     $mutagen = Get-DevboxMutagenExe
     Write-Host "Synchronizing $Session ..."
-    Write-DevboxNext 'A large folder can take a while: follow it from another terminal with dkdb-mutagen-status.'
+    Write-DevboxNext 'A large folder can take a while: follow it from another terminal with dkdb-mutagen-status.ps1.'
     & $mutagen sync flush $Session | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-DevboxWarning 'Warning: the flush failed. Mutagen retries the connection by itself; the synchronization may still progress.'

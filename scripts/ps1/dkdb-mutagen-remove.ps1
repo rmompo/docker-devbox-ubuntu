@@ -1,5 +1,5 @@
 # Remove one Mutagen session of a devbox container: choose it in a menu, stop (pause) it and terminate it.
-# Version: 0.1.0
+# Version: 0.1.2
 # The host and container folders are not touched. PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -63,11 +63,8 @@ if ($containers.Count -eq 0) {
 }
 
 if ($Container) {
-    $selected = @($containers | Where-Object { $_ -eq $Container -or $_ -eq "$DevboxPrefix-$Container" }) | Select-Object -First 1
-    if (-not $selected) {
-        Write-DevboxWarning "Error: '$Container' is not a '$DevboxPrefix-' container that uses Mutagen. Available: $($containers -join ', ')"
-        exit 1
-    }
+    $selected = Resolve-DevboxContainerName -Name $Container -Candidates $containers -Kind "a '$DevboxPrefix-' container that uses Mutagen"
+    if (-not $selected) { exit 1 }
 } else {
     $selected = Select-DevboxItem -Title 'Select the container whose session you want to remove:' -Items $containers
     if (-not $selected) {
@@ -125,4 +122,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-DevboxSuccess "Mutagen session removed: $($target.Label) ($($target.Name))"
 $null = Update-DevboxContainerState -Container $selected
-Write-DevboxNext 'Next: dkdb-mutagen-status shows the remaining sessions; dkdb-mutagen-sync registers a folder again.'
+Write-DevboxNext 'Next: dkdb-mutagen-status.ps1 shows the remaining sessions; dkdb-mutagen-sync.ps1 registers a folder again.'
