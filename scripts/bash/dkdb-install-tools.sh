@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034  # the MAN_* arrays are read by show_manual in dkdb-common.sh (through a nameref)
-# Version: 0.1.2
+# Version: 0.2.0
 # Install the tools that the devbox scripts need and that an image may not have (for example an image older
 # than the scripts). Run it inside the container: bash ~/devbox/bash/dkdb-install-tools.sh
 set -u
@@ -80,7 +80,24 @@ for argument in "$@"; do
 done
 [ "${#selected[@]}" -gt 0 ] || selected=("${GROUPS_ORDER[@]}")
 
-banner "${BASH_SOURCE[0]}"
+# On a terminal and without arguments: a menu that comes back after every option until Esc (spec 01); each option
+# runs this same script (DKDB_IN_MENU stops it from drawing its banner again).
+if [ "$#" -eq 0 ] && [ -z "${DKDB_IN_MENU:-}" ] && is_interactive; then
+    labels=('Check what is missing (installs nothing)' 'Install what is missing (every group)')
+    options=('check' '')
+    for group in "${GROUPS_ORDER[@]}"; do labels+=("Install only the group: $group"); options+=("$group"); done
+    while true; do
+        menu_header "${BASH_SOURCE[0]}" 'Tools'
+        select_item 'Select what to do:' exit "${labels[@]}" || break
+        menu_header "${BASH_SOURCE[0]}" "Tools > ${labels[$MENU_INDEX]%% (*}"
+        # shellcheck disable=SC2086  # an empty option must expand to nothing
+        ( DKDB_IN_MENU=1 bash "${BASH_SOURCE[0]}" ${options[$MENU_INDEX]} )
+        wait_key
+    done
+    exit 0
+fi
+
+[ -n "${DKDB_IN_MENU:-}" ] || banner "${BASH_SOURCE[0]}"
 
 # Print the packages of a group that are missing (one per line, without repeats).
 missing_packages() {

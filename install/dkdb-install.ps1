@@ -1,5 +1,5 @@
 # Installer for docker-devbox-ubuntu. Download only this file and run it.
-# Version: 0.3.3
+# Version: 0.3.4
 # It downloads manifest.json and every file it lists (scripts and dkdb-uninstall.ps1) from the
 # repository into <root>\devbox, creates <root>\tools and adds devbox\scripts\ps1 to the user PATH.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -28,6 +28,7 @@ $ColorNext = 'Yellow'
 $ColorTitle = 'White'
 $ColorName = 'DarkYellow'
 $ColorNote = 'DarkGray'
+$ColorScript = 'White'
 function Write-InstallSuccess {
     param([string]$Text)
     Write-Host $Text -ForegroundColor $ColorSuccess
@@ -36,8 +37,8 @@ function Write-InstallWarning {
     param([string]$Text)
     Write-Host $Text -ForegroundColor $ColorError
 }
-# The natural next step. A script named in it (dkdb-<name>.ps1 or .sh) is written in bold when the terminal
-# supports ANSI (Windows Terminal, PowerShell 7 or later, VS Code); the same helper as dkdb-common.ps1.
+# The natural next step. A script named in it (dkdb-<name>.ps1 or .sh) is written in white, and in bold when the
+# terminal supports ANSI (Windows Terminal, PowerShell 7 or later, VS Code); the same helper as dkdb-common.ps1.
 function Write-InstallNext {
     param([string]$Text)
     $ansi = (-not $env:NO_COLOR) -and (($PSVersionTable.PSVersion.Major -ge 7) -or [bool]$env:WT_SESSION -or ($env:TERM_PROGRAM -eq 'vscode'))
@@ -45,8 +46,12 @@ function Write-InstallNext {
     $esc = [char]27
     foreach ($part in [regex]::Split($Text, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
         if (-not $part) { continue }
-        if ($ansi -and $part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') { $part = "$esc[1m$part$esc[22m" }
-        Write-Host $part -NoNewline -ForegroundColor $ColorNext
+        $color = $ColorNext
+        if ($part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') {
+            $color = $ColorScript
+            if ($ansi) { $part = "$esc[1m$part$esc[22m" }
+        }
+        Write-Host $part -NoNewline -ForegroundColor $color
     }
     Write-Host ''
 }

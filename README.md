@@ -88,11 +88,15 @@ From any folder, in a new terminal:
 | 6 | `dkdb-container-delete` | Deletes a stopped container (menu, or `-Container <name>`; it always asks for confirmation). |
 | 7 | `dkdb-image-delete` | Deletes an image. |
 | 8 | `dkdb-mutagen-service` | Controls the Mutagen service from a menu (it acts on Mutagen as a whole, not on a container): start the daemon, stop it (stops all your Mutagen sessions), show its state, or terminate the orphan sessions (container deleted outside the scripts, or daemon stopped at that time; asks first). |
-| 9 | `dkdb-mutagen-manage` | Manages the Mutagen sessions of a container from a menu of actions: **Add** a folder (Add (relative) or Add (absolute), both folders checked), **Modify** (activate or pause sessions: Keep, Custom, All, None), **Remove** a session (after a `[y/N]`) and **Status** (state, conflicts and progress, `So far X of Y files`, and whether it moved since the previous query; also for all the containers). `-Container <name>` skips the container menu. The folders are never touched. |
+| 9 | `dkdb-mutagen-manage` | Manages the Mutagen sessions of a container: first the container (`-Container <name>` skips its menu), then a menu of what to do with it (Add and Modify only when it is running): **Add** a folder (Add (relative) or Add (absolute), both folders checked), **Modify** (activate or pause sessions: Keep, Custom, All, None), **Remove** a session (after a `[y/N]`) and **Status** (state, conflicts and progress, `So far X of Y files`, and whether it moved since the previous query; also for all the containers). `(all containers)` in the container menu shows the status of every Mutagen container. The folders are never touched. |
 | 10 | `dkdb-verify` | Checks the installed package against `manifest.json`. |
 | 11 | `dkdb-version` | Shows every version: the project, each file, the tools, the images and the containers (each with its projects volume: `MUTAGEN-SYNC` or `VOLUME-P9`, a Docker bind mount). |
 | 12 | `dkdb-info` | Shows how everything is set up: folders, PATH, Docker, images, containers, volumes, published ports and, when a container uses Mutagen (or the daemon has sessions), Mutagen. |
 | 13 | `dkdb-update` | Updates the installed scripts from the repository (`-Branch <name>` to use another branch or tag; default `main`). Only files whose version changed are replaced, and the files that `manifest.json` lists as removed are deleted, after a `[y/N]`. |
+
+### Menus
+
+The scripts that ask you to choose (`dkdb-container-start`, `-stop`, `-connect`, `-delete`, `dkdb-image-delete`, `dkdb-mutagen-manage`, `dkdb-mutagen-service`, and in the container `dkdb-install-tools.sh` and `dkdb-ntm-ssologin-ia4d.sh` without arguments) show a menu per screen with the keys under the title: **Up/Down** move, **Enter** selects and **Esc** goes back (in the first menu it exits). When an option ends, the menu comes back (with its list read again) until you leave, and an option that shows information waits for a key before the screen is cleared. With `-Container <name>` (or an argument in the container) the menu of that choice is skipped.
 
 ### Synchronization with Mutagen
 

@@ -1,5 +1,5 @@
 # Common definitions for the devbox PowerShell scripts.
-# Version: 0.14.0
+# Version: 0.15.0
 # Load it with:  . "$PSScriptRoot\dkdb-common.ps1"
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
 
@@ -28,6 +28,9 @@ $DevboxSectionColor = 'White'
 $DevboxLabelColor = 'DarkYellow'
 $DevboxNameColor = 'DarkYellow'
 $DevboxNoteColor = 'DarkGray'
+# A script named in a Next line: white (and bold when the terminal supports it), so it stands out from the yellow of
+# the line even where bold only means "brighter".
+$DevboxScriptColor = 'White'
 # State words: [running] and [stopped].
 $DevboxRunningColor = 'Green'
 $DevboxStoppedColor = 'Red'
@@ -387,15 +390,19 @@ function Test-DevboxAnsi {
 }
 
 # The natural next step, in the Next color. A script named in it (dkdb-<name>.ps1 or .sh: always with its extension)
-# is written in bold when the terminal supports it.
+# is written in the Script color and, when the terminal supports ANSI, in bold too.
 function Write-DevboxNext {
     param([string]$Text)
     $ansi = Test-DevboxAnsi
     $esc = [char]27
     foreach ($part in [regex]::Split($Text, '(dkdb-[a-z0-9-]+\.(?:ps1|sh))')) {
         if (-not $part) { continue }
-        if ($ansi -and $part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') { $part = "$esc[1m$part$esc[22m" }
-        Write-Host $part -NoNewline -ForegroundColor $DevboxNextColor
+        $color = $DevboxNextColor
+        if ($part -match '^dkdb-[a-z0-9-]+\.(?:ps1|sh)$') {
+            $color = $DevboxScriptColor
+            if ($ansi) { $part = "$esc[1m$part$esc[22m" }
+        }
+        Write-Host $part -NoNewline -ForegroundColor $color
     }
     Write-Host ''
 }
@@ -605,18 +612,47 @@ function Read-DevboxName {
 
 # Interactive menu: Up/Down to move, Enter to select, Esc to cancel.
 # Returns the selected item, or $null when cancelled or when there are no items.
+# The menus of the interactive scripts (spec 01): a screen of its own with the version line and the path of the menu
+# ("Mutagen sessions > dkdb-dev"). The script says who it is once with $DevboxMenuScript = $PSCommandPath and the
+# path with $DevboxMenuPath; Show-DevboxMenuHeader clears the screen and draws both.
+$DevboxMenuScript = ''
+$DevboxMenuPath = ''
+function Show-DevboxMenuHeader {
+    if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { return }
+    Clear-Host
+    if ($DevboxMenuScript) { Show-DevboxVersion -Script $DevboxMenuScript }
+    if ($DevboxMenuPath) { Write-Host $DevboxMenuPath -ForegroundColor $DevboxTitleColor }
+    Write-Host ''
+}
+
+# Wait for a key before the screen is cleared again, after an option that printed something (information, a result
+# or an error). Nothing to wait for when the input is redirected.
+function Wait-DevboxKey {
+    param([string]$Text = 'Press any key (Enter, for example) to return to the menu')
+    if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { return }
+    Write-Host ''
+    Write-Host $Text -NoNewline -ForegroundColor $DevboxNoteColor
+    [void][Console]::ReadKey($true)
+    Write-Host ''
+}
+
+# Menu of one option: Up/Down, Enter, Esc. -Clear redraws the screen first (Show-DevboxMenuHeader) and -EscapeAction
+# says in the hint what Esc does: back (to the menu before), exit (the script ends) or cancel (the default).
 function Select-DevboxItem {
     param(
         [Parameter(Mandatory)][string]$Title,
-        [string[]]$Items
+        [string[]]$Items,
+        [switch]$Clear,
+        [ValidateSet('cancel', 'back', 'exit')][string]$EscapeAction = 'cancel'
     )
     if (-not $Items -or $Items.Count -eq 0) { return $null }
     if ([Console]::IsInputRedirected) {
         throw 'Select-DevboxItem needs an interactive console.'
     }
 
+    if ($Clear) { Show-DevboxMenuHeader }
     Write-Host $Title
-    Write-Host '(Up/Down: move, Enter: select, Esc: cancel)' -ForegroundColor $DevboxNoteColor
+    Write-Host "(Up/Down: move, Enter: select, Esc: $EscapeAction)" -ForegroundColor $DevboxNoteColor
     foreach ($item in $Items) { Write-Host '' }
     $top = [Console]::CursorTop - $Items.Count
     $width = [Console]::WindowWidth - 1
@@ -654,6 +690,44 @@ function Write-DevboxColored {
     else { Write-Host $Text -NoNewline }
 }
 
+# The loop of the scripts that choose one thing and act on it (start, stop, connect, delete a container, delete an
+# image): the list is read again every time (GetItems), the chosen item goes to Action (it returns the exit code), the
+# script waits for a key and shows the list again until Esc. With -Name (a name given as a parameter) there is no menu:
+# it runs once. The exit code is left in $script:DevboxItemMenuCode. Empty message: nothing to choose.
+function Invoke-DevboxItemMenu {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)][scriptblock]$GetItems,
+        [Parameter(Mandatory)][scriptblock]$Action,
+        [Parameter(Mandatory)][string]$EmptyMessage,
+        [string]$Name,
+        [string]$Kind,
+        [switch]$NoWait
+    )
+    $script:DevboxItemMenuCode = 0
+    $script:DevboxMenuPath = $Path
+    if ($Name) {
+        $items = @(& $GetItems)
+        if ($items.Count -eq 0) { Write-Host $EmptyMessage; return }
+        $selected = Resolve-DevboxContainerName -Name $Name -Candidates $items -Kind $Kind
+        if (-not $selected) { $script:DevboxItemMenuCode = 1; return }
+        $script:DevboxItemMenuCode = [int]@(& $Action $selected)[-1]
+        return
+    }
+    while ($true) {
+        $items = @(& $GetItems)
+        if ($items.Count -eq 0) { Write-Host $EmptyMessage; return }
+        $script:DevboxMenuPath = $Path
+        $selected = Select-DevboxItem -Title $Title -Items $items -Clear -EscapeAction exit
+        if (-not $selected) { return }
+        $script:DevboxMenuPath = "$Path > $selected"
+        Show-DevboxMenuHeader
+        $script:DevboxItemMenuCode = [int]@(& $Action $selected)[-1]
+        if (-not $NoWait) { Wait-DevboxKey }
+    }
+}
+
 # Checklist: like Select-DevboxItem, but several items can be checked (Space) and Enter confirms. Items
 # starts as given in Checked. Optional Badges (one text per item, for example '[active]') are shown before
 # the item in BadgeColors (console color names). A mark that differs from its initial value is shown in
@@ -677,7 +751,7 @@ function Select-DevboxItems {
     }
 
     Write-Host $Title
-    Write-Host '(Up/Down: move, Space: check/uncheck, Enter: apply, Esc: cancel)' -ForegroundColor $DevboxNoteColor
+    Write-Host '(Up/Down: move, Space: check/uncheck, Enter: apply, Esc: back)' -ForegroundColor $DevboxNoteColor
     foreach ($item in $Items) { Write-Host '' }
     $top = [Console]::CursorTop - $Items.Count
     $width = [Console]::WindowWidth - 1
@@ -2109,7 +2183,7 @@ function Invoke-DevboxSyncPickCore {
         Write-Host "No syncs registered in '$Container' yet."
     }
     $title = if ($AddOnly) { "Select how to add a folder to '$Container':" } elseif ($NoAdd) { "Select what to activate or pause in '$Container':" } else { "Select what to synchronize in '$Container':" }
-    $choice = Select-DevboxItem -Title $title -Items $labels
+    $choice = Select-DevboxItem -Title $title -Items $labels -EscapeAction back
     if (-not $choice) {
         Write-Host 'Cancelled: nothing was changed.'
         $result.Cancelled = $true

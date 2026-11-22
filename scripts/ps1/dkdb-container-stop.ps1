@@ -1,5 +1,5 @@
 # Stop one running devbox container, given with -Container or chosen from a menu.
-# Version: 0.3.2
+# Version: 0.4.0
 # It never touches Mutagen (daemon or session): see dkdb-mutagen-service for that.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -21,6 +21,7 @@ if ($Help) {
             @{ Command = 'dkdb-container-stop -Container dkdb-dev'; Description = 'Stops that container without the menu.' }
         ) `
         -Notes @(
+            'The menu comes back after every action (with its list read again) until you press Esc (Up/Down move, Enter selects, Esc goes back); an action that prints something waits for a key before the screen is cleared. With -Container it runs once, without a menu.',
             'It never touches Mutagen.'
         )
     exit 0
@@ -48,27 +49,21 @@ if ($Man) {
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
-$containers = Get-DevboxContainers -Running $true
-if ($containers.Count -eq 0) {
-    Write-Host "No running containers starting with '$DevboxPrefix-' were found."
-    exit 0
-}
+$DevboxMenuScript = $PSCommandPath
 
-if ($Container) {
-    $selected = Resolve-DevboxContainerName -Name $Container -Candidates $containers -Kind "a running '$DevboxPrefix-' container"
-    if (-not $selected) { exit 1 }
-} else {
-    $selected = Select-DevboxItem -Title 'Select the container to stop:' -Items $containers
-    if (-not $selected) {
-        Write-Host 'Cancelled.'
-        exit 0
+function Invoke-StopAction {
+    param([Parameter(Mandatory)][string]$Selected)
+    docker stop $Selected | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-DevboxWarning "Error: could not stop '$Selected'."
+        return 1
     }
+    Write-DevboxSuccess "Container '$Selected' stopped."
+    Write-DevboxNext 'Next: dkdb-container-start.ps1 starts it again, or dkdb-container-delete.ps1 removes it.'
+    return 0
 }
 
-docker stop $selected | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-DevboxWarning "Error: could not stop '$selected'."
-    exit 1
-}
-Write-DevboxSuccess "Container '$selected' stopped."
-Write-DevboxNext 'Next: dkdb-container-start.ps1 starts it again, or dkdb-container-delete.ps1 removes it.'
+Invoke-DevboxItemMenu -Path 'Containers > Stop' -Title 'Select the container to stop:' -Name $Container `
+    -Kind "a running '$DevboxPrefix-' container" -EmptyMessage "No running containers starting with '$DevboxPrefix-' were found." `
+    -GetItems { Get-DevboxContainers -Running $true } -Action { param($item) Invoke-StopAction -Selected $item }
+exit $script:DevboxItemMenuCode

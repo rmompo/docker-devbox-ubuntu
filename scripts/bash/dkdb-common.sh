@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.5.0
+# Version: 0.6.0
 # Common definitions of the devbox bash scripts that show information (dkdb-info.sh, dkdb-version.sh).
 # Source it, do not run it:  . "$(dirname "${BASH_SOURCE[0]}")/dkdb-common.sh"; the script defines usage() and, for the manual, MAN_*.
 # ASCII only, English only, LF line endings (see specs/01-conventions.md).
@@ -10,35 +10,35 @@ DEVBOX_STATE_FILE="${DEVBOX_STATE_FILE:-$HOME/.devbox-state}"
 
 # Colors of the output (spec 01; same table as dkdb-common.ps1): ONE table, every script uses these variables.
 # Messages: green success, red warnings and errors, yellow the next step. Sides: cyan a path of the host,
-# magenta a path of the container. Text roles: a title (headings of -h and man), a section (SECTIONS of dkdb-info
+# magenta a path of the container; the row of a menu under the pointer is cyan too (selected). Text roles: a title (headings of -h and man), a section (SECTIONS of dkdb-info
 # and dkdb-version), a label (a PROPERTY in capitals), a name (a script, command, parameter or file) and a note
-# (version line, hints) and a bold for the scripts named in a Next line. Off when the output is not a terminal or NO_COLOR is set. The scripts that are not part
+# (version line, hints) and a bold white (script) for the scripts named in a Next line. Off when the output is not a terminal or NO_COLOR is set. The scripts that are not part
 # of this file load it too (. dkdb-common.sh) instead of defining their own colors.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     c_green=$'\033[32m'; c_red=$'\033[31m'; c_yellow=$'\033[33m'; c_gray=$'\033[90m'; c_off=$'\033[0m'
-    c_host=$'\033[36m'; c_container=$'\033[35m'
+    c_host=$'\033[36m'; c_container=$'\033[35m'; c_selected=$'\033[36m'
     c_title=$'\033[97m'; c_section=$'\033[97m'; c_label=$'\033[33m'; c_name=$'\033[33m'
-    c_bold=$'\033[1m'; c_unbold=$'\033[22m'
+    c_script=$'\033[1;97m'
     # Badges (reverse video, black text): the number of the background color of each one.
     badge_readonly=42; badge_readwrite=41; badge_mutagen=41; badge_sync=43; badge_volume=41; badge_compatible=42; badge_incompatible=41
 else
     c_green=''; c_red=''; c_yellow=''; c_gray=''; c_off=''
-    c_host=''; c_container=''
+    c_host=''; c_container=''; c_selected=''
     c_title=''; c_section=''; c_label=''; c_name=''
-    c_bold=''; c_unbold=''
+    c_script=''
     badge_readonly=''; badge_readwrite=''; badge_mutagen=''; badge_sync=''; badge_volume=''; badge_compatible=''; badge_incompatible=''
 fi
 ok() { message_text 1 "$c_green" "$*"; }
 bad() { message_text 1 "$c_red" "$*"; }
 warn() { message_text 2 "$c_red" "$*" >&2; }
-# The natural next step in yellow; a script named in it (dkdb-<name>.ps1 or .sh) is written in bold.
+# The natural next step in yellow; a script named in it (dkdb-<name>.ps1 or .sh) is written in bold white.
 next() {
     local text="$*" rest out="" re='dkdb-[a-z0-9-]+\.(ps1|sh)'
     # On a terminal the text is wrapped at the words first (the bold codes would count as characters).
     if [ -t 1 ]; then info_width > /dev/null; text="$(wrap_text "$(info_width)" "$text")"; fi
     rest="$text"
     while [[ "$rest" =~ $re ]]; do
-        out+="${rest%%"${BASH_REMATCH[0]}"*}${c_bold}${BASH_REMATCH[0]}${c_unbold}"
+        out+="${rest%%"${BASH_REMATCH[0]}"*}${c_script}${BASH_REMATCH[0]}${c_off}${c_yellow}"
         rest="${rest#*"${BASH_REMATCH[0]}"}"
     done
     printf '%s%s%s%s\n' "$c_yellow" "$out" "$rest" "$c_off"
@@ -149,6 +149,53 @@ info_field() {
         done
     done
     echo
+}
+
+# --- Interactive menus (spec 01): same behavior as the PowerShell ones ---
+# A screen of its own per menu (menu_header), Up/Down to move, Enter to select, Esc to go back (the hint says what Esc
+# does), and after an option that printed something wait_key keeps it on the screen until a key is pressed. The menus
+# come back until Esc; the scripts only offer them on a terminal (is_interactive), with arguments they run as always.
+is_interactive() { [ -t 0 ] && [ -t 1 ]; }
+
+# menu_header SCRIPT PATH: clears the screen and draws the version line of the script and the path of the menu.
+menu_header() {
+    printf '\033[2J\033[H'
+    banner "$1"
+    [ -z "${2:-}" ] || printf '%s%s%s\n' "$c_title" "$2" "$c_off"
+    echo
+}
+
+wait_key() {
+    printf '\n%sPress any key (Enter, for example) to return to the menu%s' "$c_gray" "$c_off"
+    IFS= read -rsn1 _ || true
+    echo
+}
+
+# select_item TITLE ESCAPE_ACTION ITEM...: ESCAPE_ACTION (back or exit) is what the hint says that Esc does. The index
+# of the chosen item is left in MENU_INDEX; the return status is 1 when Esc is pressed.
+select_item() {
+    local title="$1" escape_action="$2" index=0 count key rest i
+    shift 2
+    local items=("$@")
+    count=${#items[@]}
+    [ "$count" -gt 0 ] || return 1
+    printf '%s\n%s(Up/Down: move, Enter: select, Esc: %s)%s\n' "$title" "$c_gray" "$escape_action" "$c_off"
+    printf '\033[?25l'
+    while true; do
+        for ((i = 0; i < count; i++)); do
+            printf '\r\033[2K'
+            if [ "$i" -eq "$index" ]; then printf '%s> %s%s\n' "$c_selected" "${items[$i]}" "$c_off"; else printf '  %s\n' "${items[$i]}"; fi
+        done
+        printf '\033[%dA' "$count"
+        IFS= read -rsn1 key || key=$'\033'
+        if [ "$key" = $'\033' ]; then IFS= read -rsn2 -t 0.05 rest || rest=''; key+="$rest"; fi
+        case "$key" in
+            $'\033[A') index=$(((index - 1 + count) % count)) ;;
+            $'\033[B') index=$(((index + 1) % count)) ;;
+            '') MENU_INDEX=$index; printf '\033[%dB\033[?25h' "$count"; return 0 ;;
+            $'\033') printf '\033[%dB\033[?25h' "$count"; return 1 ;;
+        esac
+    done
 }
 
 # Version of a file: its '# Version: x.y.z' line (empty when absent).

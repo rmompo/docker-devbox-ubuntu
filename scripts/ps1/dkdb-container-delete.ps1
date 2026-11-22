@@ -1,5 +1,5 @@
 # Delete one stopped devbox container, given with -Container or chosen from a menu.
-# Version: 0.3.2
+# Version: 0.4.0
 # The host folders (projects, tools, bash) are NOT touched, but everything stored only
 # inside the container (its home, installed AI client, login) is lost.
 # With a Mutagen container, only its Mutagen sessions (the whole projects folder and its
@@ -24,6 +24,7 @@ if ($Help) {
             @{ Command = 'dkdb-container-delete -Container dkdb-dev'; Description = 'Deletes that container (it still asks for confirmation).' }
         ) `
         -Notes @(
+            'The menu comes back after every action (with its list read again) until you press Esc (Up/Down move, Enter selects, Esc goes back); an action that prints something waits for a key before the screen is cleared. With -Container it runs once, without a menu.',
             'Its home, the installed AI client and (with Mutagen) its copy of the projects are lost; the host folders are not touched.',
             'For a Mutagen container it also terminates its Mutagen sessions.',
             'With -Container it still asks for confirmation.'
@@ -56,43 +57,36 @@ if ($Man) {
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
-$containers = Get-DevboxContainers -Running $false
-if ($containers.Count -eq 0) {
-    Write-Host "No stopped containers starting with '$DevboxPrefix-' were found (stop it first with dkdb-container-stop)."
-    exit 0
-}
+$DevboxMenuScript = $PSCommandPath
 
-if ($Container) {
-    $selected = Resolve-DevboxContainerName -Name $Container -Candidates $containers -Kind "a stopped '$DevboxPrefix-' container"
-    if (-not $selected) { exit 1 }
-} else {
-    $selected = Select-DevboxItem -Title 'Select the container to delete:' -Items $containers
-    if (-not $selected) {
+function Invoke-DeleteAction {
+    param([Parameter(Mandatory)][string]$Selected)
+    $answer = Read-Host "Delete '$Selected'? Its home and installed AI client are lost (with Mutagen, the container copy of the projects too). [y/N]"
+    if ($answer -notmatch '^[yY]$') {
         Write-Host 'Cancelled.'
-        exit 0
+        return 0
     }
+    # The session names depend on the container ID: read them before the container is removed (the
+    # session of the whole projects folder and those of its folders).
+    $sessionNames = @()
+    $usesMutagen = $false
+    if ((Get-DevboxContainerEnv -Container $Selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
+        $sessionNames = @(Get-DevboxContainerSessionNames -Container $Selected)
+        $usesMutagen = $true
+    }
+    docker rm $Selected | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-DevboxWarning "Error: could not delete '$Selected'."
+        return 1
+    }
+    Write-DevboxSuccess "Container '$Selected' deleted."
+    if ($usesMutagen) { foreach ($sessionName in $sessionNames) { Remove-DevboxSyncSession -SessionName $sessionName } }
+    Write-DevboxNext 'Next: dkdb-container-create.ps1 creates another one.'
+    return 0
 }
 
-$answer = Read-Host "Delete '$selected'? Its home and installed AI client are lost (with Mutagen, the container copy of the projects too). [y/N]"
-if ($answer -notmatch '^[yY]$') {
-    Write-Host 'Cancelled.'
-    exit 0
-}
-
-# The session names depend on the container ID: read them before the container is removed (the
-# session of the whole projects folder and those of its folders).
-$sessionNames = @()
-$usesMutagen = $false
-if ((Get-DevboxContainerEnv -Container $selected -Name 'DEVBOX_SYNC') -eq 'mutagen') {
-    $sessionNames = @(Get-DevboxContainerSessionNames -Container $selected)
-    $usesMutagen = $true
-}
-
-docker rm $selected | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-DevboxWarning "Error: could not delete '$selected'."
-    exit 1
-}
-Write-DevboxSuccess "Container '$selected' deleted."
-if ($usesMutagen) { foreach ($sessionName in $sessionNames) { Remove-DevboxSyncSession -SessionName $sessionName } }
-Write-DevboxNext 'Next: dkdb-container-create.ps1 creates another one.'
+Invoke-DevboxItemMenu -Path 'Containers > Delete' -Title 'Select the container to delete:' -Name $Container `
+    -Kind "a stopped '$DevboxPrefix-' container" `
+    -EmptyMessage "No stopped containers starting with '$DevboxPrefix-' were found (stop it first with dkdb-container-stop.ps1)." `
+    -GetItems { Get-DevboxContainers -Running $false } -Action { param($item) Invoke-DeleteAction -Selected $item }
+exit $script:DevboxItemMenuCode

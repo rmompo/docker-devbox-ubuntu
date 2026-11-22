@@ -1,6 +1,6 @@
 # Manage the Mutagen sessions of a devbox container: add a folder, activate or pause sessions, remove one, see the status.
-# Version: 0.1.0
-# One menu of actions, then the container (given with -Container, or chosen from a menu). The Mutagen service itself
+# Version: 0.3.0
+# The container first (given with -Container, or chosen from a menu), then a menu of what to do with it. The Mutagen service itself
 # (the daemon, the orphan sessions) is controlled with dkdb-mutagen-service.
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
@@ -12,20 +12,21 @@ param(
 . "$PSScriptRoot\dkdb-common.ps1"
 if ($Help) {
     Show-DevboxHelp -Script $PSCommandPath `
-        -Description 'Manages the Mutagen sessions of a container that uses Mutagen from a menu of actions: Add a folder (a new session), Modify (activate or pause sessions), Remove a session and Status (state, conflicts and progress). The container is given with -Container or chosen from a menu.' `
+        -Description 'Manages the Mutagen sessions of a container that uses Mutagen. First the container (given with -Container, or chosen from a menu), then a menu of what to do with it: Add a folder (a new session), Modify (activate or pause sessions), Remove a session and Status (state, conflicts and progress).' `
         -Usage 'dkdb-mutagen-manage [-Container <name>] [-Help] [-Man]' `
         -Parameters @(
-            @{ Name = '-Container'; Description = 'Name of the container (with or without the dkdb- prefix); skips the container menu. It must be a container that uses Mutagen (a running one for Add and Modify).' }
+            @{ Name = '-Container'; Description = 'Name of the container (with or without the dkdb- prefix); skips the container menu. It must be a container that uses Mutagen; Add and Modify are only offered when it is running.' }
         ) `
         -Examples @(
-            @{ Command = 'dkdb-mutagen-manage'; Description = 'Pick the action, then the container.' },
-            @{ Command = 'dkdb-mutagen-manage -Container dkdb-dev'; Description = 'Pick the action; it applies to that container.' }
+            @{ Command = 'dkdb-mutagen-manage'; Description = 'Pick the container, then the action.' },
+            @{ Command = 'dkdb-mutagen-manage -Container dkdb-dev'; Description = 'Skip the container menu: pick the action for that container.' }
         ) `
         -Notes @(
+            'Both menus come back after every action until you press Esc (Up/Down move, Enter selects, Esc goes back; in the actions it returns to the containers); an action that prints something waits for a key before the screen is cleared.',
             'Add: Add (relative) asks for a folder relative to the host projects folder (or absolute inside it); it is mirrored at the same path inside the container. Add (absolute) asks for a host folder and a folder of the container, which can be anywhere; %VAR% and ~ are accepted for the host folder and $HOME and ~ for the folder of the container. Both folders are checked: a missing host folder aborts the operation; a missing folder of the container is created after asking. The new session is added to the active ones: it pauses the active sessions it covers, and changes nothing when an active session already covers it.',
             'Modify: a menu with Keep (no changes) (the first option, the default), Custom (a checklist of the registered sessions: checked ones are active, the others paused), All (registered) and None (pause all). Sessions are only paused, never terminated. A session cannot change its folders: to change one, Remove it and Add the new one.',
             'Remove: lists the sessions of the container with their state, stops the one you choose and terminates it, after a [y/N] confirmation. The host and container folders are not touched.',
-            'Status: for every session a card (name, identifier, endpoints, state) and a summary of how many files are done and whether it moved since the previous query. With no -Container the menu starts with (all containers).',
+            'Status: for every session a card (name, identifier, endpoints, state) and a summary of how many files are done and whether it moved since the previous query. With no -Container the container menu starts with (all containers), which shows the status of every Mutagen container (it is the only action that applies to all).',
             'Orphan sessions (their container no longer exists) are removed with dkdb-mutagen-service (Clean).'
         )
     exit 0
@@ -34,11 +35,11 @@ if ($Man) {
     Show-DevboxMan -Script $PSCommandPath `
         -Purpose 'Manages the Mutagen sessions of a container: adds a folder, activates or pauses sessions, removes one, shows the status.' `
         -Needs @(
-            'Docker Engine running, mutagen.exe and a container that uses Mutagen (running for Add and Modify; Remove and Status also read a stopped one).'
+            'Docker Engine running, mutagen.exe and a container that uses Mutagen (running for Add and Modify; Remove and Status also work with a stopped one).'
         ) `
         -Steps @(
-            'Shows the menu of actions: Add a folder, Modify, Remove a session or Status.',
-            'Uses the container given with -Container, or shows the menu of the containers that use Mutagen (Status adds the option (all containers)). Add and Modify warn about versions and never stop because of them.',
+            'Uses the container given with -Container, or shows the menu of the containers that use Mutagen (running or stopped), starting with (all containers), which goes straight to Status.',
+            'Shows the menu of what to do with that container: Status, Add a folder, Modify and Remove a session (Add and Modify only when the container is running). Add and Modify warn about versions and never stop because of them.',
             'Add: runs the checks (variables, mutagen, container ID, host path, container ready, daemon, active overlaps), starts the Mutagen daemon if needed and shows Add (relative) and Add (absolute); both folders are checked (the host folder must exist; the folder of the container is created after asking). The session is created (or the one of the same folder reused) and activated, pausing the active sessions it covers.',
             'Modify: runs the same checks and shows Keep (no changes) (the first option and the default), Custom, All (registered) and None (pause all).',
             'Remove: lists the registered sessions with [active] or [paused], asks [y/N] (Esc cancels), pauses the chosen one and terminates it.',
@@ -70,71 +71,27 @@ if (-not (Test-DevboxMutagen)) {
 
 $allContainersItem = '(all containers)'
 
-# The container of the action: -Container (checked against the candidates) or a menu. Ends the script when there is
-# none, when the name is not a candidate (exit 1) or when the menu is cancelled.
-function Select-ManageContainer {
-    param(
-        [string[]]$Candidates,
-        [Parameter(Mandatory)][string]$Kind,
-        [Parameter(Mandatory)][string]$EmptyMessage,
-        [Parameter(Mandatory)][string]$Title,
-        [switch]$AllowAll
-    )
-    if (@($Candidates).Count -eq 0) {
-        Write-Host $EmptyMessage
-        exit 0
-    }
-    if ($Container) {
-        $found = Resolve-DevboxContainerName -Name $Container -Candidates $Candidates -Kind $Kind
-        if (-not $found) { exit 1 }
-        return $found
-    }
-    $items = @($Candidates)
-    if ($AllowAll) { $items = @($allContainersItem) + $items }
-    $selected = Select-DevboxItem -Title $Title -Items $items
-    if (-not $selected) {
-        Write-Host 'Cancelled.'
-        exit 0
-    }
-    return $selected
-}
-
-# Containers that use Mutagen: the running ones (Add and Modify) or all of them, running or stopped (Remove, Status).
-function Get-ManageCandidates {
-    param([switch]$RunningOnly)
-    if ($RunningOnly) {
-        return @(Get-DevboxContainers -Running $true | Where-Object { (Get-DevboxContainerEnv -Container $_ -Name 'DEVBOX_SYNC') -eq 'mutagen' })
-    }
-    return @(Get-DevboxMutagenContainers)
-}
-
 function Invoke-ManageAdd {
-    $candidates = Get-ManageCandidates -RunningOnly
-    $selected = Select-ManageContainer -Candidates $candidates -Kind "a running '$DevboxPrefix-' container that uses Mutagen" `
-        -EmptyMessage "No running containers starting with '$DevboxPrefix-' use Mutagen (start one with dkdb-container-start.ps1)." `
-        -Title 'Select the container to add a folder to:'
+    param([Parameter(Mandatory)][string]$Selected)
     $null = Test-DevboxContainerVersion -Container $selected
     $pick = Invoke-DevboxSyncPick -Container $selected -Flush -AddOnly
-    if ($pick.Cancelled) { exit 0 }
+    if ($pick.Cancelled) { return }
     if (-not $pick.Ok) {
         Write-DevboxWarning 'The folder was NOT added.'
-        exit 1
+        return
     }
     Write-DevboxSuccess "Folder added to '$selected'."
     Write-DevboxNext 'Next: dkdb-mutagen-manage.ps1 (Status) shows the progress; Remove removes a session.'
 }
 
 function Invoke-ManageModify {
-    $candidates = Get-ManageCandidates -RunningOnly
-    $selected = Select-ManageContainer -Candidates $candidates -Kind "a running '$DevboxPrefix-' container that uses Mutagen" `
-        -EmptyMessage "No running containers starting with '$DevboxPrefix-' use Mutagen (start one with dkdb-container-start.ps1)." `
-        -Title 'Select the container whose sessions you want to activate or pause:'
+    param([Parameter(Mandatory)][string]$Selected)
     $null = Test-DevboxContainerVersion -Container $selected
     $pick = Invoke-DevboxSyncPick -Container $selected -Flush -NoAdd
-    if ($pick.Cancelled) { exit 0 }
+    if ($pick.Cancelled) { return }
     if (-not $pick.Ok) {
         Write-DevboxWarning 'The sessions were NOT changed.'
-        exit 1
+        return
     }
     if ($pick.Active) {
         Write-DevboxSuccess "Mutagen sync for '$selected' is active."
@@ -145,23 +102,20 @@ function Invoke-ManageModify {
 }
 
 function Invoke-ManageRemove {
-    $candidates = Get-ManageCandidates
-    $selected = Select-ManageContainer -Candidates $candidates -Kind "a '$DevboxPrefix-' container that uses Mutagen" `
-        -EmptyMessage "No containers starting with '$DevboxPrefix-' use Mutagen." `
-        -Title 'Select the container whose session you want to remove:'
+    param([Parameter(Mandatory)][string]$Selected)
     if (-not (Test-DevboxMutagenDaemon)) {
         Write-Host 'The Mutagen daemon is stopped (start it with dkdb-mutagen-service.ps1, dkdb-container-start.ps1 or dkdb-container-connect.ps1).'
-        exit 0
+        return
     }
     $user = Get-DevboxContainerUser -Container $selected
     if (-not $user) {
         Write-DevboxWarning "Error: '$selected' has no DEVBOX_USER variable; it was not created by dkdb-container-create.ps1."
-        exit 1
+        return
     }
     $sessions = @(Get-DevboxPickSessions -Container $selected -User $user)
     if ($sessions.Count -eq 0) {
         Write-Host "There are no Mutagen sessions registered in '$selected': nothing to remove."
-        exit 0
+        return
     }
     # The menu shows the state before each session.
     $labels = @{}
@@ -169,10 +123,10 @@ function Invoke-ManageRemove {
         $state = if ($item.Paused) { 'paused' } else { 'active' }
         $labels["[$state] $($item.Label)"] = $item
     }
-    $choice = Select-DevboxItem -Title "Select the session to remove from '$selected':" -Items @($labels.Keys | Sort-Object { $labels[$_].Label })
+    $choice = Select-DevboxItem -Title "Select the session to remove from '$selected':" -Items @($labels.Keys | Sort-Object { $labels[$_].Label }) -EscapeAction back
     if (-not $choice) {
         Write-Host 'Cancelled: nothing was changed.'
-        exit 0
+        return
     }
     $target = $labels[$choice]
 
@@ -180,7 +134,7 @@ function Invoke-ManageRemove {
     $answer = Read-DevboxLine 'Stop and terminate it? The folders are not touched. [y/N] (Esc cancels)'
     if ($null -eq $answer -or $answer -notmatch '^\s*(y|yes)\s*$') {
         Write-Host 'Cancelled: nothing was changed.'
-        exit 0
+        return
     }
     $mutagen = Get-DevboxMutagenExe
     if (-not $target.Paused) {
@@ -191,7 +145,7 @@ function Invoke-ManageRemove {
     & $mutagen sync terminate $target.Name *> $null
     if ($LASTEXITCODE -ne 0) {
         Write-DevboxWarning "Error: could not terminate the Mutagen session '$($target.Name)'. Check it with the Status action of dkdb-mutagen-manage.ps1."
-        exit 1
+        return
     }
     Write-DevboxSuccess "Mutagen session removed: $($target.Label) ($($target.Name))"
     $null = Update-DevboxContainerState -Container $selected
@@ -241,16 +195,13 @@ function Show-ManageStatus {
 }
 
 function Invoke-ManageStatus {
-    $candidates = Get-ManageCandidates
-    $selected = Select-ManageContainer -Candidates $candidates -Kind "a '$DevboxPrefix-' container that uses Mutagen" `
-        -EmptyMessage "No containers starting with '$DevboxPrefix-' use Mutagen." `
-        -Title 'Select the container to check:' -AllowAll
+    param([Parameter(Mandatory)][string]$Selected)
     if (-not (Test-DevboxMutagenDaemon)) {
         Write-Host 'The Mutagen daemon is stopped (start it with dkdb-mutagen-service.ps1, dkdb-container-start.ps1 or dkdb-container-connect.ps1).'
-        exit 0
+        return
     }
     $targets = @($selected)
-    if ($selected -eq $allContainersItem) { $targets = @($candidates) }
+    if ($selected -eq $allContainersItem) { $targets = @(Get-DevboxMutagenContainers) }
     $allComplete = $true
     $missing = $false
     foreach ($target in $targets) {
@@ -263,7 +214,7 @@ function Invoke-ManageStatus {
         elseif (-not $script:StatusComplete) { $allComplete = $false }
     }
     Write-Host ''
-    if ($missing -and $targets.Count -eq 1) { exit 1 }
+    if ($missing -and $targets.Count -eq 1) { return }
     if ($allComplete) {
         Write-DevboxNext 'Next: dkdb-container-connect.ps1 to work in the container; change the synchronized folders with dkdb-mutagen-manage.ps1 (Modify, Add or Remove); if there are conflicts, see TROUBLESHOOTING.md.'
     } else {
@@ -271,18 +222,56 @@ function Invoke-ManageStatus {
     }
 }
 
+# 1. The container: -Container, or a menu (with (all containers), which only has the Status action). 2. The action,
+# from a menu that only offers what applies to that container (Add and Modify need it running). Both menus come
+# back after every action, with the screen drawn again, until Esc: Esc in the actions goes back to the containers
+# (the script ends instead when the container was given with -Container) and Esc in the containers ends the script.
+$DevboxMenuScript = $PSCommandPath
 $addItem = 'Add a folder (a new session)'
 $modifyItem = 'Modify (activate or pause sessions)'
 $removeItem = 'Remove a session'
 $statusItem = 'Status of the sessions'
-$action = Select-DevboxItem -Title 'Select what to do with the Mutagen sessions:' -Items @($statusItem, $addItem, $modifyItem, $removeItem)
-if (-not $action) {
-    Write-Host 'Cancelled.'
-    exit 0
+$exitCode = 0
+while ($true) {
+    $candidates = @(Get-DevboxMutagenContainers)
+    if ($candidates.Count -eq 0) {
+        Write-Host "No containers starting with '$DevboxPrefix-' use Mutagen."
+        break
+    }
+    if ($Container) {
+        $selected = Resolve-DevboxContainerName -Name $Container -Candidates $candidates -Kind "a '$DevboxPrefix-' container that uses Mutagen"
+        if (-not $selected) { $exitCode = 1; break }
+    } else {
+        $DevboxMenuPath = 'Mutagen sessions'
+        $selected = Select-DevboxItem -Title 'Select the container whose Mutagen sessions you want to manage:' -Items (@($allContainersItem) + $candidates) -Clear -EscapeAction exit
+        if (-not $selected) { break }
+    }
+    if ($selected -eq $allContainersItem) {
+        $DevboxMenuPath = "Mutagen sessions > $allContainersItem > Status"
+        Show-DevboxMenuHeader
+        Invoke-ManageStatus -Selected $selected
+        Wait-DevboxKey
+        continue
+    }
+    while ($true) {
+        $running = @(Get-DevboxContainers -Running $true) -contains $selected
+        $actions = @($statusItem)
+        if ($running) { $actions += @($addItem, $modifyItem) }
+        $actions += @($removeItem)
+        $DevboxMenuPath = "Mutagen sessions > $selected"
+        $action = Select-DevboxItem -Title "Select what to do with the Mutagen sessions of '$selected':" -Items $actions -Clear -EscapeAction $(if ($Container) { 'exit' } else { 'back' })
+        if (-not $action) { break }
+        $actionName = ($action -split ' ')[0]
+        $DevboxMenuPath = "Mutagen sessions > $selected > $actionName"
+        Show-DevboxMenuHeader
+        switch ($action) {
+            $addItem { Invoke-ManageAdd -Selected $selected }
+            $modifyItem { Invoke-ManageModify -Selected $selected }
+            $removeItem { Invoke-ManageRemove -Selected $selected }
+            $statusItem { Invoke-ManageStatus -Selected $selected }
+        }
+        Wait-DevboxKey
+    }
+    if ($Container) { break }
 }
-switch ($action) {
-    $addItem { Invoke-ManageAdd }
-    $modifyItem { Invoke-ManageModify }
-    $removeItem { Invoke-ManageRemove }
-    $statusItem { Invoke-ManageStatus }
-}
+exit $exitCode

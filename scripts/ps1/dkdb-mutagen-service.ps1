@@ -1,5 +1,5 @@
 # Control the Mutagen service: start or stop the daemon, see its state, clean the orphan sessions.
-# Version: 0.1.0
+# Version: 0.2.0
 # One menu of actions. It acts on Mutagen as a whole (one daemon per user), not on a container: the sessions of a
 # container are managed with dkdb-mutagen-manage. dkdb-container-start and dkdb-container-connect already start
 # the daemon for a Mutagen container.
@@ -18,6 +18,7 @@ if ($Help) {
             @{ Command = 'dkdb-mutagen-service'; Description = 'Shows the menu: Start, Stop, State or Clean (orphan sessions).' }
         ) `
         -Notes @(
+            'The menu comes back after every action until you press Esc (Up/Down move, Enter selects, Esc goes back); an action that prints something waits for a key before the screen is cleared.',
             'Start checks the daemon and starts it if it is not running. dkdb-container-start and dkdb-container-connect start it by themselves for a container that uses Mutagen.',
             'Stop flushes the running Mutagen containers and stops the daemon. There is one daemon per user: it stops ALL your Mutagen sessions, not only the dkdb- ones; they are kept and come back when the daemon starts.',
             'State shows the Mutagen executable and version, whether the daemon is running and how many sessions it has.',
@@ -75,7 +76,7 @@ function Invoke-ServiceStart {
         Write-DevboxNext 'Next: dkdb-mutagen-manage.ps1 lets you choose what to synchronize.'
     } else {
         Write-DevboxWarning 'Error: the Mutagen daemon could not be started.'
-        exit 1
+        return
     }
 }
 
@@ -101,7 +102,7 @@ function Invoke-ServiceStop {
     & $mutagen daemon stop | Out-Null
     if (Test-DevboxMutagenDaemon) {
         Write-DevboxWarning 'Error: the Mutagen daemon is still running.'
-        exit 1
+        return
     }
     Write-DevboxSuccess 'The Mutagen daemon is stopped.'
     if ($docker) {
@@ -158,7 +159,7 @@ function Invoke-ServiceClean {
         $labels["$($orphan.Name)  [$target]"] = $orphan.Name
     }
     $allItem = '(all orphan sessions)'
-    $selected = Select-DevboxItem -Title 'Select the orphan Mutagen session to terminate:' -Items (@($labels.Keys | Sort-Object) + $allItem)
+    $selected = Select-DevboxItem -Title 'Select the orphan Mutagen session to terminate:' -Items (@($labels.Keys | Sort-Object) + $allItem) -EscapeAction back
     if (-not $selected) {
         Write-Host 'Cancelled.'
         return
@@ -185,18 +186,23 @@ function Invoke-ServiceClean {
     Write-DevboxNext 'Next: dkdb-mutagen-manage.ps1 (status) checks the remaining sessions.'
 }
 
+# The menu comes back after every action, with the screen drawn again, until Esc.
+$DevboxMenuScript = $PSCommandPath
 $startItem = 'Start the daemon'
 $stopItem = 'Stop the daemon'
 $stateItem = 'State of the daemon'
 $cleanItem = 'Clean orphan sessions'
-$action = Select-DevboxItem -Title 'Select what to do with the Mutagen service:' -Items @($stateItem, $startItem, $stopItem, $cleanItem)
-if (-not $action) {
-    Write-Host 'Cancelled.'
-    exit 0
-}
-switch ($action) {
-    $startItem { Invoke-ServiceStart }
-    $stopItem { Invoke-ServiceStop }
-    $stateItem { Invoke-ServiceState }
-    $cleanItem { Invoke-ServiceClean }
+while ($true) {
+    $DevboxMenuPath = 'Mutagen service'
+    $action = Select-DevboxItem -Title 'Select what to do with the Mutagen service:' -Items @($stateItem, $startItem, $stopItem, $cleanItem) -Clear -EscapeAction exit
+    if (-not $action) { break }
+    $DevboxMenuPath = "Mutagen service > $action"
+    Show-DevboxMenuHeader
+    switch ($action) {
+        $startItem { Invoke-ServiceStart }
+        $stopItem { Invoke-ServiceStop }
+        $stateItem { Invoke-ServiceState }
+        $cleanItem { Invoke-ServiceClean }
+    }
+    Wait-DevboxKey
 }

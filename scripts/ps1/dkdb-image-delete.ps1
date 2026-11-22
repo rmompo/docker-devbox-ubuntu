@@ -1,5 +1,5 @@
 # Delete one devbox image chosen from a menu.
-# Version: 0.2.1
+# Version: 0.3.0
 # PositionalBinding is off so that a stray argument is an error.
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -15,6 +15,7 @@ if ($Help) {
             @{ Command = 'dkdb-image-delete'; Description = 'Shows the images and deletes the one you pick.' }
         ) `
         -Notes @(
+            'The menu comes back after every action until you press Esc (Up/Down move, Enter selects, Esc goes back); an action that prints something waits for a key before the screen is cleared.',
             'A container that uses the image must be deleted first (dkdb-container-delete).'
         )
     exit 0
@@ -43,22 +44,21 @@ if ($Man) {
 Show-DevboxVersion -Script $PSCommandPath
 Assert-DevboxDocker
 
-$images = Get-DevboxImages
-if ($images.Count -eq 0) {
-    Write-Host "No images starting with '$DevboxPrefix-' were found."
-    exit 0
+$DevboxMenuScript = $PSCommandPath
+
+function Invoke-ImageDeleteAction {
+    param([Parameter(Mandatory)][string]$Selected)
+    docker rmi $Selected
+    if ($LASTEXITCODE -ne 0) {
+        Write-DevboxWarning "Error: could not delete '$Selected' (is a container using it?)."
+        return 1
+    }
+    Write-DevboxSuccess "Image '$Selected' deleted."
+    Write-DevboxNext 'Next: dkdb-image-create.ps1 builds a new image when you need one.'
+    return 0
 }
 
-$selected = Select-DevboxItem -Title 'Select the image to delete:' -Items $images
-if (-not $selected) {
-    Write-Host 'Cancelled.'
-    exit 0
-}
-
-docker rmi $selected
-if ($LASTEXITCODE -ne 0) {
-    Write-DevboxWarning "Error: could not delete '$selected' (is a container using it?)."
-    exit 1
-}
-Write-DevboxSuccess "Image '$selected' deleted."
-Write-DevboxNext 'Next: dkdb-image-create.ps1 builds a new image when you need one.'
+Invoke-DevboxItemMenu -Path 'Images > Delete' -Title 'Select the image to delete:' `
+    -EmptyMessage "No images starting with '$DevboxPrefix-' were found." `
+    -GetItems { Get-DevboxImages } -Action { param($item) Invoke-ImageDeleteAction -Selected $item }
+exit $script:DevboxItemMenuCode

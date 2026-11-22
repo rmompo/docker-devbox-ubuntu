@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.5.3
+# Version: 0.6.0
 # ia4d (ntm GenAI Suite) for Claude Code in this container: keyring, login (credential renewal) and installer.
 # Exclusive to the ntm Claude Code containers. Repo: scripts/bash/ntm-ssologin/, seen in the container (read-only)
 # as ~/devbox/bash/ntm-ssologin/. Run with: bash ~/devbox/bash/ntm-ssologin/dkdb-ntm-ssologin-ia4d.sh [all | status | setup | login | renew | install]
@@ -353,27 +353,46 @@ step_status() {
 }
 
 command='all'
+command_given=0
 for argument in "$@"; do
     case "$argument" in
         -h|--help) usage; exit 0 ;;
         man) manual; exit 0 ;;
-        all|status|setup|login|renew|install) command="$argument" ;;
+        all|status|setup|login|renew|install) command="$argument"; command_given=1 ;;
         *) warn "Unknown argument: $argument (use -h or man)."; exit 1 ;;
     esac
 done
-script_version="$(sed -n 's/^# Version: *//p' "$0" | head -n 1)"
-echo "$(basename "$0") ${script_version:-unknown} (docker-devbox-ubuntu image ${DEVBOX_IMAGE_VERSION:-unknown})"
 
-case "$command" in
-    status) step_status ;;
-    setup) step_setup ;;
-    login) step_tools && step_setup >/dev/null && step_login ;;
-    renew) step_tools && step_setup >/dev/null && step_renew ;;
-    install) step_tools && step_setup >/dev/null && step_install ;;
-    all)
-        step_setup || exit 1
-        check_session
-        if [ "$session_ok" = 1 ]; then ok "Session: valid, no login needed"; else step_login || exit 1; fi
-        step_install || exit 1
-        step_status ;;
-esac
+run_command() {
+    case "$1" in
+        status) step_status ;;
+        setup) step_setup ;;
+        login) step_tools && step_setup >/dev/null && step_login ;;
+        renew) step_tools && step_setup >/dev/null && step_renew ;;
+        install) step_tools && step_setup >/dev/null && step_install ;;
+        all)
+            step_setup || exit 1
+            check_session
+            if [ "$session_ok" = 1 ]; then ok "Session: valid, no login needed"; else step_login || exit 1; fi
+            step_install || exit 1
+            step_status ;;
+    esac
+}
+
+# On a terminal and without a command: a menu that comes back after every option until Esc (spec 01). Each option runs
+# in a subshell, so that its exit only ends it.
+if [ "$command_given" = 0 ] && is_interactive; then
+    labels=('Status' 'Setup' 'Login' 'Renew' 'Install' 'All (setup, login, install, status)')
+    commands=(status setup login renew install all)
+    while true; do
+        menu_header "$0" 'ia4d (ntm)'
+        select_item 'Select what to do:' exit "${labels[@]}" || break
+        menu_header "$0" "ia4d (ntm) > ${labels[$MENU_INDEX]%% *}"
+        ( run_command "${commands[$MENU_INDEX]}" )
+        wait_key
+    done
+    exit 0
+fi
+
+banner "$0"
+run_command "$command"
